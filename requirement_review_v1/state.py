@@ -11,6 +11,7 @@ class ReviewState(TypedDict, total=False):
     """
 
     requirement_doc: str
+    run_dir: str
     parsed_items: List[dict]
     review_results: List[dict]
     final_report: str

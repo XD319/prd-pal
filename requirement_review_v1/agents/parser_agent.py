@@ -18,6 +18,9 @@ from gpt_researcher.utils.llm import create_chat_completion
 
 from ..prompts import PARSER_SYSTEM_PROMPT, PARSER_USER_PROMPT
 from ..state import ReviewState
+from ..utils.io import save_raw_agent_output
+
+_AGENT = "parser"
 
 
 async def run(state: ReviewState) -> ReviewState:
@@ -29,6 +32,8 @@ async def run(state: ReviewState) -> ReviewState:
     start = time.time()
     requirement_doc: str = state.get("requirement_doc", "")
     trace: dict[str, Any] = dict(state.get("trace", {}))
+    run_dir: str = state.get("run_dir", "")
+    raw = ""
 
     messages = convert_openai_messages([
         {"role": "system", "content": PARSER_SYSTEM_PROMPT},
@@ -52,16 +57,27 @@ async def run(state: ReviewState) -> ReviewState:
         parsed_items: list[dict] = parsed.get("parsed_items", [])
 
         elapsed = round(time.time() - start, 3)
-        trace["parser"] = {
+        trace[_AGENT] = {
             "elapsed_seconds": elapsed,
             "item_count": len(parsed_items),
         }
+
+        if "parsed_items" not in parsed and run_dir and raw:
+            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
+            trace[_AGENT]["raw_output_path"] = raw_path
+            trace[_AGENT]["error_message"] = (
+                "key 'parsed_items' missing after json repair"
+            )
+
         return {"parsed_items": parsed_items, "trace": trace}
 
     except Exception as exc:
         elapsed = round(time.time() - start, 3)
-        trace["parser"] = {
+        trace[_AGENT] = {
             "elapsed_seconds": elapsed,
             "error": str(exc),
         }
+        if run_dir and raw:
+            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
+            trace[_AGENT]["raw_output_path"] = raw_path
         return {"parsed_items": [], "trace": trace}

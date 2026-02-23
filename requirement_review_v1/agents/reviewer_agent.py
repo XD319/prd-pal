@@ -19,6 +19,9 @@ from gpt_researcher.utils.llm import create_chat_completion
 
 from ..prompts import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 from ..state import ReviewState
+from ..utils.io import save_raw_agent_output
+
+_AGENT = "reviewer"
 
 
 async def run(state: ReviewState) -> ReviewState:
@@ -33,9 +36,11 @@ async def run(state: ReviewState) -> ReviewState:
     start = time.time()
     parsed_items: list[dict] = state.get("parsed_items", [])
     trace: dict[str, Any] = dict(state.get("trace", {}))
+    run_dir: str = state.get("run_dir", "")
+    raw = ""
 
     if not parsed_items:
-        trace["reviewer"] = {
+        trace[_AGENT] = {
             "elapsed_seconds": 0.0,
             "error": "parsed_items is empty — nothing to review",
         }
@@ -65,16 +70,27 @@ async def run(state: ReviewState) -> ReviewState:
         review_results: list[dict] = parsed.get("review_results", [])
 
         elapsed = round(time.time() - start, 3)
-        trace["reviewer"] = {
+        trace[_AGENT] = {
             "elapsed_seconds": elapsed,
             "result_count": len(review_results),
         }
+
+        if "review_results" not in parsed and run_dir and raw:
+            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
+            trace[_AGENT]["raw_output_path"] = raw_path
+            trace[_AGENT]["error_message"] = (
+                "key 'review_results' missing after json repair"
+            )
+
         return {"review_results": review_results, "trace": trace}
 
     except Exception as exc:
         elapsed = round(time.time() - start, 3)
-        trace["reviewer"] = {
+        trace[_AGENT] = {
             "elapsed_seconds": elapsed,
             "error": str(exc),
         }
+        if run_dir and raw:
+            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
+            trace[_AGENT]["raw_output_path"] = raw_path
         return {"review_results": [], "trace": trace}

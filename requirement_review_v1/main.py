@@ -28,13 +28,13 @@ async def main():
     with open(args.input, "r", encoding="utf-8") as f:
         doc = f.read()
 
-    graph = build_review_graph()
-    result = await graph.ainvoke({"requirement_doc": doc})
-
-    # ── persist outputs ───────────────────────────────────────────────
+    # ── prepare output directory before graph runs ──────────────────
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = os.path.join("outputs", run_id)
     os.makedirs(out_dir, exist_ok=True)
+
+    graph = build_review_graph()
+    result = await graph.ainvoke({"requirement_doc": doc, "run_dir": out_dir})
 
     report_path = os.path.join(out_dir, "report.md")
     state_path = os.path.join(out_dir, "report.json")
