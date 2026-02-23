@@ -6,7 +6,6 @@ requirement_doc  →  parsed_items
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 import json_repair
@@ -19,6 +18,7 @@ from gpt_researcher.utils.llm import create_chat_completion
 from ..prompts import PARSER_SYSTEM_PROMPT, PARSER_USER_PROMPT
 from ..state import ReviewState
 from ..utils.io import save_raw_agent_output
+from ..utils.trace import trace_start
 
 _AGENT = "parser"
 
@@ -29,11 +29,12 @@ async def run(state: ReviewState) -> ReviewState:
     Returns a partial state update containing *parsed_items* and *trace*.
     On any failure the items list is empty and the trace carries the error.
     """
-    start = time.time()
     requirement_doc: str = state.get("requirement_doc", "")
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
     raw = ""
+
+    span = trace_start(_AGENT, input_chars=len(requirement_doc))
 
     messages = convert_openai_messages([
         {"role": "system", "content": PARSER_SYSTEM_PROMPT},
@@ -45,6 +46,8 @@ async def run(state: ReviewState) -> ReviewState:
 
     try:
         cfg = Config()
+        span.model = cfg.smart_llm_model or "unknown"
+
         raw = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=messages,
@@ -56,28 +59,25 @@ async def run(state: ReviewState) -> ReviewState:
         parsed: dict = parse_json_markdown(raw, parser=json_repair.loads)
         parsed_items: list[dict] = parsed.get("parsed_items", [])
 
-        elapsed = round(time.time() - start, 3)
-        trace[_AGENT] = {
-            "elapsed_seconds": elapsed,
-            "item_count": len(parsed_items),
-        }
-
-        if "parsed_items" not in parsed and run_dir and raw:
-            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
-            trace[_AGENT]["raw_output_path"] = raw_path
-            trace[_AGENT]["error_message"] = (
-                "key 'parsed_items' missing after json repair"
+        if "parsed_items" not in parsed:
+            raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            trace[_AGENT] = span.end(
+                status="error",
+                output_chars=len(raw),
+                raw_output_path=raw_path,
+                error_message="key 'parsed_items' missing after json repair",
             )
+        else:
+            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
 
         return {"parsed_items": parsed_items, "trace": trace}
 
     except Exception as exc:
-        elapsed = round(time.time() - start, 3)
-        trace[_AGENT] = {
-            "elapsed_seconds": elapsed,
-            "error": str(exc),
-        }
-        if run_dir and raw:
-            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
-            trace[_AGENT]["raw_output_path"] = raw_path
+        raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        trace[_AGENT] = span.end(
+            status="error",
+            output_chars=len(raw),
+            raw_output_path=raw_path,
+            error_message=str(exc),
+        )
         return {"parsed_items": [], "trace": trace}

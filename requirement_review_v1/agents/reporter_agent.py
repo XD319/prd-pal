@@ -8,10 +8,10 @@ V1: no LLM call — the report is built by deterministic string concatenation.
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from ..state import ReviewState
+from ..utils.trace import trace_start
 
 # ── risk helpers ──────────────────────────────────────────────────────────
 
@@ -104,13 +104,17 @@ def _build_risk_summary(results: list[dict]) -> str:
 
 # ── node function ─────────────────────────────────────────────────────────
 
+_AGENT = "reporter"
+
 
 async def run(state: ReviewState) -> ReviewState:
     """Assemble *final_report* from *parsed_items* and *review_results*."""
-    start = time.time()
     parsed_items: list[dict] = state.get("parsed_items", [])
     review_results: list[dict] = state.get("review_results", [])
     trace: dict[str, Any] = dict(state.get("trace", {}))
+
+    input_chars = len(str(parsed_items)) + len(str(review_results))
+    span = trace_start(_AGENT, model="none", input_chars=input_chars)
 
     results_by_id = {r["id"]: r for r in review_results if "id" in r}
 
@@ -139,10 +143,6 @@ async def run(state: ReviewState) -> ReviewState:
 
     final_report = "\n".join(parts) + "\n"
 
-    elapsed = round(time.time() - start, 3)
-    trace["reporter"] = {
-        "elapsed_seconds": elapsed,
-        "report_length": len(final_report),
-    }
+    trace[_AGENT] = span.end(status="ok", output_chars=len(final_report))
 
     return {"final_report": final_report, "trace": trace}

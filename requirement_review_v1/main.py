@@ -36,6 +36,20 @@ async def main():
     graph = build_review_graph()
     result = await graph.ainvoke({"requirement_doc": doc, "run_dir": out_dir})
 
+    # ── resolve model / provider (best-effort) ─────────────────────
+    _model, _provider = "unknown", "unknown"
+    try:
+        from gpt_researcher.config.config import Config as _Cfg
+        _c = _Cfg()
+        _model = _c.smart_llm_model or "unknown"
+        _provider = _c.smart_llm_provider or "unknown"
+    except Exception:
+        for _aname in ("parser", "reviewer"):
+            _m = result.get("trace", {}).get(_aname, {}).get("model", "")
+            if _m and _m not in ("unknown", "none"):
+                _model = _m
+                break
+
     report_path = os.path.join(out_dir, "report.md")
     state_path = os.path.join(out_dir, "report.json")
     trace_path = os.path.join(out_dir, "run_trace.json")
@@ -43,8 +57,18 @@ async def main():
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(result.get("final_report", ""))
 
+    report_data: dict = {
+        "schema_version": "v1.1",
+        "run_id": run_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "model": _model,
+        "provider": _provider,
+        "project": "requirement_review_v1",
+    }
+    report_data.update(result)
+
     with open(state_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+        json.dump(report_data, f, ensure_ascii=False, indent=2)
 
     with open(trace_path, "w", encoding="utf-8") as f:
         json.dump(result.get("trace", {}), f, ensure_ascii=False, indent=2)

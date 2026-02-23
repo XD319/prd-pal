@@ -7,7 +7,6 @@ parsed_items  →  review_results
 from __future__ import annotations
 
 import json
-import time
 from typing import Any
 
 import json_repair
@@ -20,6 +19,7 @@ from gpt_researcher.utils.llm import create_chat_completion
 from ..prompts import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 from ..state import ReviewState
 from ..utils.io import save_raw_agent_output
+from ..utils.trace import trace_start
 
 _AGENT = "reviewer"
 
@@ -33,20 +33,21 @@ async def run(state: ReviewState) -> ReviewState:
     Returns a partial state update with *review_results* and *trace*.
     On failure the results list is empty and the trace carries the error.
     """
-    start = time.time()
     parsed_items: list[dict] = state.get("parsed_items", [])
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
     raw = ""
 
     if not parsed_items:
-        trace[_AGENT] = {
-            "elapsed_seconds": 0.0,
-            "error": "parsed_items is empty — nothing to review",
-        }
+        span = trace_start(_AGENT, model="none", input_chars=0)
+        trace[_AGENT] = span.end(
+            status="error",
+            error_message="parsed_items is empty — nothing to review",
+        )
         return {"review_results": [], "trace": trace}
 
     items_json = json.dumps(parsed_items, ensure_ascii=False, indent=2)
+    span = trace_start(_AGENT, input_chars=len(items_json))
 
     messages = convert_openai_messages([
         {"role": "system", "content": REVIEWER_SYSTEM_PROMPT},
@@ -58,6 +59,8 @@ async def run(state: ReviewState) -> ReviewState:
 
     try:
         cfg = Config()
+        span.model = cfg.smart_llm_model or "unknown"
+
         raw = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=messages,
@@ -69,28 +72,25 @@ async def run(state: ReviewState) -> ReviewState:
         parsed: dict = parse_json_markdown(raw, parser=json_repair.loads)
         review_results: list[dict] = parsed.get("review_results", [])
 
-        elapsed = round(time.time() - start, 3)
-        trace[_AGENT] = {
-            "elapsed_seconds": elapsed,
-            "result_count": len(review_results),
-        }
-
-        if "review_results" not in parsed and run_dir and raw:
-            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
-            trace[_AGENT]["raw_output_path"] = raw_path
-            trace[_AGENT]["error_message"] = (
-                "key 'review_results' missing after json repair"
+        if "review_results" not in parsed:
+            raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            trace[_AGENT] = span.end(
+                status="error",
+                output_chars=len(raw),
+                raw_output_path=raw_path,
+                error_message="key 'review_results' missing after json repair",
             )
+        else:
+            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
 
         return {"review_results": review_results, "trace": trace}
 
     except Exception as exc:
-        elapsed = round(time.time() - start, 3)
-        trace[_AGENT] = {
-            "elapsed_seconds": elapsed,
-            "error": str(exc),
-        }
-        if run_dir and raw:
-            raw_path = save_raw_agent_output(run_dir, _AGENT, raw)
-            trace[_AGENT]["raw_output_path"] = raw_path
+        raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        trace[_AGENT] = span.end(
+            status="error",
+            output_chars=len(raw),
+            raw_output_path=raw_path,
+            error_message=str(exc),
+        )
         return {"review_results": [], "trace": trace}
