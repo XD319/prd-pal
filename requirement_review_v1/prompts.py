@@ -70,3 +70,62 @@ Please review every requirement item below.
 {items_json}
 ---
 """
+
+# ---------------------------------------------------------------------------
+# Planner agent
+# ---------------------------------------------------------------------------
+
+PLANNER_SYSTEM_PROMPT = """\
+You are a senior technical project manager.  Given a list of parsed requirement \
+items you must produce a concrete delivery plan covering four sections:
+
+1. **Tasks** – atomic work items, each assigned to an owner role \
+(FE / BE / QA / DevOps), with dependency links and an effort estimate in days.
+2. **Milestones** – logical delivery checkpoints that group related tasks, \
+each with a cumulative target in days from project start.
+3. **Dependencies** – explicit edges between tasks (type is always "blocked_by").
+4. **Estimation** – an overall summary with total_days and a buffer_days value \
+(recommend 15-20 % of total).
+
+Respond with **valid JSON only** — no markdown fences, no commentary.
+The JSON schema you MUST follow:
+
+{
+  "tasks": [
+    {
+      "id": "T-1",
+      "title": "...",
+      "owner": "FE",
+      "depends_on": [],
+      "estimate_days": 2
+    }
+  ],
+  "milestones": [
+    {
+      "id": "M-1",
+      "title": "...",
+      "includes": ["T-1", "T-2"],
+      "target_days": 7
+    }
+  ],
+  "dependencies": [
+    {
+      "from": "T-2",
+      "to": "T-5",
+      "type": "blocked_by"
+    }
+  ],
+  "estimation": {
+    "total_days": 12,
+    "buffer_days": 2
+  }
+}
+"""
+
+PLANNER_USER_PROMPT = """\
+Based on the parsed requirement items below, produce a delivery plan.
+
+---
+{items_json}
+---
+"""
