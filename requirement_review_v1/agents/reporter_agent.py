@@ -1,7 +1,8 @@
-"""Reporter agent — LangGraph node that assembles parsed items and review
-results into a human-readable Markdown report.
+"""Reporter agent — LangGraph node that assembles parsed items, review
+results, and delivery plan into a human-readable Markdown report.
 
-parsed_items + review_results  →  final_report
+parsed_items + review_results + tasks/milestones/estimation + plan_review
+  →  final_report
 
 V1: no LLM call — the report is built by deterministic string concatenation.
 """
@@ -40,7 +41,7 @@ def _risk_level(result: dict) -> str:
 
 _RISK_EMOJI = {_RISK_HIGH: "🔴", _RISK_MEDIUM: "🟡", _RISK_LOW: "🟢"}
 
-# ── markdown builders ─────────────────────────────────────────────────────
+# ── markdown builders — requirements ─────────────────────────────────────
 
 
 def _build_requirement_table(items: list[dict]) -> str:
@@ -102,18 +103,101 @@ def _build_risk_summary(results: list[dict]) -> str:
     return "\n".join(rows)
 
 
+# ── markdown builders — delivery plan ────────────────────────────────────
+
+
+def _build_task_table(tasks: list[dict]) -> str:
+    rows = [
+        "| ID | Title | Owner | Dependencies | Est. Days |",
+        "|----|-------|-------|--------------|-----------|",
+    ]
+    for t in tasks:
+        tid = t.get("id", "-")
+        title = t.get("title", "-")
+        owner = t.get("owner", "-")
+        deps = ", ".join(t.get("depends_on", [])) or "—"
+        days = t.get("estimate_days", "-")
+        rows.append(f"| {tid} | {title} | {owner} | {deps} | {days} |")
+    return "\n".join(rows)
+
+
+def _build_milestone_table(milestones: list[dict]) -> str:
+    rows = [
+        "| ID | Title | Tasks | Target Days |",
+        "|----|-------|-------|-------------|",
+    ]
+    for m in milestones:
+        mid = m.get("id", "-")
+        title = m.get("title", "-")
+        includes = ", ".join(m.get("includes", [])) or "—"
+        target = m.get("target_days", "-")
+        rows.append(f"| {mid} | {title} | {includes} | {target} |")
+    return "\n".join(rows)
+
+
+def _build_estimation_summary(estimation: dict) -> str:
+    total = estimation.get("total_days", "?")
+    buffer = estimation.get("buffer_days", "?")
+    return (
+        f"- **Total estimated days:** {total}\n"
+        f"- **Buffer days:** {buffer}\n"
+        f"- **Grand total:** {total + buffer if isinstance(total, (int, float)) and isinstance(buffer, (int, float)) else '?'}"
+    )
+
+
+def _build_plan_review_section(plan_review: dict) -> str:
+    if not plan_review:
+        return "_No plan review comments available._"
+    lines: list[str] = []
+    for key in ("coverage", "milestones", "estimation"):
+        comment = plan_review.get(key, "")
+        if comment:
+            label = key.replace("_", " ").title()
+            lines.append(f"- **{label}:** {comment}")
+    return "\n".join(lines) if lines else "_No plan review comments available._"
+
+
+# ── markdown builders — delivery risks ────────────────────────────────────
+
+_IMPACT_EMOJI = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+
+
+def _build_risk_register(risks: list[dict]) -> str:
+    rows = [
+        "| ID | Description | Impact | Mitigation | Buffer Days |",
+        "|----|-------------|--------|------------|-------------|",
+    ]
+    for r in risks:
+        rid = r.get("id", "-")
+        desc = r.get("description", "-")
+        impact = r.get("impact", "-")
+        emoji = _IMPACT_EMOJI.get(impact, "⚪")
+        mitigation = r.get("mitigation", "-")
+        buf = r.get("buffer_days", 0)
+        rows.append(f"| {rid} | {desc} | {emoji} {impact} | {mitigation} | {buf} |")
+    return "\n".join(rows)
+
+
 # ── node function ─────────────────────────────────────────────────────────
 
 _AGENT = "reporter"
 
 
 async def run(state: ReviewState) -> ReviewState:
-    """Assemble *final_report* from *parsed_items* and *review_results*."""
+    """Assemble *final_report* from all state fields."""
     parsed_items: list[dict] = state.get("parsed_items", [])
     review_results: list[dict] = state.get("review_results", [])
+    tasks: list[dict] = state.get("tasks", [])
+    milestones: list[dict] = state.get("milestones", [])
+    estimation: dict = state.get("estimation", {})
+    risks: list[dict] = state.get("risks", [])
+    plan_review: dict = state.get("plan_review", {})
     trace: dict[str, Any] = dict(state.get("trace", {}))
 
-    input_chars = len(str(parsed_items)) + len(str(review_results))
+    input_chars = sum(len(str(v)) for v in (
+        parsed_items, review_results, tasks, milestones, estimation,
+        risks, plan_review,
+    ))
     span = trace_start(_AGENT, model="none", input_chars=input_chars)
 
     results_by_id = {r["id"]: r for r in review_results if "id" in r}
@@ -134,12 +218,44 @@ async def run(state: ReviewState) -> ReviewState:
     else:
         parts.append("_No review results available._")
 
-    # Section 3 — risk summary
+    # Section 3 — requirement quality risk summary
     parts.append("\n## 3. Risk Summary\n")
     if review_results:
         parts.append(_build_risk_summary(review_results))
     else:
         parts.append("_No review results to summarize._")
+
+    # Section 4 — delivery plan
+    parts.append("\n## 4. Delivery Plan\n")
+
+    parts.append("### 4.1 Task Breakdown\n")
+    if tasks:
+        parts.append(_build_task_table(tasks))
+    else:
+        parts.append("_No tasks generated._")
+
+    parts.append("\n### 4.2 Milestones\n")
+    if milestones:
+        parts.append(_build_milestone_table(milestones))
+    else:
+        parts.append("_No milestones generated._")
+
+    parts.append("\n### 4.3 Estimation\n")
+    if estimation:
+        parts.append(_build_estimation_summary(estimation))
+    else:
+        parts.append("_No estimation available._")
+
+    # Section 5 — delivery risk register
+    parts.append("\n## 5. Delivery Risk Register\n")
+    if risks:
+        parts.append(_build_risk_register(risks))
+    else:
+        parts.append("_No delivery risks identified._")
+
+    # Section 6 — plan review
+    parts.append("\n## 6. Plan Review\n")
+    parts.append(_build_plan_review_section(plan_review))
 
     final_report = "\n".join(parts) + "\n"
 

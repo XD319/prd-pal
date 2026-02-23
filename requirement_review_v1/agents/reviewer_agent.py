@@ -1,7 +1,7 @@
 """Reviewer agent — LangGraph node that evaluates each parsed requirement
-on clarity, testability, and ambiguity.
+on clarity, testability, ambiguity, and plan coverage.
 
-parsed_items  →  review_results
+parsed_items + tasks/milestones/estimation  →  review_results + plan_review
 """
 
 from __future__ import annotations
@@ -30,8 +30,12 @@ async def run(state: ReviewState) -> ReviewState:
     Each result contains ``is_clear``, ``is_testable``, ``is_ambiguous``,
     a list of concrete ``issues``, and actionable ``suggestions``.
 
-    Returns a partial state update with *review_results* and *trace*.
-    On failure the results list is empty and the trace carries the error.
+    When a delivery plan is available the reviewer also cross-checks
+    requirement-to-task coverage and produces *plan_review* comments.
+
+    Returns a partial state update with *review_results*, *plan_review*,
+    and *trace*.  On failure the results list is empty and the trace
+    carries the error.
     """
     parsed_items: list[dict] = state.get("parsed_items", [])
     trace: dict[str, Any] = dict(state.get("trace", {}))
@@ -44,16 +48,28 @@ async def run(state: ReviewState) -> ReviewState:
             status="error",
             error_message="parsed_items is empty — nothing to review",
         )
-        return {"review_results": [], "trace": trace}
+        return {"review_results": [], "plan_review": {}, "trace": trace}
 
     items_json = json.dumps(parsed_items, ensure_ascii=False, indent=2)
-    span = trace_start(_AGENT, input_chars=len(items_json))
+
+    plan_data = {
+        "tasks": state.get("tasks", []),
+        "milestones": state.get("milestones", []),
+        "estimation": state.get("estimation", {}),
+    }
+    plan_json = json.dumps(plan_data, ensure_ascii=False, indent=2)
+
+    input_chars = len(items_json) + len(plan_json)
+    span = trace_start(_AGENT, input_chars=input_chars)
 
     messages = convert_openai_messages([
         {"role": "system", "content": REVIEWER_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": REVIEWER_USER_PROMPT.format(items_json=items_json),
+            "content": REVIEWER_USER_PROMPT.format(
+                items_json=items_json,
+                plan_json=plan_json,
+            ),
         },
     ])
 
@@ -71,6 +87,7 @@ async def run(state: ReviewState) -> ReviewState:
 
         parsed: dict = parse_json_markdown(raw, parser=json_repair.loads)
         review_results: list[dict] = parsed.get("review_results", [])
+        plan_review: dict = parsed.get("plan_review", {})
 
         if "review_results" not in parsed:
             raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
@@ -83,7 +100,11 @@ async def run(state: ReviewState) -> ReviewState:
         else:
             trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
 
-        return {"review_results": review_results, "trace": trace}
+        return {
+            "review_results": review_results,
+            "plan_review": plan_review,
+            "trace": trace,
+        }
 
     except Exception as exc:
         raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
@@ -93,4 +114,4 @@ async def run(state: ReviewState) -> ReviewState:
             raw_output_path=raw_path,
             error_message=str(exc),
         )
-        return {"review_results": [], "trace": trace}
+        return {"review_results": [], "plan_review": {}, "trace": trace}
