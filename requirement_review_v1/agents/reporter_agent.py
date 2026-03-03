@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..metrics import compute_requirement_coverage
 from ..state import ReviewState
 from ..utils.trace import trace_start
 
@@ -202,8 +203,21 @@ async def run(state: ReviewState) -> ReviewState:
     span = trace_start(_AGENT, model="none", input_chars=input_chars)
 
     results_by_id = {r["id"]: r for r in review_results if "id" in r}
+    metrics = compute_requirement_coverage(parsed_items, tasks)
 
     parts: list[str] = ["# Requirement Review Report\n"]
+    ratio = metrics.get("coverage_ratio", 0.0)
+    req_to_tasks = metrics.get("requirement_to_tasks", {})
+    uncovered = metrics.get("uncovered_requirements", [])
+
+    covered_count = sum(1 for task_ids in req_to_tasks.values() if task_ids)
+    total_count = len(req_to_tasks)
+    parts.append(
+        f"**Coverage:** {ratio:.2%} ({covered_count}/{total_count} requirements covered)"
+    )
+    if uncovered:
+        parts.append(f"**Uncovered:** {', '.join(uncovered)}")
+    parts.append("")
 
     # Section 1 — requirement list
     parts.append("## 1. Requirement List\n")
@@ -262,4 +276,4 @@ async def run(state: ReviewState) -> ReviewState:
 
     trace[_AGENT] = span.end(status="ok", output_chars=len(final_report))
 
-    return {"final_report": final_report, "trace": trace}
+    return {"final_report": final_report, "metrics": metrics, "trace": trace}

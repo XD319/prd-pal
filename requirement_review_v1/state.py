@@ -25,6 +25,7 @@ class ReviewState(TypedDict, total=False):
     estimation: Dict[str, object]
     risks: List[dict]
     plan_review: Dict[str, str]
+    metrics: Dict[str, object]
 
 
 def create_initial_state(requirement_doc: str) -> ReviewState:
@@ -41,4 +42,5 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         estimation={},
         risks=[],
         plan_review={},
+        metrics={},
     )
