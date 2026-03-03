@@ -176,6 +176,73 @@ All authentication events must be logged for compliance purposes, with appropria
 
 ---
 
+## Metrics
+
+系统在 `report.json` 的 `metrics` 字段中输出可回归、可比较的结构化指标（由 `requirement_review_v1/metrics/coverage.py` 计算）。
+
+### coverage_ratio 语义
+
+- 定义：`coverage_ratio = covered_requirements / total_requirements`
+- `total_requirements`：Parser 产出的需求 ID 总数（`parsed_items[*].id`）
+- `covered_requirements`：至少被一个任务引用的需求数（`tasks[*].requirement_ids`）
+- 取值范围：`[0, 1]`，并保留 4 位小数
+- 边界行为：当无可统计需求（`total_requirements == 0`）时返回 `0.0`
+
+### 相关指标字段
+
+| 字段 | 类型 | 含义 |
+|------|------|------|
+| `coverage_ratio` | float | 需求覆盖率（0~1） |
+| `uncovered_requirements` | list[str] | 未被任何任务覆盖的需求 ID 列表 |
+| `requirement_to_tasks` | dict[str, list[str]] | 每个需求 ID 对应的任务 ID 列表 |
+
+---
+
+## Eval
+
+项目提供最小回归评估脚本 `eval/run_eval.py`，用于批量执行测试 case 并校验核心质量门禁：
+
+- `report_json_valid`：`report.json` 顶层关键字段存在且类型正确
+- `trace_complete`：5 个 Agent（`parser/planner/risk/reviewer/reporter`）的 trace 完整
+- `coverage_ratio_present`：`metrics.coverage_ratio` 存在且值在 `[0, 1]`
+
+默认输入 case 文件为 `eval/cases/prd_test_inputs.jsonl`，每行一个 JSON case。
+
+### 运行 Eval
+
+```bash
+# 使用默认路径运行全部 case
+python eval/run_eval.py
+
+# 指定 case 文件、输出报告和运行产物目录
+python eval/run_eval.py \
+  --cases eval/cases/prd_test_inputs.jsonl \
+  --out eval/eval_report.json \
+  --runs-dir eval/runs
+```
+
+运行后将生成：
+
+- 汇总报告：`eval/eval_report.json`
+- 每个 case 的产物目录：`eval/runs/<case_id>_<timestamp>/`
+  - `report.md`
+  - `report.json`
+  - `run_trace.json`
+
+> CI 集成说明：当存在 `failed` 或 `error` case 时，`eval/run_eval.py` 将返回非 0 退出码。
+
+### 运行示例
+
+```bash
+# 1) 先跑一次主流程，生成单次报告
+python -m requirement_review_v1.main --input docs/sample_prd.md
+
+# 2) 再跑回归评估，验证 report/trace/metrics 关键约束
+python eval/run_eval.py
+```
+
+---
+
 ## Testing
 
 完整测试报告见 [`docs/v1-test-report.md`](docs/v1-test-report.md)。
