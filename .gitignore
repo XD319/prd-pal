@@ -52,3 +52,10 @@ server_log.txt
 .cursorrules
 CURSOR_RULES.md
 /.history
+
+# Local pip cache
+.pip-cache/
+
+# Eval run outputs
+eval/eval_report.json
+eval/runs/
