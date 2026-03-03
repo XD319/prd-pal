@@ -17,6 +17,7 @@ from gpt_researcher.config.config import Config
 from gpt_researcher.utils.llm import create_chat_completion
 
 from ..prompts import RISK_SYSTEM_PROMPT, RISK_USER_PROMPT
+from ..schemas import RiskOutput, validate_risk_output
 from ..state import ReviewState
 from ..utils.io import save_raw_agent_output
 from ..utils.trace import trace_start
@@ -77,20 +78,21 @@ async def run(state: ReviewState) -> ReviewState:
         )
 
         parsed: dict = parse_json_markdown(raw, parser=json_repair.loads)
-        risks: list[dict] = parsed.get("risks", [])
-
-        if "risks" not in parsed:
+        try:
+            validated = validate_risk_output(parsed)
+            output = validated.model_dump(mode="python")
+            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
+        except Exception as exc:
             raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            output = RiskOutput().model_dump(mode="python")
             trace[_AGENT] = span.end(
                 status="error",
                 output_chars=len(raw),
                 raw_output_path=raw_path,
-                error_message="key 'risks' missing after json repair",
+                error_message=f"schema validation failed: {exc}",
             )
-        else:
-            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
 
-        return {"risks": risks, "trace": trace}
+        return {"risks": output.get("risks", []), "trace": trace}
 
     except Exception as exc:
         raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""

@@ -17,6 +17,7 @@ from gpt_researcher.config.config import Config
 from gpt_researcher.utils.llm import create_chat_completion
 
 from ..prompts import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
+from ..schemas import ReviewerOutput, validate_reviewer_output
 from ..state import ReviewState
 from ..utils.io import save_raw_agent_output
 from ..utils.trace import trace_start
@@ -86,23 +87,23 @@ async def run(state: ReviewState) -> ReviewState:
         )
 
         parsed: dict = parse_json_markdown(raw, parser=json_repair.loads)
-        review_results: list[dict] = parsed.get("review_results", [])
-        plan_review: dict = parsed.get("plan_review", {})
-
-        if "review_results" not in parsed:
+        try:
+            validated = validate_reviewer_output(parsed)
+            output = validated.model_dump(mode="python")
+            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
+        except Exception as exc:
             raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            output = ReviewerOutput().model_dump(mode="python")
             trace[_AGENT] = span.end(
                 status="error",
                 output_chars=len(raw),
                 raw_output_path=raw_path,
-                error_message="key 'review_results' missing after json repair",
+                error_message=f"schema validation failed: {exc}",
             )
-        else:
-            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
 
         return {
-            "review_results": review_results,
-            "plan_review": plan_review,
+            "review_results": output.get("review_results", []),
+            "plan_review": output.get("plan_review", {}),
             "trace": trace,
         }
 

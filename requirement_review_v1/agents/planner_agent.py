@@ -17,14 +17,12 @@ from gpt_researcher.config.config import Config
 from gpt_researcher.utils.llm import create_chat_completion
 
 from ..prompts import PLANNER_SYSTEM_PROMPT, PLANNER_USER_PROMPT
+from ..schemas import PlannerOutput, validate_planner_output
 from ..state import ReviewState
 from ..utils.io import save_raw_agent_output
 from ..utils.trace import trace_start
 
 _AGENT = "planner"
-
-_EXPECTED_KEYS = ("tasks", "milestones", "dependencies", "estimation")
-
 
 async def run(state: ReviewState) -> ReviewState:
     """Produce a delivery plan from *parsed_items*.
@@ -70,24 +68,25 @@ async def run(state: ReviewState) -> ReviewState:
         )
 
         parsed: dict = parse_json_markdown(raw, parser=json_repair.loads)
-
-        missing = [k for k in _EXPECTED_KEYS if k not in parsed]
-        if missing:
+        try:
+            validated = validate_planner_output(parsed)
+            output = validated.model_dump(mode="python", by_alias=True)
+            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
+        except Exception as exc:
             raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            output = PlannerOutput().model_dump(mode="python", by_alias=True)
             trace[_AGENT] = span.end(
                 status="error",
                 output_chars=len(raw),
                 raw_output_path=raw_path,
-                error_message=f"keys missing after json repair: {missing}",
+                error_message=f"schema validation failed: {exc}",
             )
-        else:
-            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
 
         return {
-            "tasks": parsed.get("tasks", []),
-            "milestones": parsed.get("milestones", []),
-            "dependencies": parsed.get("dependencies", []),
-            "estimation": parsed.get("estimation", {}),
+            "tasks": output.get("tasks", []),
+            "milestones": output.get("milestones", []),
+            "dependencies": output.get("dependencies", []),
+            "estimation": output.get("estimation", {}),
             "trace": trace,
         }
 
