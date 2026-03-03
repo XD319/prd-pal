@@ -108,16 +108,17 @@ def _build_risk_summary(results: list[dict]) -> str:
 
 def _build_task_table(tasks: list[dict]) -> str:
     rows = [
-        "| ID | Title | Owner | Dependencies | Est. Days |",
-        "|----|-------|-------|--------------|-----------|",
+        "| ID | Title | Owner | Requirement IDs | Dependencies | Est. Days |",
+        "|----|-------|-------|-----------------|--------------|-----------|",
     ]
     for t in tasks:
         tid = t.get("id", "-")
         title = t.get("title", "-")
         owner = t.get("owner", "-")
+        requirement_ids = ", ".join(t.get("requirement_ids", [])) or "—"
         deps = ", ".join(t.get("depends_on", [])) or "—"
         days = t.get("estimate_days", "-")
-        rows.append(f"| {tid} | {title} | {owner} | {deps} | {days} |")
+        rows.append(f"| {tid} | {title} | {owner} | {requirement_ids} | {deps} | {days} |")
     return "\n".join(rows)
 
 

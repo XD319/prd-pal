@@ -18,6 +18,7 @@ class Task(BaseModel):
     id: str
     title: str = ""
     owner: str = ""
+    requirement_ids: list[str] = []
     depends_on: SafeStrList = []
     estimate_days: float = 0
 
@@ -72,7 +73,7 @@ def validate_planner_output(data: dict) -> PlannerOutput:
 # validate_planner_output({
 #     "tasks": [
 #         {"id": "T-1", "title": "Design API", "owner": "BE",
-#          "depends_on": [], "estimate_days": 3}
+#          "requirement_ids": ["REQ-001"], "depends_on": [], "estimate_days": 3}
 #     ],
 #     "milestones": [
 #         {"id": "M-1", "title": "API Ready", "includes": ["T-1"],

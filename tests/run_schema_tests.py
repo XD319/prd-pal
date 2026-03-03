@@ -161,7 +161,14 @@ print("\n=== planner schema ===")
 
 PLANNER_VALID = {
     "tasks": [
-        {"id": "T-1", "title": "Design API", "owner": "BE", "depends_on": [], "estimate_days": 3}
+        {
+            "id": "T-1",
+            "title": "Design API",
+            "owner": "BE",
+            "requirement_ids": ["REQ-001"],
+            "depends_on": [],
+            "estimate_days": 3,
+        }
     ],
     "milestones": [
         {"id": "M-1", "title": "API Ready", "includes": ["T-1"], "target_days": 5}
@@ -178,6 +185,7 @@ def _():
     out = validate_planner_output(PLANNER_VALID)
     assert len(out.tasks) == 1
     assert out.tasks[0].id == "T-1"
+    assert out.tasks[0].requirement_ids == ["REQ-001"]
     assert out.estimation.total_days == 10
 
 @test("planner: dependency alias 'from' -> from_task")

@@ -102,7 +102,8 @@ You are a senior technical project manager.  Given a list of parsed requirement 
 items you must produce a concrete delivery plan covering four sections:
 
 1. **Tasks** – atomic work items, each assigned to an owner role \
-(FE / BE / QA / DevOps), with dependency links and an effort estimate in days.
+(FE / BE / QA / DevOps), with dependency links, a requirement mapping list, \
+and an effort estimate in days.
 2. **Milestones** – logical delivery checkpoints that group related tasks, \
 each with a cumulative target in days from project start.
 3. **Dependencies** – explicit edges between tasks (type is always "blocked_by").
@@ -118,6 +119,7 @@ The JSON schema you MUST follow:
       "id": "T-1",
       "title": "...",
       "owner": "FE",
+      "requirement_ids": ["REQ-001"],
       "depends_on": [],
       "estimate_days": 2
     }
@@ -142,6 +144,11 @@ The JSON schema you MUST follow:
     "buffer_days": 2
   }
 }
+
+Hard requirement for every task:
+- `requirement_ids` MUST be present.
+- `requirement_ids` MUST be a non-empty list of valid requirement IDs from the \
+input (e.g. "REQ-001").
 """
 
 PLANNER_USER_PROMPT = """\
