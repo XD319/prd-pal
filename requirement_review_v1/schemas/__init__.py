@@ -1,14 +1,35 @@
 """Pydantic v2 schemas for requirement_review_v1 agent outputs."""
 
-from .parser_schema import ParserOutput, validate_parser_output
-from .planner_schema import PlannerOutput, validate_planner_output
-from .risk_schema import RiskOutput, validate_risk_output
-from .reviewer_schema import ReviewerOutput, validate_reviewer_output
+from .base import ID, RiskLevel
+from .parser_schema import ParsedItem, ParserOutput, validate_parser_output
+from .planner_schema import (
+    Estimation,
+    Milestone,
+    PlannerOutput,
+    Task,
+    validate_planner_output,
+)
+from .risk_schema import RiskItem, RiskOutput, validate_risk_output
+from .reviewer_schema import (
+    PlanReview,
+    ReviewResultItem,
+    ReviewerOutput,
+    validate_reviewer_output,
+)
 
 __all__ = [
+    "ID",
+    "RiskLevel",
+    "ParsedItem",
     "ParserOutput",
+    "Task",
+    "Milestone",
+    "Estimation",
     "PlannerOutput",
+    "RiskItem",
     "RiskOutput",
+    "ReviewResultItem",
+    "PlanReview",
     "ReviewerOutput",
     "validate_parser_output",
     "validate_planner_output",

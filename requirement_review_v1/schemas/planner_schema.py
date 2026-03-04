@@ -4,45 +4,47 @@ Field names match the JSON contract defined in ``prompts.PLANNER_SYSTEM_PROMPT``
 and consumed by ``agents/planner_agent.py``.
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
 
-from .base import SafeStrList
+from pydantic import ConfigDict, Field
+
+from .base import AgentSchemaModel, ID, SafeStrList
 
 
 # ── sub-models ────────────────────────────────────────────────────────────
 
 
-class Task(BaseModel):
+class Task(AgentSchemaModel):
     """An atomic work item in the delivery plan."""
 
-    id: str
+    id: ID
     title: str = ""
     owner: str = ""
-    requirement_ids: list[str] = []
-    depends_on: SafeStrList = []
+    requirement_ids: list[ID] = Field(default_factory=list)
+    depends_on: SafeStrList = Field(default_factory=list)
     estimate_days: float = 0
 
 
-class Milestone(BaseModel):
+class Milestone(AgentSchemaModel):
     """A delivery checkpoint grouping related tasks."""
 
-    id: str
+    id: ID
     title: str = ""
-    includes: SafeStrList = []
+    includes: SafeStrList = Field(default_factory=list)
     target_days: float = 0
 
 
-class Dependency(BaseModel):
+class Dependency(AgentSchemaModel):
     """An explicit edge between two tasks (``from`` → ``to``)."""
 
     model_config = ConfigDict(populate_by_name=True)
 
-    from_task: str = Field(alias="from", default="")
-    to: str = ""
+    from_task: ID = Field(alias="from")
+    to: ID
     type: str = "blocked_by"
 
 
-class Estimation(BaseModel):
+class Estimation(AgentSchemaModel):
     """Overall effort summary."""
 
     total_days: float = 0
@@ -52,19 +54,19 @@ class Estimation(BaseModel):
 # ── top-level output ──────────────────────────────────────────────────────
 
 
-class PlannerOutput(BaseModel):
+class PlannerOutput(AgentSchemaModel):
     """Wrapper returned by the planner LLM call.
 
     ``{"tasks": [...], "milestones": [...], "dependencies": [...], "estimation": {...}}``
     """
 
-    tasks: list[Task] = []
-    milestones: list[Milestone] = []
-    dependencies: list[Dependency] = []
+    tasks: list[Task] = Field(default_factory=list)
+    milestones: list[Milestone] = Field(default_factory=list)
+    dependencies: list[Dependency] = Field(default_factory=list)
     estimation: Estimation = Field(default_factory=Estimation)
 
 
-def validate_planner_output(data: dict) -> PlannerOutput:
+def validate_planner_output(data: dict[str, Any]) -> PlannerOutput:
     """Validate and coerce a raw dict into a :class:`PlannerOutput`."""
     return PlannerOutput.model_validate(data)
 

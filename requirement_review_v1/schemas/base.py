@@ -1,8 +1,9 @@
-"""Shared helpers and annotated types for schema validation."""
+"""Shared helpers and common types for schema validation."""
 
+from enum import Enum
 from typing import Annotated, Any
 
-from pydantic import BeforeValidator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 
 def normalize_bool(v: Any) -> bool:
@@ -26,6 +27,28 @@ def safe_list(v: Any) -> list:
     if isinstance(v, list):
         return v
     return [v]
+
+
+class AgentSchemaModel(BaseModel):
+    """Base model for all agent schemas.
+
+    - ignores unknown fields from LLM outputs
+    - serializes enums by their raw string values
+    """
+
+    model_config = ConfigDict(extra="ignore", use_enum_values=True)
+
+
+ID = Annotated[str, Field(min_length=1)]
+"""Generic non-empty identifier type used across agent outputs."""
+
+
+class RiskLevel(str, Enum):
+    """Normalized risk-impact levels used by risk outputs."""
+
+    high = "high"
+    medium = "medium"
+    low = "low"
 
 
 NormalizedBool = Annotated[bool, BeforeValidator(normalize_bool)]
