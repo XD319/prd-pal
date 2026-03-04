@@ -9,6 +9,7 @@ route_decider  →  clarify(parser_prompt=v1.1-clarify)  →  planner  →  risk
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -24,6 +25,7 @@ from .state import ReviewState
 
 _MAX_REVISION_ROUNDS = 2
 _HIGH_RISK_THRESHOLD = 0.4
+ProgressHook = Callable[[str, str, ReviewState], None]
 
 
 async def _clarify_node(state: ReviewState) -> ReviewState:
@@ -85,20 +87,58 @@ def _route_next(state: ReviewState) -> str:
     return "reporter"
 
 
-def build_review_graph():
+def _build_async_node(
+    node_name: str,
+    node_fn: Callable[[ReviewState], Awaitable[ReviewState]],
+    progress_hook: ProgressHook | None,
+) -> Callable[[ReviewState], Awaitable[ReviewState]]:
+    async def _runner(state: ReviewState) -> ReviewState:
+        if progress_hook:
+            progress_hook("start", node_name, state)
+        update = await node_fn(state)
+        if progress_hook:
+            merged_state: ReviewState = dict(state)
+            if isinstance(update, dict):
+                merged_state.update(update)
+            progress_hook("end", node_name, merged_state)
+        return update
+
+    return _runner
+
+
+def _build_sync_node(
+    node_name: str,
+    node_fn: Callable[[ReviewState], ReviewState],
+    progress_hook: ProgressHook | None,
+) -> Callable[[ReviewState], ReviewState]:
+    def _runner(state: ReviewState) -> ReviewState:
+        if progress_hook:
+            progress_hook("start", node_name, state)
+        update = node_fn(state)
+        if progress_hook:
+            merged_state: ReviewState = dict(state)
+            if isinstance(update, dict):
+                merged_state.update(update)
+            progress_hook("end", node_name, merged_state)
+        return update
+
+    return _runner
+
+
+def build_review_graph(progress_hook: ProgressHook | None = None):
     """Build and compile the review graph with conditional loop routing.
 
     Returns a compiled ``CompiledGraph`` ready for ``await graph.ainvoke()``.
     """
     workflow = StateGraph(ReviewState)
 
-    workflow.add_node("parser", parser_agent.run)
-    workflow.add_node("clarify", _clarify_node)
-    workflow.add_node("planner", planner_agent.run)
-    workflow.add_node("risk", risk_agent.run)
-    workflow.add_node("reviewer", reviewer_agent.run)
-    workflow.add_node("route_decider", _route_decider_node)
-    workflow.add_node("reporter", reporter_agent.run)
+    workflow.add_node("parser", _build_async_node("parser", parser_agent.run, progress_hook))
+    workflow.add_node("clarify", _build_async_node("clarify", _clarify_node, progress_hook))
+    workflow.add_node("planner", _build_async_node("planner", planner_agent.run, progress_hook))
+    workflow.add_node("risk", _build_async_node("risk", risk_agent.run, progress_hook))
+    workflow.add_node("reviewer", _build_async_node("reviewer", reviewer_agent.run, progress_hook))
+    workflow.add_node("route_decider", _build_sync_node("route_decider", _route_decider_node, progress_hook))
+    workflow.add_node("reporter", _build_async_node("reporter", reporter_agent.run, progress_hook))
 
     workflow.set_entry_point("parser")
     workflow.add_edge("parser", "planner")
