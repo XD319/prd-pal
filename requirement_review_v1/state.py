@@ -97,6 +97,10 @@ class ReviewState(TypedDict, total=False):
     risks: list[RiskItemState]
     plan_review: PlanReviewState
     metrics: dict[str, Any]
+    revision_round: int
+    high_risk_ratio: float
+    routing_reason: str
+    parser_prompt_version: str
 
 
 def create_initial_state(requirement_doc: str) -> ReviewState:
@@ -114,4 +118,8 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         risks=[],
         plan_review={},
         metrics={},
+        revision_round=0,
+        high_risk_ratio=0.0,
+        routing_reason="",
+        parser_prompt_version="v1.1",
     )

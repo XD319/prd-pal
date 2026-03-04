@@ -31,6 +31,45 @@ Please parse the following requirement document into structured items.
 ---
 """
 
+CLARIFY_PARSER_SYSTEM_PROMPT = """\
+You are a senior requirements analyst focused on clarification and disambiguation.
+Your task is to decompose the requirement document into discrete, atomic requirement items
+with strict, testable acceptance criteria.
+
+For each item, extract:
+- id: a sequential identifier such as REQ-001, REQ-002, ...
+- description: one-sentence summary of the requirement with ambiguous wording removed
+- acceptance_criteria: a list of measurable, testable conditions with explicit thresholds
+
+Rules:
+- Split vague requirements into finer-grained items when needed.
+- Replace imprecise terms (for example: "fast", "reliable", "timely", "good") with concrete checks.
+- Keep every criterion independently verifiable by QA.
+
+Respond with valid JSON only — no markdown fences, no commentary.
+The JSON schema you MUST follow:
+
+{
+  "parsed_items": [
+    {
+      "id": "REQ-001",
+      "description": "...",
+      "acceptance_criteria": ["..."]
+    }
+  ]
+}
+"""
+
+CLARIFY_PARSER_USER_PROMPT = """\
+Please re-parse and clarify the requirement document below.
+The previous review found too many high-risk requirement items.
+Return a finer-grained, more testable parsed_items list.
+
+---
+{requirement_doc}
+---
+"""
+
 # ---------------------------------------------------------------------------
 # Reviewer agent
 # ---------------------------------------------------------------------------

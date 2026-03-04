@@ -11,7 +11,12 @@ from typing import Any
 
 from gpt_researcher.config.config import Config
 
-from ..prompts import PARSER_SYSTEM_PROMPT, PARSER_USER_PROMPT
+from ..prompts import (
+    CLARIFY_PARSER_SYSTEM_PROMPT,
+    CLARIFY_PARSER_USER_PROMPT,
+    PARSER_SYSTEM_PROMPT,
+    PARSER_USER_PROMPT,
+)
 from ..schemas import ParserOutput, validate_parser_output
 from ..state import ReviewState
 from ..utils.io import save_raw_agent_output
@@ -19,6 +24,8 @@ from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
 
 _AGENT = "parser"
+_DEFAULT_PROMPT_VERSION = "v1.1"
+_CLARIFY_PROMPT_VERSION = "v1.1-clarify"
 
 
 async def run(state: ReviewState) -> ReviewState:
@@ -31,12 +38,21 @@ async def run(state: ReviewState) -> ReviewState:
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
     raw = ""
+    prompt_version = str(state.get("parser_prompt_version", _DEFAULT_PROMPT_VERSION) or _DEFAULT_PROMPT_VERSION)
 
     span = trace_start(_AGENT, input_chars=len(requirement_doc))
+    span.set_attr("prompt_version", prompt_version)
+
+    if prompt_version == _CLARIFY_PROMPT_VERSION:
+        system_prompt = CLARIFY_PARSER_SYSTEM_PROMPT
+        user_prompt = CLARIFY_PARSER_USER_PROMPT
+    else:
+        system_prompt = PARSER_SYSTEM_PROMPT
+        user_prompt = PARSER_USER_PROMPT
 
     prompt = (
-        f"{PARSER_SYSTEM_PROMPT}\n\n"
-        f"{PARSER_USER_PROMPT.format(requirement_doc=requirement_doc)}"
+        f"{system_prompt}\n\n"
+        f"{user_prompt.format(requirement_doc=requirement_doc)}"
     )
 
     try:
