@@ -291,6 +291,29 @@ python eval/run_eval.py
 
 ---
 
+## Testing
+
+项目使用 [pytest](https://docs.pytest.org/) + [pytest-asyncio](https://pypi.org/project/pytest-asyncio/) 运行单元测试，所有测试通过 mock LLM 调用运行，**无需 API Key**。
+
+```bash
+# 安装测试依赖（首次）
+pip install pytest pytest-asyncio
+
+# 运行 v2 结构化输出 / 回环路由 / tool 降级 回归测试
+pytest tests/test_schema_validation.py tests/test_routing_loop.py tests/test_risk_tool.py -v
+
+# 仅运行 schema 验证
+pytest tests/test_schema_validation.py -v
+
+# 仅运行回环路由
+pytest tests/test_routing_loop.py -v
+
+# 仅运行 risk tool 降级
+pytest tests/test_risk_tool.py -v
+```
+
+---
+
 ## Troubleshooting
 
 ### 1. Windows 代理 / SSL 错误
