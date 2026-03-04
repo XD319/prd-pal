@@ -177,3 +177,21 @@ MCP 集成建议：
 - 可选（仅当需要把外部 MCP 当数据源接入工作流时）：`langchain-mcp-adapters>=0.1.0`
 
 额外注意：当前 `pyproject.toml` 中 `mcp` 带有 `platform_system != 'Windows'` marker；若目标运行环境包含 Windows，需要评估并调整该 marker 策略。
+
+## 7. 已落地的最小 MCP Server（stdio）
+
+当前仓库已新增最小可运行骨架：
+- `requirement_review_v1/mcp_server/__init__.py`
+- `requirement_review_v1/mcp_server/server.py`
+
+已注册工具：
+- `ping`：返回 `{"ok": true}`
+
+启动命令：
+```bash
+python -m requirement_review_v1.mcp_server.server
+```
+
+说明：
+- transport 使用 `stdio`（优先方案）。
+- 当前不接入业务工作流，仅提供连通性检查工具，避免影响现有功能。
