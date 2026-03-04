@@ -6,6 +6,37 @@
 
 ---
 
+## Latest Release
+
+- Version: `v2.1.0`
+- Core capabilities:
+  - Structured Outputs (schema validation + repair fallback)
+  - LangGraph conditional routing with review loop
+  - Tool-based evidence (risk catalog retrieval with graceful fallback)
+  - FastAPI service entry (`requirement_review_v1/server/app.py`)
+  - MCP Server support (`requirement_review_v1/mcp_server`)
+  - Eval + Metrics (`eval/run_eval.py`, `metrics.coverage_ratio`)
+
+### Quick Verification
+
+Run the following commands inside your virtual environment:
+
+```bash
+python -m requirement_review_v1.main --input docs/sample_prd.md
+python eval/run_eval.py
+pytest -q
+```
+
+## How to run MCP Server
+
+If `requirement_review_v1/mcp_server` exists, start the MCP server in stdio mode with:
+
+```bash
+python -m requirement_review_v1.mcp_server.server
+```
+
+See additional notes in `docs/mcp.md`.
+
 ## Architecture
 
 ```
