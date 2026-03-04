@@ -6,10 +6,11 @@ Run:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from requirement_review_v1.service.report_service import get_report_for_mcp
 from requirement_review_v1.service.review_service import review_prd_for_mcp
 
 mcp = FastMCP("requirement-review-v1")
@@ -43,6 +44,51 @@ def review_prd(
         return _error_response("INVALID_INPUT", str(exc))
     except Exception as exc:
         return _error_response("INTERNAL_ERROR", f"review_prd failed: {exc}")
+
+
+@mcp.tool()
+def get_report(
+    run_id: str,
+    format: Literal["md", "json"] = "md",
+    offset: int = 0,
+    limit: int | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fetch report artifact content by run_id (supports markdown/json)."""
+    try:
+        resolved_options = options or {}
+        if not isinstance(resolved_options, dict):
+            raise TypeError("options must be an object")
+        outputs_root = resolved_options.get("outputs_root", "outputs")
+        return get_report_for_mcp(
+            run_id=run_id,
+            format=format,
+            offset=offset,
+            limit=limit,
+            outputs_root=str(outputs_root),
+        )
+    except (TypeError, ValueError) as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "format": str(format or "md"),
+            "content": "",
+            "paths": {
+                "report_md_path": "",
+                "report_json_path": "",
+            },
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
+    except Exception as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "format": str(format or "md"),
+            "content": "",
+            "paths": {
+                "report_md_path": "",
+                "report_json_path": "",
+            },
+            "error": {"code": "internal_error", "message": f"get_report failed: {exc}"},
+        }
 
 
 def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None) -> dict[str, Any]:
