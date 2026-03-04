@@ -11,7 +11,7 @@ from typing import Any, Literal
 from mcp.server.fastmcp import Context, FastMCP
 
 from requirement_review_v1.service.report_service import get_report_for_mcp
-from requirement_review_v1.service.review_service import review_prd_for_mcp
+from requirement_review_v1.service.review_service import review_prd_for_mcp_async
 
 mcp = FastMCP("requirement-review-v1")
 
@@ -23,7 +23,7 @@ def ping() -> dict[str, Any]:
 
 
 @mcp.tool()
-def review_prd(
+async def review_prd(
     prd_text: str | None = None,
     prd_path: str | None = None,
     options: dict[str, Any] | None = None,
@@ -32,7 +32,7 @@ def review_prd(
     """Run one PRD review and return run status, metrics and artifact paths."""
     try:
         client_meta = _extract_client_metadata(ctx=ctx, options=options)
-        return review_prd_for_mcp(
+        return await review_prd_for_mcp_async(
             prd_text=prd_text,
             prd_path=prd_path,
             options=options,

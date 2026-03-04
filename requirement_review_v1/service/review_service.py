@@ -160,7 +160,7 @@ def _attach_trace_invocation(summary: ReviewResultSummary, invocation_meta: dict
                 pass
 
 
-def review_prd_for_mcp(
+async def review_prd_for_mcp_async(
     *,
     prd_text: str | None,
     prd_path: str | None,
@@ -176,7 +176,7 @@ def review_prd_for_mcp(
     run_id = str(run_id_raw).strip() if run_id_raw is not None else ""
     outputs_root = str(resolved_options.get("outputs_root", "outputs"))
 
-    summary = review_prd_text(
+    summary = await review_prd_text_async(
         prd_text=requirement_doc,
         run_id=run_id or None,
         config_overrides={"outputs_root": outputs_root},
@@ -201,3 +201,24 @@ def review_prd_for_mcp(
             "trace_path": summary.run_trace_path,
         },
     }
+
+
+def review_prd_for_mcp(
+    *,
+    prd_text: str | None,
+    prd_path: str | None,
+    options: dict[str, Any] | None = None,
+    invocation_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(
+            review_prd_for_mcp_async(
+                prd_text=prd_text,
+                prd_path=prd_path,
+                options=options,
+                invocation_meta=invocation_meta,
+            )
+        )
+    raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
