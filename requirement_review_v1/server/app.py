@@ -12,7 +12,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, model_validator
 
-from requirement_review_v1.run_review import make_run_id, run_review
+from requirement_review_v1.run_review import make_run_id
+from requirement_review_v1.service.review_service import review_prd_text_async
 
 OUTPUTS_ROOT = Path("outputs")
 PRIMARY_NODES = ("parser", "planner", "risk", "reviewer", "reporter")
@@ -137,15 +138,17 @@ async def _run_job(job: JobRecord, requirement_doc: str) -> None:
     job.status = "running"
     job.updated_at = datetime.now(timezone.utc).isoformat()
     try:
-        result = await run_review(
-            requirement_doc=requirement_doc,
+        summary = await review_prd_text_async(
+            prd_text=requirement_doc,
             run_id=job.run_id,
-            outputs_root=OUTPUTS_ROOT,
-            progress_hook=lambda event, node, state: _apply_progress_event(job, event, node, state),
+            config_overrides={
+                "outputs_root": OUTPUTS_ROOT,
+                "progress_hook": lambda event, node, state: _apply_progress_event(job, event, node, state),
+            },
         )
-        job.status = "completed"
+        job.status = summary.status
         job.current_node = ""
-        job.report_paths = result["report_paths"]
+        job.report_paths = summary.to_report_paths()
     except Exception as exc:
         job.status = "failed"
         job.error = str(exc)

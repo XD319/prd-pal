@@ -9,7 +9,7 @@ import asyncio
 
 from dotenv import load_dotenv
 
-from .run_review import run_review
+from .service.review_service import review_prd_text_async
 
 
 def _parse_args():
@@ -25,10 +25,10 @@ async def main():
     with open(args.input, "r", encoding="utf-8") as f:
         doc = f.read()
 
-    run_output = await run_review(doc, outputs_root="outputs")
-    report_path = run_output["report_paths"]["report_md"]
-    state_path = run_output["report_paths"]["report_json"]
-    trace_path = run_output["report_paths"]["run_trace"]
+    summary = await review_prd_text_async(doc, config_overrides={"outputs_root": "outputs"})
+    report_path = summary.report_md_path
+    state_path = summary.report_json_path
+    trace_path = summary.run_trace_path
 
     print(f"Report : {report_path}")
     print(f"State  : {state_path}")
