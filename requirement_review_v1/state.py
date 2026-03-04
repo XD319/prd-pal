@@ -53,6 +53,8 @@ class RiskItemState(TypedDict):
     impact: str
     mitigation: str
     buffer_days: float
+    evidence_ids: list[str]
+    evidence_snippets: list[str]
 
 
 class ReviewResultItemState(TypedDict):

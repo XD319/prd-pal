@@ -164,10 +164,15 @@ def _build_plan_review_section(plan_review: dict) -> str:
 _IMPACT_EMOJI = {"high": "🔴", "medium": "🟡", "low": "🟢"}
 
 
+def _md_cell(value: Any) -> str:
+    text = str(value if value is not None else "")
+    return text.replace("|", "\\|").replace("\n", "<br>")
+
+
 def _build_risk_register(risks: list[dict]) -> str:
     rows = [
-        "| ID | Description | Impact | Mitigation | Buffer Days |",
-        "|----|-------------|--------|------------|-------------|",
+        "| ID | Description | Impact | Mitigation | Buffer Days | Evidence IDs | Evidence |",
+        "|----|-------------|--------|------------|-------------|--------------|----------|",
     ]
     for r in risks:
         rid = r.get("id", "-")
@@ -176,7 +181,13 @@ def _build_risk_register(risks: list[dict]) -> str:
         emoji = _IMPACT_EMOJI.get(impact, "⚪")
         mitigation = r.get("mitigation", "-")
         buf = r.get("buffer_days", 0)
-        rows.append(f"| {rid} | {desc} | {emoji} {impact} | {mitigation} | {buf} |")
+        evidence_ids = ", ".join(r.get("evidence_ids", [])) or "—"
+        evidence_snippets = " / ".join(r.get("evidence_snippets", [])) or "—"
+        rows.append(
+            f"| {_md_cell(rid)} | {_md_cell(desc)} | {_md_cell(f'{emoji} {impact}')} "
+            f"| {_md_cell(mitigation)} | {_md_cell(buf)} | {_md_cell(evidence_ids)} "
+            f"| {_md_cell(evidence_snippets)} |"
+        )
     return "\n".join(rows)
 
 

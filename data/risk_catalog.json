@@ -1,0 +1,178 @@
+[
+  {
+    "id": "RC-001",
+    "title": "Single owner bottleneck on backend integration",
+    "description": "Too many integration tasks are assigned to one backend engineer, creating a queue and delay risk.",
+    "triggers": ["More than 40% tasks owned by one role", "Critical path tasks all assigned to BE"],
+    "mitigations": ["Rebalance ownership across BE and FE", "Split integration tasks into parallel sub-tasks"],
+    "tags": ["resource", "backend", "bottleneck"]
+  },
+  {
+    "id": "RC-002",
+    "title": "Long dependency chain blocks delivery",
+    "description": "Tasks form a long blocked_by sequence, so one delay cascades into multiple milestones.",
+    "triggers": ["Dependency path length over 4", "Milestone includes tasks from same chain"],
+    "mitigations": ["Reduce chain depth", "Add intermediate deliverables and integration checkpoints"],
+    "tags": ["dependency", "schedule", "critical-path"]
+  },
+  {
+    "id": "RC-003",
+    "title": "Insufficient schedule buffer",
+    "description": "Buffer days are below the typical 15% contingency threshold for project uncertainty.",
+    "triggers": ["buffer_days / total_days < 0.15", "No explicit contingency tasks"],
+    "mitigations": ["Increase buffer to 15-20%", "Reserve contingency for integration and QA"],
+    "tags": ["buffer", "estimation", "schedule"]
+  },
+  {
+    "id": "RC-004",
+    "title": "Optimistic QA effort estimate",
+    "description": "Testing work is underestimated relative to scope, increasing defect escape and rework risk.",
+    "triggers": ["QA tasks under 10% of total effort", "No regression test task in plan"],
+    "mitigations": ["Allocate dedicated regression window", "Add explicit test design and automation tasks"],
+    "tags": ["qa", "estimation", "quality"]
+  },
+  {
+    "id": "RC-005",
+    "title": "Milestones include unresolved blocked tasks",
+    "description": "Milestone delivery criteria contain tasks still blocked by upstream work.",
+    "triggers": ["Milestone tasks have open dependencies", "Target day assumes parallel work that is blocked"],
+    "mitigations": ["Gate milestones on dependency readiness", "Resequence blocked tasks"],
+    "tags": ["milestone", "dependency", "planning"]
+  },
+  {
+    "id": "RC-006",
+    "title": "Cross-team handoff latency",
+    "description": "Frequent FE-BE-QA handoffs introduce waiting time and coordination overhead.",
+    "triggers": ["Many tasks require multi-role handoff", "No overlap windows for handoff"],
+    "mitigations": ["Define interface contracts early", "Plan overlap windows and handoff SLAs"],
+    "tags": ["handoff", "coordination", "multi-team"]
+  },
+  {
+    "id": "RC-007",
+    "title": "Unclear API contract readiness",
+    "description": "Frontend implementation starts before backend API contracts are finalized.",
+    "triggers": ["FE task depends on undefined API schema", "No task for API contract sign-off"],
+    "mitigations": ["Add API contract milestone", "Use mocked contract tests before integration"],
+    "tags": ["api", "frontend", "backend"]
+  },
+  {
+    "id": "RC-008",
+    "title": "Critical path lacks parallelization",
+    "description": "High-effort tasks on the critical path are planned sequentially even when partly independent.",
+    "triggers": ["Large tasks not split", "No parallel streams in milestone plan"],
+    "mitigations": ["Decompose tasks by component", "Run infra and feature work in parallel"],
+    "tags": ["critical-path", "parallelization", "schedule"]
+  },
+  {
+    "id": "RC-009",
+    "title": "Deployment readiness omitted",
+    "description": "No explicit DevOps or release-hardening activities are included before target release.",
+    "triggers": ["No deployment task owner", "No rollback or observability checklist task"],
+    "mitigations": ["Add release readiness checklist", "Include staging validation and rollback drill"],
+    "tags": ["devops", "release", "operations"]
+  },
+  {
+    "id": "RC-010",
+    "title": "Data migration uncertainty",
+    "description": "Schema or data migration complexity is not represented in estimates and milestones.",
+    "triggers": ["Existing data model changes", "No migration dry-run task"],
+    "mitigations": ["Create migration spike", "Plan dry-run and rollback path"],
+    "tags": ["data", "migration", "backend"]
+  },
+  {
+    "id": "RC-011",
+    "title": "Third-party dependency volatility",
+    "description": "External service limits or API changes can break timeline assumptions.",
+    "triggers": ["Heavy reliance on vendor API", "No fallback for external outage or rate limit"],
+    "mitigations": ["Add retry and fallback design task", "Include vendor-risk contingency buffer"],
+    "tags": ["external", "integration", "vendor"]
+  },
+  {
+    "id": "RC-012",
+    "title": "Security review scheduled too late",
+    "description": "Security hardening and review happen near release, causing last-minute blockers.",
+    "triggers": ["No early threat-model task", "Security checks after feature freeze"],
+    "mitigations": ["Shift security review left", "Add secure coding and scan checkpoints"],
+    "tags": ["security", "compliance", "quality"]
+  },
+  {
+    "id": "RC-013",
+    "title": "Requirement-to-task coverage gaps",
+    "description": "Some requirements have no mapped tasks, leading to hidden scope and missed outcomes.",
+    "triggers": ["Requirement IDs not referenced by tasks", "Review flags uncovered requirements"],
+    "mitigations": ["Enforce coverage matrix", "Add missing implementation and verification tasks"],
+    "tags": ["coverage", "scope", "planning"]
+  },
+  {
+    "id": "RC-014",
+    "title": "Ambiguous acceptance criteria increase rework",
+    "description": "Vague acceptance criteria lead to mismatched implementation and QA expectations.",
+    "triggers": ["Criteria use words like fast or intuitive", "High ambiguity flagged in review"],
+    "mitigations": ["Rewrite into measurable criteria", "Add examples and explicit thresholds"],
+    "tags": ["requirements", "ambiguity", "quality"]
+  },
+  {
+    "id": "RC-015",
+    "title": "No spike for unknown technical area",
+    "description": "Novel architecture or technology is planned without feasibility validation.",
+    "triggers": ["New framework with no prior team experience", "No discovery or spike task"],
+    "mitigations": ["Add time-boxed technical spike", "Adjust estimates based on spike findings"],
+    "tags": ["technical-risk", "estimation", "architecture"]
+  },
+  {
+    "id": "RC-016",
+    "title": "Environment instability impacts QA",
+    "description": "Shared test environments are unstable or unavailable, delaying verification.",
+    "triggers": ["No environment provisioning task", "Repeated environment outage incidents"],
+    "mitigations": ["Automate environment setup", "Introduce isolated QA environment"],
+    "tags": ["environment", "qa", "devops"]
+  },
+  {
+    "id": "RC-017",
+    "title": "Insufficient observability for go-live",
+    "description": "Monitoring, logging, and alerting are not planned, slowing incident detection.",
+    "triggers": ["No telemetry implementation task", "No runbook or alert thresholds"],
+    "mitigations": ["Include observability baseline tasks", "Define SLO alerts before launch"],
+    "tags": ["observability", "operations", "release"]
+  },
+  {
+    "id": "RC-018",
+    "title": "Review and approval lead time ignored",
+    "description": "Business, security, or architecture approvals are not reflected in timeline.",
+    "triggers": ["No approval gates in milestones", "Past projects had long review cycles"],
+    "mitigations": ["Add approval milestones", "Book reviewers early and track decision dates"],
+    "tags": ["governance", "schedule", "stakeholders"]
+  },
+  {
+    "id": "RC-019",
+    "title": "Regression risk from compressed timeline",
+    "description": "Shortened schedule reduces stabilization time and increases post-release defects.",
+    "triggers": ["Feature + bugfix overlap near release", "No stabilization sprint"],
+    "mitigations": ["Introduce code freeze window", "Reserve explicit regression and hardening time"],
+    "tags": ["regression", "timeline", "quality"]
+  },
+  {
+    "id": "RC-020",
+    "title": "Unplanned dependency on legacy system",
+    "description": "Legacy integration behavior is poorly documented and causes surprise blockers.",
+    "triggers": ["Unknown legacy interface constraints", "No legacy integration test task"],
+    "mitigations": ["Add legacy discovery and contract tests", "Pair with domain expert early"],
+    "tags": ["legacy", "integration", "unknowns"]
+  },
+  {
+    "id": "RC-021",
+    "title": "Scope creep via unbounded enhancement requests",
+    "description": "New requests enter sprint without impact analysis, destabilizing milestones.",
+    "triggers": ["Frequent requirement changes", "No change control checkpoint"],
+    "mitigations": ["Use change budget", "Require trade-off decision before adding scope"],
+    "tags": ["scope", "governance", "planning"]
+  },
+  {
+    "id": "RC-022",
+    "title": "Key person availability risk",
+    "description": "Critical specialist availability is uncertain during key milestones.",
+    "triggers": ["Single specialist owns critical tasks", "Known PTO overlaps with release window"],
+    "mitigations": ["Create backup ownership", "Front-load specialist-dependent tasks"],
+    "tags": ["resource", "staffing", "schedule"]
+  }
+]

@@ -219,6 +219,11 @@ their scope.
 For every risk provide an impact level (high / medium / low), a mitigation \
 strategy, and an optional extra buffer_days recommendation.
 
+You are also given evidence candidates from a local risk catalog retrieval tool.
+- Use the most relevant evidence items for each risk.
+- Keep evidence references short and specific.
+- If no evidence applies, return empty arrays.
+
 Respond with **valid JSON only** — no markdown fences, no commentary.
 The JSON schema you MUST follow:
 
@@ -229,7 +234,9 @@ The JSON schema you MUST follow:
       "description": "...",
       "impact": "high",
       "mitigation": "...",
-      "buffer_days": 1
+      "buffer_days": 1,
+      "evidence_ids": ["RC-001"],
+      "evidence_snippets": ["Too many integration tasks are assigned to one backend engineer."]
     }
   ]
 }
@@ -240,5 +247,10 @@ Analyse the delivery plan below and identify all delivery risks.
 
 ---
 {plan_json}
+---
+
+### Retrieved Evidence Candidates
+---
+{evidence_json}
 ---
 """

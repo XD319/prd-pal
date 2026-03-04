@@ -22,6 +22,8 @@ class RiskItem(AgentSchemaModel):
     impact: RiskLevel = RiskLevel.medium
     mitigation: str = ""
     buffer_days: float = 0
+    evidence_ids: list[str] = Field(default_factory=list)
+    evidence_snippets: list[str] = Field(default_factory=list)
 
 
 # ── top-level output ──────────────────────────────────────────────────────
