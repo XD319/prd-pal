@@ -110,9 +110,14 @@ def review_prd_text(
 
 
 def _read_prd_text(prd_text: str | None, prd_path: str | None) -> str:
-    if isinstance(prd_text, str) and prd_text.strip():
+    has_prd_text = isinstance(prd_text, str) and bool(prd_text.strip())
+    has_prd_path = isinstance(prd_path, str) and bool(prd_path.strip())
+
+    if has_prd_text and has_prd_path:
+        raise ValueError("Provide only one of prd_text or prd_path")
+    if has_prd_text:
         return prd_text
-    if isinstance(prd_path, str) and prd_path.strip():
+    if has_prd_path:
         path = Path(prd_path)
         if not path.exists():
             raise FileNotFoundError(f"PRD file not found: {prd_path}")
