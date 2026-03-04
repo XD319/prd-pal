@@ -1,0 +1,327 @@
+"""Risk-tool tests: catalog search hit / miss / disabled switch.
+
+Covers three behaviors of the risk agent's tool integration:
+1. Tool enabled + catalog hits → evidence attached to risks
+2. Tool enabled + no catalog hits → risks returned without evidence
+3. Tool disabled via env switch → tool skipped, degraded trace recorded
+
+All LLM calls are mocked — no API keys required.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
+
+from requirement_review_v1.tools.risk_catalog_search import search_risk_catalog
+from requirement_review_v1.state import ReviewState
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# search_risk_catalog: local TF-IDF tool
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+SAMPLE_CATALOG = [
+    {
+        "id": "RC-001",
+        "title": "Single owner bottleneck on backend integration",
+        "description": "Too many integration tasks assigned to one backend engineer.",
+        "triggers": ["More than 40% tasks owned by one role"],
+        "mitigations": ["Rebalance ownership across BE and FE"],
+        "tags": ["resource", "backend", "bottleneck"],
+    },
+    {
+        "id": "RC-003",
+        "title": "Insufficient schedule buffer",
+        "description": "Buffer days below the typical 15% contingency threshold.",
+        "triggers": ["buffer_days / total_days < 0.15"],
+        "mitigations": ["Increase buffer to 15-20%"],
+        "tags": ["buffer", "estimation", "schedule"],
+    },
+    {
+        "id": "RC-004",
+        "title": "Optimistic QA effort estimate",
+        "description": "Testing work underestimated relative to scope.",
+        "triggers": ["QA tasks under 10% of total effort"],
+        "mitigations": ["Allocate dedicated regression window"],
+        "tags": ["qa", "estimation", "quality"],
+    },
+]
+
+
+class TestRiskCatalogSearch:
+    """search_risk_catalog with an in-memory catalog fixture."""
+
+    @pytest.fixture(autouse=True)
+    def _write_catalog(self, tmp_path):
+        catalog_file = tmp_path / "risk_catalog.json"
+        catalog_file.write_text(json.dumps(SAMPLE_CATALOG), encoding="utf-8")
+        self.catalog_path = str(catalog_file)
+
+    def test_hit_returns_matching_entries(self):
+        results = search_risk_catalog(
+            "backend bottleneck integration tasks",
+            catalog_path=self.catalog_path,
+            top_k=3,
+        )
+        assert len(results) >= 1
+        ids = [r["id"] for r in results]
+        assert "RC-001" in ids
+
+    def test_hit_includes_score_and_snippet(self):
+        results = search_risk_catalog(
+            "buffer estimation schedule",
+            catalog_path=self.catalog_path,
+            top_k=2,
+        )
+        assert len(results) >= 1
+        top = results[0]
+        assert "score" in top and top["score"] > 0
+        assert "snippet" in top and len(top["snippet"]) > 0
+
+    def test_miss_returns_empty(self):
+        results = search_risk_catalog(
+            "xyzzy frobnicator quantum",
+            catalog_path=self.catalog_path,
+            top_k=5,
+        )
+        assert results == []
+
+    def test_empty_query_returns_empty(self):
+        assert search_risk_catalog("", catalog_path=self.catalog_path) == []
+
+    def test_whitespace_query_returns_empty(self):
+        assert search_risk_catalog("   ", catalog_path=self.catalog_path) == []
+
+    def test_top_k_limits_results(self):
+        results = search_risk_catalog(
+            "estimation buffer QA backend",
+            catalog_path=self.catalog_path,
+            top_k=1,
+        )
+        assert len(results) <= 1
+
+    def test_matched_terms_present(self):
+        results = search_risk_catalog(
+            "backend bottleneck",
+            catalog_path=self.catalog_path,
+            top_k=3,
+        )
+        hit = next((r for r in results if r["id"] == "RC-001"), None)
+        assert hit is not None
+        assert "backend" in hit["matched_terms"] or "bottleneck" in hit["matched_terms"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Risk agent: tool enabled + hits
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _base_state() -> ReviewState:
+    return {
+        "tasks": [
+            {"id": "T-1", "title": "Design API", "owner": "BE", "requirement_ids": ["REQ-001"], "depends_on": [], "estimate_days": 3},
+        ],
+        "milestones": [{"id": "M-1", "title": "MVP", "includes": ["T-1"], "target_days": 5}],
+        "dependencies": [],
+        "estimation": {"total_days": 10, "buffer_days": 1},
+        "trace": {},
+        "run_dir": "",
+    }
+
+
+MOCK_LLM_RISK_OUTPUT = {
+    "risks": [
+        {
+            "id": "R-1",
+            "description": "Tight buffer for backend tasks",
+            "impact": "high",
+            "mitigation": "Add 2 extra buffer days",
+            "buffer_days": 2,
+            "evidence_ids": [],
+            "evidence_snippets": [],
+        }
+    ]
+}
+
+
+class TestRiskAgentToolEnabled:
+    """Risk agent with tool enabled and catalog returning hits."""
+
+    @pytest.fixture(autouse=True)
+    def _write_catalog(self, tmp_path):
+        catalog_file = tmp_path / "risk_catalog.json"
+        catalog_file.write_text(json.dumps(SAMPLE_CATALOG), encoding="utf-8")
+        self.catalog_path = str(catalog_file)
+
+    @pytest.mark.asyncio
+    async def test_tool_hit_attaches_evidence(self):
+        catalog_hits = [
+            {"id": "RC-003", "title": "Insufficient schedule buffer", "score": 5.0, "snippet": "Buffer below 15%", "matched_terms": ["buffer"]},
+        ]
+        with (
+            patch(
+                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=MOCK_LLM_RISK_OUTPUT,
+            ),
+            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch(
+                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                return_value=catalog_hits,
+            ),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true"}),
+        ):
+            from requirement_review_v1.agents import risk_agent
+
+            result = await risk_agent.run(_base_state())
+
+        assert len(result["risks"]) == 1
+        risk = result["risks"][0]
+        assert "RC-003" in risk["evidence_ids"]
+        assert result["trace"]["risk"]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_tool_miss_returns_risks_without_evidence(self):
+        with (
+            patch(
+                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=MOCK_LLM_RISK_OUTPUT,
+            ),
+            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch(
+                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                return_value=[],
+            ),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true"}),
+        ):
+            from requirement_review_v1.agents import risk_agent
+
+            result = await risk_agent.run(_base_state())
+
+        assert len(result["risks"]) == 1
+        risk = result["risks"][0]
+        assert risk["evidence_ids"] == []
+        assert result["trace"]["risk"]["status"] == "ok"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Risk agent: tool disabled via env switch
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRiskAgentToolDisabled:
+    """Risk agent with RISK_AGENT_ENABLE_CATALOG_TOOL=false."""
+
+    @pytest.mark.asyncio
+    async def test_tool_disabled_skips_catalog(self):
+        mock_search = MagicMock(return_value=[])
+        with (
+            patch(
+                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=MOCK_LLM_RISK_OUTPUT,
+            ),
+            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch(
+                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                mock_search,
+            ),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "false"}),
+        ):
+            from requirement_review_v1.agents import risk_agent
+
+            result = await risk_agent.run(_base_state())
+
+        mock_search.assert_not_called()
+        assert len(result["risks"]) == 1
+        trace_risk = result["trace"]["risk"]
+        assert trace_risk["status"] == "ok"
+        assert trace_risk.get("risk_catalog_tool_status") == "degraded_disabled"
+
+    @pytest.mark.asyncio
+    async def test_tool_disabled_with_env_zero(self):
+        mock_search = MagicMock(return_value=[])
+        with (
+            patch(
+                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=MOCK_LLM_RISK_OUTPUT,
+            ),
+            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch(
+                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                mock_search,
+            ),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "0"}),
+        ):
+            from requirement_review_v1.agents import risk_agent
+
+            result = await risk_agent.run(_base_state())
+
+        mock_search.assert_not_called()
+        assert result["trace"]["risk"].get("risk_catalog_tool_status") == "degraded_disabled"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Risk agent: tool enabled but raises exception → degraded
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRiskAgentToolError:
+    """Risk agent gracefully degrades when catalog tool throws."""
+
+    @pytest.mark.asyncio
+    async def test_tool_error_degrades_gracefully(self):
+        with (
+            patch(
+                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=MOCK_LLM_RISK_OUTPUT,
+            ),
+            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch(
+                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                side_effect=RuntimeError("catalog file missing"),
+            ),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true"}),
+        ):
+            from requirement_review_v1.agents import risk_agent
+
+            result = await risk_agent.run(_base_state())
+
+        assert len(result["risks"]) == 1
+        trace_risk = result["trace"]["risk"]
+        assert trace_risk["status"] == "ok"
+        assert trace_risk.get("risk_catalog_tool_status") == "degraded_error"
+        assert "catalog file missing" in trace_risk.get("risk_catalog_tool_error", "")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Risk agent: empty tasks → early return
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRiskAgentEmptyTasks:
+    """Risk agent returns empty risks when tasks list is empty."""
+
+    @pytest.mark.asyncio
+    async def test_empty_tasks_returns_empty(self):
+        state: ReviewState = {
+            "tasks": [],
+            "milestones": [],
+            "dependencies": [],
+            "estimation": {},
+            "trace": {},
+            "run_dir": "",
+        }
+        from requirement_review_v1.agents import risk_agent
+
+        result = await risk_agent.run(state)
+        assert result["risks"] == []
+        assert result["trace"]["risk"]["status"] == "error"
+        assert "empty" in result["trace"]["risk"]["error_message"]

@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 import json
 import logging
+import os
 from fastapi import WebSocket
 from datetime import datetime
 
@@ -28,6 +29,9 @@ class TestWebSocket(WebSocket):
 @pytest.mark.asyncio
 async def test_log_output_file():
     """Test to verify logs are properly written to output file"""
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY is not set")
+
     from gpt_researcher.agent import GPTResearcher
     from backend.server.server_utils import CustomLogsHandler
     

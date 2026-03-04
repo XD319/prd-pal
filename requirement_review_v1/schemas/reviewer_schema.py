@@ -4,26 +4,28 @@ Field names match the JSON contract defined in ``prompts.REVIEWER_SYSTEM_PROMPT`
 and consumed by ``agents/reviewer_agent.py`` and ``agents/reporter_agent.py``.
 """
 
-from pydantic import BaseModel
+from typing import Any
 
-from .base import NormalizedBool, SafeStrList
+from pydantic import Field
+
+from .base import AgentSchemaModel, ID, NormalizedBool, SafeStrList
 
 
 # ── sub-models ────────────────────────────────────────────────────────────
 
 
-class ReviewResult(BaseModel):
+class ReviewResultItem(AgentSchemaModel):
     """Per-requirement quality assessment."""
 
-    id: str
+    id: ID
     is_clear: NormalizedBool = True
     is_testable: NormalizedBool = True
     is_ambiguous: NormalizedBool = False
-    issues: SafeStrList = []
+    issues: SafeStrList = Field(default_factory=list)
     suggestions: str = ""
 
 
-class PlanReview(BaseModel):
+class PlanReview(AgentSchemaModel):
     """Top-level plan quality comments."""
 
     coverage: str = ""
@@ -34,19 +36,23 @@ class PlanReview(BaseModel):
 # ── top-level output ──────────────────────────────────────────────────────
 
 
-class ReviewerOutput(BaseModel):
+class ReviewerOutput(AgentSchemaModel):
     """Wrapper returned by the reviewer LLM call.
 
     ``{"review_results": [...], "plan_review": {...}}``
     """
 
-    review_results: list[ReviewResult] = []
-    plan_review: PlanReview = PlanReview()
+    review_results: list[ReviewResultItem] = Field(default_factory=list)
+    plan_review: PlanReview = Field(default_factory=PlanReview)
 
 
-def validate_reviewer_output(data: dict) -> ReviewerOutput:
+def validate_reviewer_output(data: dict[str, Any]) -> ReviewerOutput:
     """Validate and coerce a raw dict into a :class:`ReviewerOutput`."""
     return ReviewerOutput.model_validate(data)
+
+
+# Backward-compatible alias for existing imports.
+ReviewResult = ReviewResultItem
 
 
 # ── minimal example ───────────────────────────────────────────────────────

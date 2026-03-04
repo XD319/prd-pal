@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 import sys
 import logging
+import os
 
 # Add the project root to Python path
 project_root = Path(__file__).parent.parent
@@ -18,6 +19,9 @@ async def test_researcher_logging():  # Renamed function to be more specific
     Test suite for verifying the researcher's logging infrastructure.
     Ensures proper creation and formatting of log files.
     """
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY is not set")
+
     try:
         # Import here to catch any import errors
         from backend.server.server_utils import Researcher

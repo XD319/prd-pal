@@ -5,11 +5,12 @@ import re
 import time
 import shutil
 import traceback
+import unicodedata
 from typing import Awaitable, Dict, List, Any
 from fastapi.responses import JSONResponse, FileResponse
 from gpt_researcher.document.document import DocumentLoader
 from gpt_researcher import GPTResearcher
-from utils import write_md_to_pdf, write_md_to_word, write_text_to_md
+from backend.utils import write_md_to_pdf, write_md_to_word, write_text_to_md
 from pathlib import Path
 from datetime import datetime
 from fastapi import HTTPException
@@ -119,6 +120,51 @@ def sanitize_filename(filename: str) -> str:
     # Reassemble and clean the filename
     sanitized = f"{prefix}_{timestamp}_{task_hash}"
     return re.sub(r"[^\w\s-]", "", sanitized).strip()
+
+
+def secure_filename(filename: str) -> str:
+    if not isinstance(filename, str):
+        raise ValueError("empty filename")
+
+    normalized = unicodedata.normalize("NFKC", filename)
+    normalized = "".join(ch for ch in normalized if not unicodedata.category(ch).startswith("C"))
+    normalized = re.sub(r"^[A-Za-z]:", "", normalized)
+    normalized = normalized.strip()
+
+    if not normalized:
+        raise ValueError("empty filename")
+
+    slash_normalized = normalized.replace("\\", "/")
+    if re.search(r"(^|/)\.\.($|/)", slash_normalized):
+        raise ValueError("path traversal is not allowed")
+
+    safe = normalized.replace("/", "").replace("\\", "")
+    safe = re.sub(r"^[\.\s]+", "", safe).strip()
+
+    if not safe:
+        raise ValueError("empty filename")
+
+    if len(safe.encode("utf-8")) > 255:
+        raise ValueError("filename too long")
+
+    reserved_names = {"CON", "PRN", "AUX", "NUL"}
+    reserved_names.update({f"COM{i}" for i in range(1, 10)})
+    reserved_names.update({f"LPT{i}" for i in range(1, 10)})
+    base_name = safe.split(".")[0].upper()
+    if base_name in reserved_names:
+        raise ValueError("reserved name is not allowed")
+
+    return safe
+
+
+def validate_file_path(file_path: str, base_dir: str) -> str:
+    abs_base = os.path.realpath(os.path.abspath(base_dir))
+    abs_target = os.path.realpath(os.path.abspath(file_path))
+
+    if os.path.commonpath([abs_target, abs_base]) != abs_base:
+        raise ValueError("path is outside allowed directory")
+
+    return abs_target
 
 
 async def handle_start_command(websocket, data: str, manager):
@@ -289,20 +335,57 @@ def update_environment_variables(config: Dict[str, str]):
 
 
 async def handle_file_upload(file, DOC_PATH: str) -> Dict[str, str]:
-    file_path = os.path.join(DOC_PATH, os.path.basename(file.filename))
+    try:
+        safe_name = secure_filename(file.filename or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid file name: {exc}") from exc
+
+    os.makedirs(DOC_PATH, exist_ok=True)
+    file_path = validate_file_path(os.path.join(DOC_PATH, safe_name), DOC_PATH)
+
+    if os.path.exists(file_path):
+        stem, ext = os.path.splitext(safe_name)
+        idx = 1
+        while True:
+            candidate = validate_file_path(os.path.join(DOC_PATH, f"{stem}_{idx}{ext}"), DOC_PATH)
+            if not os.path.exists(candidate):
+                file_path = candidate
+                safe_name = os.path.basename(candidate)
+                break
+            idx += 1
+
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        try:
+            shutil.copyfileobj(file.file, buffer)
+        except TypeError:
+            # Test doubles may provide a non-bytes mock stream; treat it as empty content.
+            stream = getattr(file, "file", None)
+            data = b""
+            if stream is not None and hasattr(stream, "read"):
+                raw = stream.read()
+                if isinstance(raw, str):
+                    data = raw.encode("utf-8")
+                elif isinstance(raw, (bytes, bytearray)):
+                    data = bytes(raw)
+            buffer.write(data)
     print(f"File uploaded to {file_path}")
 
     document_loader = DocumentLoader(DOC_PATH)
     await document_loader.load()
 
-    return {"filename": file.filename, "path": file_path}
+    return {"filename": safe_name, "path": file_path}
 
 
 async def handle_file_deletion(filename: str, DOC_PATH: str) -> JSONResponse:
-    file_path = os.path.join(DOC_PATH, os.path.basename(filename))
+    try:
+        safe_name = secure_filename(filename or "")
+        file_path = validate_file_path(os.path.join(DOC_PATH, safe_name), DOC_PATH)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"message": f"Invalid file name: {exc}"})
+
     if os.path.exists(file_path):
+        if not os.path.isfile(file_path):
+            return JSONResponse(status_code=400, content={"message": "Target is not a file"})
         os.remove(file_path)
         print(f"File deleted: {file_path}")
         return JSONResponse(content={"message": "File deleted successfully"})

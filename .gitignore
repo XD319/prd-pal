@@ -35,6 +35,7 @@ build
 docs/build
 
 .vscode/launch.json
+.vscode/
 .langgraph-data/
 .next/
 package-lock.json

@@ -4,35 +4,37 @@ Field names match the JSON contract defined in ``prompts.PARSER_SYSTEM_PROMPT``
 and consumed by ``agents/parser_agent.py``.
 """
 
-from pydantic import BaseModel
+from typing import Any
 
-from .base import SafeStrList
+from pydantic import Field
+
+from .base import AgentSchemaModel, ID, SafeStrList
 
 
 # ── item-level model ──────────────────────────────────────────────────────
 
 
-class ParsedItem(BaseModel):
+class ParsedItem(AgentSchemaModel):
     """A single atomic requirement extracted from the PRD."""
 
-    id: str
+    id: ID
     description: str = ""
-    acceptance_criteria: SafeStrList = []
+    acceptance_criteria: SafeStrList = Field(default_factory=list)
 
 
 # ── top-level output ──────────────────────────────────────────────────────
 
 
-class ParserOutput(BaseModel):
+class ParserOutput(AgentSchemaModel):
     """Wrapper returned by the parser LLM call.
 
     ``{"parsed_items": [...]}``
     """
 
-    parsed_items: list[ParsedItem] = []
+    parsed_items: list[ParsedItem] = Field(default_factory=list)
 
 
-def validate_parser_output(data: dict) -> ParserOutput:
+def validate_parser_output(data: dict[str, Any]) -> ParserOutput:
     """Validate and coerce a raw dict into a :class:`ParserOutput`."""
     return ParserOutput.model_validate(data)
 

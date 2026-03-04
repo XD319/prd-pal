@@ -31,6 +31,45 @@ Please parse the following requirement document into structured items.
 ---
 """
 
+CLARIFY_PARSER_SYSTEM_PROMPT = """\
+You are a senior requirements analyst focused on clarification and disambiguation.
+Your task is to decompose the requirement document into discrete, atomic requirement items
+with strict, testable acceptance criteria.
+
+For each item, extract:
+- id: a sequential identifier such as REQ-001, REQ-002, ...
+- description: one-sentence summary of the requirement with ambiguous wording removed
+- acceptance_criteria: a list of measurable, testable conditions with explicit thresholds
+
+Rules:
+- Split vague requirements into finer-grained items when needed.
+- Replace imprecise terms (for example: "fast", "reliable", "timely", "good") with concrete checks.
+- Keep every criterion independently verifiable by QA.
+
+Respond with valid JSON only — no markdown fences, no commentary.
+The JSON schema you MUST follow:
+
+{
+  "parsed_items": [
+    {
+      "id": "REQ-001",
+      "description": "...",
+      "acceptance_criteria": ["..."]
+    }
+  ]
+}
+"""
+
+CLARIFY_PARSER_USER_PROMPT = """\
+Please re-parse and clarify the requirement document below.
+The previous review found too many high-risk requirement items.
+Return a finer-grained, more testable parsed_items list.
+
+---
+{requirement_doc}
+---
+"""
+
 # ---------------------------------------------------------------------------
 # Reviewer agent
 # ---------------------------------------------------------------------------
@@ -180,6 +219,11 @@ their scope.
 For every risk provide an impact level (high / medium / low), a mitigation \
 strategy, and an optional extra buffer_days recommendation.
 
+You are also given evidence candidates from a local risk catalog retrieval tool.
+- Use the most relevant evidence items for each risk.
+- Keep evidence references short and specific.
+- If no evidence applies, return empty arrays.
+
 Respond with **valid JSON only** — no markdown fences, no commentary.
 The JSON schema you MUST follow:
 
@@ -190,7 +234,9 @@ The JSON schema you MUST follow:
       "description": "...",
       "impact": "high",
       "mitigation": "...",
-      "buffer_days": 1
+      "buffer_days": 1,
+      "evidence_ids": ["RC-001"],
+      "evidence_snippets": ["Too many integration tasks are assigned to one backend engineer."]
     }
   ]
 }
@@ -201,5 +247,10 @@ Analyse the delivery plan below and identify all delivery risks.
 
 ---
 {plan_json}
+---
+
+### Retrieved Evidence Candidates
+---
+{evidence_json}
 ---
 """
