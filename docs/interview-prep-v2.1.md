@@ -1,6 +1,55 @@
 ﻿# Multi-Agent 需求评审系统面试题（V2）
 
-基于当前仓库实现整理，覆盖 LangGraph 工作流、多 Agent 协作、结构化输出、条件路由、风险证据工具、FastAPI、MCP 与评估体系。
+## 目录
+- [第一部分：系统设计](#sec-system-design)
+  - [Q0-1. 系统整体架构是什么？数据如何流动？](#q0-1)
+  - [Q0-2. 为什么使用多 Agent，而不是单 Agent？](#q0-2)
+  - [Q0-3. 系统里最复杂/最核心的部分是什么？为什么？](#q0-3)
+  - [1. 为什么这里使用 LangGraph，而不是简单的线性 pipeline？](#q1)
+  - [2. 多 Agent 在这套系统里是怎么协作的？](#q2)
+  - [3. 如何避免 Agent 间状态混乱？](#q3)
+  - [4. 为什么把澄清步骤建成独立节点 `clarify`？](#q4)
+  - [4.1 如何从“系统整体”解释这套架构？](#q4-1)
+  - [4.2 这个系统和 RAG 的区别是什么？为什么这是 Agent Workflow 而不是 RAG？](#q4-2)
+- [第二部分：工程实现](#sec-engineering)
+  - [5. Structured Outputs 如何保证稳定？](#q5)
+  - [6. 为什么需要 schema validation？](#q6)
+  - [PE-1. prompt 模板如何组织与复用？](#qpe-1)
+  - [PE-2. prompt 版本如何管理与回滚？](#qpe-2)
+  - [PE-3. 如何做 prompt 的 regression evaluation？](#qpe-3)
+  - [Q8.x Prompt 为什么要做版本管理？clarify prompt 与 normal prompt 有什么差异？](#q8-x)
+  - [Q8.y 如何从系统层面降低 hallucination？](#q8-y)
+  - [7. LLM JSON 解析失败时如何处理？](#q7)
+  - [8. temperature=0 在这里的工程意义是什么？](#q8)
+  - [C-1. 如何降低 LLM 调用成本？](#qc-1)
+  - [C-2. 如何优化端到端延迟？](#qc-2)
+- [第三部分：Agent 设计](#sec-agent-design)
+  - [9. Risk Agent 如何降低 hallucination？](#q9)
+  - [10. Tool-based evidence retrieval 的作用是什么？](#q10)
+  - [11. 工具不可用时系统会怎样？](#q11)
+  - [12. 为什么 Reporter Agent 不调用 LLM？](#q12)
+- [第四部分：系统可靠性](#sec-reliability)
+  - [13. Conditional routing 如何避免无限循环？](#q13)
+  - [13.1 routing loop 如何设计？](#q13-1)
+  - [14. 系统如何监控 agent 执行状态？](#q14)
+  - [15. 失败后还能拿到什么结果？](#q15)
+  - [16. 为什么要把 trace 单独写成 run_trace.json？](#q16)
+  - [16.2 trace artifacts 有什么作用？](#q16-2)
+  - [16.1 生产化落地时，你会优先补哪些能力？](#q16-1)
+- [第五部分：扩展能力](#sec-extension)
+  - [17. MCP Server 在这套系统里的作用是什么？](#q17)
+  - [18. 如何把系统集成到 AI 客户端？](#q18)
+  - [19. FastAPI API 层做了哪些工程化设计？](#q19)
+  - [20. Evaluation framework 如何保障迭代质量？](#q20)
+  - [20.1 如果要支持企业级生产发布，你会如何扩展？](#q20-1)
+- [第六部分：Debug & Troubleshooting](#sec-debug)
+  - [D1. structured output 解析失败率高怎么办？](#qd1)
+  - [D2. LangGraph routing loop 出现死循环如何排查？](#qd2)
+  - [D3. Risk catalog tool 命中率低怎么办？](#qd3)
+  - [D4. Agent 输出字段缺失怎么办？](#qd4)
+  - [D5. trace artifacts 不完整怎么办？](#qd5)
+  - [D6. FastAPI 任务执行卡住如何排查？](#qd6)
+
 
 ## 变更说明（V2.1）
 - 本版本补齐：系统整体、Prompt工程、成本/性能、Agent vs RAG、生产化等面试高频点。
@@ -12,8 +61,10 @@
 - B3/C3/C4：risk evidence retrieval、risk-driven routing loop。覆盖：Q9、Q10、Q11、Q13、Q13.1。  
 - B4/C5/C6：FastAPI async service、MCP server、evaluation framework、trace artifacts。覆盖：Q14、Q16、Q16.2、Q17、Q18、Q19、Q20。  
 
+<a id="sec-system-design"></a>
 ## 第一部分：系统设计
 
+<a id="q0-1"></a>
 ### Q0-1. 系统整体架构是什么？数据如何流动？
 【Resume Highlight】对应简历：Version B #1，Version C #1。  
 问题  
@@ -115,6 +166,7 @@ Pitfalls
 - 只讲节点顺序，不讲 `review_service -> workflow -> run_review` 的工程边界。
 - 忽略 artifacts 命名与目录规范，后续检索 `get_report` 容易不兼容。
 
+<a id="q0-2"></a>
 ### Q0-2. 为什么使用多 Agent，而不是单 Agent？
 问题  
 为什么不让一个“大而全”的 Agent 一次性完成解析、规划、风险和评审？
@@ -188,6 +240,7 @@ Pitfalls
 - 只强调“多 Agent 更先进”，忽略小场景下复杂度可能过高。
 - 未说明跨 agent 数据契约，面试官会追问字段漂移风险。
 
+<a id="q0-3"></a>
 ### Q0-3. 系统里最复杂/最核心的部分是什么？为什么？
 问题  
 如果只挑一个“最核心工程点”，你会选什么？
@@ -260,6 +313,7 @@ Pitfalls
 - 只说“核心是 loop”，但解释不出终止保障和可测试证据。
 - 没给出失败场景处理策略（缺字段、空输出、异常路径）。
 
+<a id="q1"></a>
 ### 1. 为什么这里使用 LangGraph，而不是简单的线性 pipeline？
 【Resume Highlight】对应简历：Version B #1，Version C #1/#4。  
 问题  
@@ -342,6 +396,7 @@ Pitfalls
 - 只强调“图更高级”而不解释 loop/termination 的工程必要性。
 - 忽略 state 字段演进导致的兼容问题（新增字段未同步 schema/agent）。
 
+<a id="q2"></a>
 ### 2. 多 Agent 在这套系统里是怎么协作的？
 问题  
 Parser/Planner/Risk/Reviewer/Reporter 的协作边界是什么？
@@ -416,6 +471,7 @@ Pitfalls
 - 协作描述停留在概念层，没有字段级输入输出边界。
 - 忽略 agent 间失败传播策略，面试官会追问异常链路。
 
+<a id="q3"></a>
 ### 3. 如何避免 Agent 间状态混乱？
 问题  
 多个节点都在读写 state，如何控制状态一致性？
@@ -488,6 +544,7 @@ Pitfalls
 - 只说“partial update”不说明冲突策略和字段 ownership。
 - 把 state 当全局变量随意写，最终难以回归与审计。
 
+<a id="q4"></a>
 ### 4. 为什么把澄清步骤建成独立节点 `clarify`？
 问题  
 为何不是在 parser 内部做 while 循环？
@@ -560,6 +617,7 @@ Pitfalls
 - 把 clarify 当成“再跑一次 parser”，忽略其目标是信息增益而非重复解析。
 - 未记录轮次和路由原因，后续无法证明 loop 的必要性。
 
+<a id="q4-1"></a>
 ### 4.1 如何从“系统整体”解释这套架构？
 问题  
 如果面试官要求你在 1-2 分钟讲清系统全貌，你会怎么讲调用链、输入输出与边界？
@@ -633,6 +691,7 @@ Pitfalls
 - 只讲技术名词，不给调用链与输入输出边界。
 - 忽略“失败时怎么处理”，面试官会判定工程性不足。
 
+<a id="q4-2"></a>
 ### 4.2 这个系统和 RAG 的区别是什么？为什么这是 Agent Workflow 而不是 RAG？
 问题  
 如果面试官问“你这个项目是不是 RAG”，应该如何准确回答？
@@ -706,8 +765,10 @@ Pitfalls
 - 把“有检索”直接等同于 RAG，概念边界不清。
 - 只谈术语，不落到 `workflow.py` 与 `risk_catalog_search.py` 的代码证据。
 
+<a id="sec-engineering"></a>
 ## 第二部分：工程实现
 
+<a id="q5"></a>
 ### 5. Structured Outputs 如何保证稳定？
 【Resume Highlight】对应简历：Version B #2，Version C #2。  
 问题  
@@ -790,6 +851,7 @@ Pitfalls
 - 把“能 parse 出 JSON”当成稳定性完成，忽略业务字段缺失与脏值。
 - 没有区分 provider 结构化失败和 schema 校验失败两类问题。
 
+<a id="q6"></a>
 ### 6. 为什么需要 schema validation？
 【Resume Highlight】对应简历：Version B #2，Version C #2。  
 问题  
@@ -874,6 +936,7 @@ Pitfalls
 
 ### Prompt Engineering & Prompt Versioning
 
+<a id="qpe-1"></a>
 #### PE-1. prompt 模板如何组织与复用？
 问题  
 在工程里，system/user prompt 应该如何拆分，如何注入字段化输入并复用模板？
@@ -947,6 +1010,7 @@ Pitfalls
 - prompt 组织只按文件划分，未绑定节点输入契约。
 - 变更 prompt 不做回归，导致线上表现漂移却不可追踪。
 
+<a id="qpe-2"></a>
 #### PE-2. prompt 版本如何管理与回滚？
 问题  
 如何确保 prompt 变更可追踪、可回滚、可定位影响范围？
@@ -1020,6 +1084,7 @@ Pitfalls
 - 只有版本号，没有对应变更说明与评估结果，回滚依据不足。
 - 版本切换不写 trace，导致线上问题无法定位到具体 prompt。
 
+<a id="qpe-3"></a>
 #### PE-3. 如何做 prompt 的 regression evaluation？
 问题  
 prompt 调整后，如何判断质量是“真的提升”而不是偶然波动？
@@ -1094,6 +1159,7 @@ Pitfalls
 - 只比平均值，不看失败分布与长尾样本。
 - 评测集长期不更新，指标会虚高而失真。
 
+<a id="q8-x"></a>
 ### Q8.x Prompt 为什么要做版本管理？clarify prompt 与 normal prompt 有什么差异？
 问题  
 为什么 prompt 不能只维护一个版本？澄清轮次为何要用独立 prompt？
@@ -1167,6 +1233,7 @@ Pitfalls
 - 把 clarify prompt 当“普通 prompt 的改写”，忽略任务目标差异。
 - 版本命名无语义，后续难以沟通与追踪。
 
+<a id="q8-y"></a>
 ### Q8.y 如何从系统层面降低 hallucination？
 问题  
 除了“写好提示词”，系统级还有哪些可执行手段？
@@ -1241,6 +1308,7 @@ Pitfalls
 - 将“低温度”当唯一反幻觉手段，忽略证据和校验链路。
 - 没有定义可量化的幻觉评估口径。
 
+<a id="q7"></a>
 ### 7. LLM JSON 解析失败时如何处理？
 问题  
 如果模型输出不可解析，系统如何避免整个流程崩溃？
@@ -1313,6 +1381,7 @@ Pitfalls
 - 只做异常捕获不做错误分类，后续无法针对性优化。
 - 降级策略未被评估，可能让问题静默进入生产。
 
+<a id="q8"></a>
 ### 8. temperature=0 在这里的工程意义是什么？
 问题  
 为什么调用里固定 `temperature=0`？
@@ -1387,6 +1456,7 @@ Pitfalls
 
 ### 成本与性能（新增）
 
+<a id="qc-1"></a>
 #### C-1. 如何降低 LLM 调用成本？
 问题  
 在不明显牺牲质量的前提下，怎么做成本优化？
@@ -1460,6 +1530,7 @@ Pitfalls
 - 只谈模型降级，不谈质量回归门禁。
 - 缓存命中策略不含版本字段，容易出现错配结果。
 
+<a id="qc-2"></a>
 #### C-2. 如何优化端到端延迟？
 问题  
 如何降低一次评审从提交到拿到报告的总时延？
@@ -1533,8 +1604,10 @@ Pitfalls
 - 把平均时延当唯一指标，忽略 P95/P99 长尾。
 - 优化时延时不同时跟踪质量指标，容易“快但不准”。
 
+<a id="sec-agent-design"></a>
 ## 第三部分：Agent 设计
 
+<a id="q9"></a>
 ### 9. Risk Agent 如何降低 hallucination？
 问题  
 Risk Agent 除了让模型“想”，还做了什么来约束？
@@ -1616,6 +1689,7 @@ Pitfalls
 - 只说“用了检索就不会幻觉”，忽略检索召回质量本身。
 - 不区分真实证据与 fallback 证据，导致审计判断失真。
 
+<a id="q10"></a>
 ### 10. Tool-based evidence retrieval 的作用是什么？
 【Resume Highlight】对应简历：Version C #3，Version B #3。  
 问题  
@@ -1698,6 +1772,7 @@ Pitfalls
 - 把工具调用结果当“绝对真相”，忽略 top-k 召回偏差。
 - 开关策略没有纳入测试与发布检查，线上行为不可预测。
 
+<a id="q11"></a>
 ### 11. 工具不可用时系统会怎样？
 问题  
 如果风险目录检索报错或被禁用，流程会中断吗？
@@ -1770,6 +1845,7 @@ Pitfalls
 - 只讨论异常捕获，不定义质量退化告警阈值。
 - 忽略降级场景的测试覆盖和上线验证。
 
+<a id="q12"></a>
 ### 12. 为什么 Reporter Agent 不调用 LLM？
 问题  
 报告生成为何做成确定性字符串拼接？
@@ -1842,8 +1918,10 @@ Pitfalls
 - 误把“无 LLM”理解为“无风险”，忽略模板逻辑错误同样会影响交付。
 - 没有对报告字段完整性做自动校验。
 
+<a id="sec-reliability"></a>
 ## 第四部分：系统可靠性
 
+<a id="q13"></a>
 ### 13. Conditional routing 如何避免无限循环？
 【Resume Highlight】对应简历：Version B #3，Version C #4。  
 问题  
@@ -1926,6 +2004,7 @@ Pitfalls
 - 只依赖单阈值，不设最大轮次硬上限。
 - 未记录路由原因，出现误路由时无法复盘。
 
+<a id="q13-1"></a>
 ### 13.1 routing loop 如何设计？
 【Resume Highlight】对应简历：Version B #3，Version C #4。  
 问题  
@@ -2000,6 +2079,7 @@ Pitfalls
 - 没有定义边界条件（`==阈值`）导致线上行为含糊。
 - loop 设计没有对应的测试样例矩阵。
 
+<a id="q14"></a>
 ### 14. 系统如何监控 agent 执行状态？
 问题  
 怎样知道每个节点是否成功、执行到哪一步？
@@ -2072,6 +2152,7 @@ Pitfalls
 - 只监控成功率，不追踪节点级失败原因和时延分布。
 - trace 字段定义频繁变化却没有兼容策略。
 
+<a id="q15"></a>
 ### 15. 失败后还能拿到什么结果？
 问题  
 某个 Agent 失败时，系统是全失败还是部分可用？
@@ -2144,6 +2225,7 @@ Pitfalls
 - 只讲“不中断”，不讲结果可靠性边界。
 - 没有定义失败语义（hard fail/soft fail）给上游系统。
 
+<a id="q16"></a>
 ### 16. 为什么要把 trace 单独写成 run_trace.json？
 【Resume Highlight】对应简历：Version C #5，Version B #4。  
 问题  
@@ -2217,6 +2299,7 @@ Pitfalls
 - 双写无校验，出现 report/trace 不一致。
 - trace schema 演进不做版本控制，后续工具链断裂。
 
+<a id="q16-2"></a>
 ### 16.2 trace artifacts 有什么作用？
 【Resume Highlight】对应简历：Version C #5，Version B #4。  
 问题  
@@ -2291,6 +2374,7 @@ Pitfalls
 - 把 trace 当普通日志，不设稳定字段契约。
 - 只采集不消费，无法形成真实质量闭环。
 
+<a id="q16-1"></a>
 ### 16.1 生产化落地时，你会优先补哪些能力？
 问题  
 从“能跑”到“可上线”，这套系统还需要哪些关键工程能力？
@@ -2364,8 +2448,10 @@ Pitfalls
 - 生产化路线只列清单，不给落地顺序与验收标准。
 - 忽略迁移过程的兼容层，容易一次性重构失败。
 
+<a id="sec-extension"></a>
 ## 第五部分：扩展能力
 
+<a id="q17"></a>
 ### 17. MCP Server 在这套系统里的作用是什么？
 【Resume Highlight】对应简历：Version B #4，Version C #6。  
 问题  
@@ -2448,6 +2534,7 @@ Pitfalls
 - 把 MCP 当成“另一个 REST”，忽略其 tool-call 协议语义。
 - 只讲接入便利，不讲权限边界与运行隔离（当前需额外工程化补齐）。
 
+<a id="q18"></a>
 ### 18. 如何把系统集成到 AI 客户端？
 【Resume Highlight】对应简历：Version B #4，Version C #6。  
 问题  
@@ -2521,6 +2608,7 @@ Pitfalls
 - 接口文档只写 happy path，不写错误码与超时语义。
 - 忽视 run_id 生命周期管理，导致检索与清理冲突。
 
+<a id="q19"></a>
 ### 19. FastAPI API 层做了哪些工程化设计？
 【Resume Highlight】对应简历：Version B #4，Version C #6。  
 问题  
@@ -2603,6 +2691,7 @@ Pitfalls
 - 把“异步 task”误认为“已具备分布式任务系统”。
 - 忽略幂等键与重复提交控制，导致同一请求重复执行。
 
+<a id="q20"></a>
 ### 20. Evaluation framework 如何保障迭代质量？
 【Resume Highlight】对应简历：Version B #4，Version C #5。  
 问题  
@@ -2677,6 +2766,7 @@ Pitfalls
 - 评测只关注通过率，不追踪退化幅度与原因。
 - 指标定义变化后未做历史可比性处理。
 
+<a id="q20-1"></a>
 ### 20.1 如果要支持企业级生产发布，你会如何扩展？
 问题  
 当业务量提升到多团队共用时，系统扩展路线应该是什么？
@@ -2749,6 +2839,129 @@ Pitfalls
 - 只谈扩容，不谈安全合规与审计闭环。
 - 没有分阶段里程碑，企业级方案容易停留在口号。
 
+<a id="sec-debug"></a>
+## 第六部分：Debug & Troubleshooting
+
+<a id="qd1"></a>
+### D1. structured output 解析失败率高怎么办？
+问题  
+线上出现 `StructuredCallError` 增多、JSON 解析失败率上升时，如何快速定位并修复？
+
+简要回答  
+先区分“模型输出不可解析”与“schema 校验失败”两类故障，再针对性修复。实践上优先检查 `requirement_review_v1/utils/llm_structured_call.py` 的 tools-first/fallback 路径、`requirement_review_v1/workflow.py` 节点输入质量、以及 `requirement_review_v1/utils/trace.py` 的错误分布。
+
+排查步骤
+- 在 `run_trace.json` 中统计失败节点与 `error_message`，确认是否集中在 parser/planner/risk 某一节点。
+- 检查 `requirement_review_v1/utils/llm_structured_call.py`：tools 路径是否回退过多、`raw_output` 是否包含截断或非 JSON 结构。
+- 对照 `requirement_review_v1/server/app.py` 的请求入口，确认输入 payload 是否异常（空文本、超长文本、字段缺失）。
+- 若集中在风险节点，联动检查 `requirement_review_v1/agents/risk_agent.py` 的证据注入是否导致输出结构漂移。
+
+技术要点
+- 关键模块：`requirement_review_v1/utils/llm_structured_call.py`、`requirement_review_v1/workflow.py`。  
+- 可观测定位：`requirement_review_v1/utils/trace.py` 用于聚合失败类型与节点分布。  
+- 服务侧入口：`requirement_review_v1/server/app.py` 用于复现实例请求并验证修复。  
+- 风险节点联动：`requirement_review_v1/agents/risk_agent.py` 需确认 evidence 注入后的输出稳定性。  
+
+<a id="qd2"></a>
+### D2. LangGraph routing loop 出现死循环如何排查？
+问题  
+当路由反复在 `clarify -> planner -> risk -> reviewer -> route_decider` 循环时，如何判断是否死循环并快速止损？
+
+简要回答  
+优先验证 `requirement_review_v1/workflow.py` 的终止条件是否生效（阈值与最大轮次）。再用 `requirement_review_v1/utils/trace.py` 的 `routing_rounds/revision_round` 轨迹确认是规则失效还是上游节点持续产出高风险信号。
+
+排查步骤
+- 检查 `workflow.py` 中 `_HIGH_RISK_THRESHOLD` 与 `_MAX_REVISION_ROUNDS` 是否被错误改动或覆盖。
+- 打开 `run_trace.json`，核对每轮 `routing_reason`、`revision_round` 是否按预期递增并最终退出。
+- 检查 `risk_agent.py` 与 reviewer 相关输入是否异常放大 `high_risk_ratio`，导致持续触发澄清。
+- 在 `server/app.py` 增加超时与任务中断保护，避免单任务长期占用 worker。
+
+技术要点
+- 路由核心：`requirement_review_v1/workflow.py`（`route_decider` 与循环边）。  
+- 轨迹证据：`requirement_review_v1/utils/trace.py`（`routing_rounds`、`revision_round`）。  
+- 上游信号来源：`requirement_review_v1/agents/risk_agent.py` 影响风险比率与路由判定。  
+- 止损入口：`requirement_review_v1/server/app.py` 可加任务超时/取消策略。  
+
+<a id="qd3"></a>
+### D3. Risk catalog tool 命中率低怎么办？
+问题  
+`risk_catalog_search` 命中率明显下降，导致风险结论缺少证据时如何排查？
+
+简要回答  
+先确认检索输入是否退化（关键词稀疏、噪声过高），再检查工具链路是否处于 `degraded_*` 状态。定位时重点结合 `requirement_review_v1/agents/risk_agent.py` 的 evidence 注入与 `requirement_review_v1/utils/trace.py` 的命中统计字段。
+
+排查步骤
+- 在 trace 中查看 `risk_catalog_tool_status` 与命中数量，区分“工具可用但低命中”与“工具不可用降级”。
+- 检查 `risk_agent.py` 传入工具的查询文本，确认是否丢失关键业务词。
+- 在 `workflow.py` 中复盘上游 parser/planner 输出，确认风险检索输入是否被过度抽象。
+- 通过 `server/app.py` 复现同一请求并对比修复前后命中率与报告差异。
+
+技术要点
+- 风险节点：`requirement_review_v1/agents/risk_agent.py` 负责调用与注入 evidence。  
+- 编排输入：`requirement_review_v1/workflow.py` 决定 risk 节点输入上下文质量。  
+- 观测指标：`requirement_review_v1/utils/trace.py` 提供 `tool_status/hits` 排障依据。  
+- 复现入口：`requirement_review_v1/server/app.py` 用于端到端验证命中率修复。  
+
+<a id="qd4"></a>
+### D4. Agent 输出字段缺失怎么办？
+问题  
+面试中若被问到“某个 Agent 经常漏字段”，应该如何给出工程化排查方案？
+
+简要回答  
+先锁定“是模型未产出、解析丢失，还是 schema 过滤掉了字段”，再按链路逐层定位。通常从 `workflow.py` 输入到 `risk_agent.py`/其他 agent 输出，再到 `trace.py` 中的 raw output 与状态，能快速定位丢失点。
+
+排查步骤
+- 在 trace 中对比节点 `raw_output` 与最终结构化对象，判断字段在哪一层消失。
+- 检查 `workflow.py` 进入该节点的 state 是否已缺关键上下文。
+- 对风险相关字段，检查 `risk_agent.py` 中 fallback/evidence 合并逻辑是否覆盖原字段。
+- 从 `server/app.py` 重放同一请求，确认是否为输入分布导致的间歇性缺失。
+
+技术要点
+- 状态流排查：`requirement_review_v1/workflow.py`。  
+- 节点行为排查：`requirement_review_v1/agents/risk_agent.py`（可类比其他 agent）。  
+- 输出证据：`requirement_review_v1/utils/trace.py` 的 `raw_output_path/status/error_message`。  
+- 复现验证：`requirement_review_v1/server/app.py` 的任务接口。  
+
+<a id="qd5"></a>
+### D5. trace artifacts 不完整怎么办？
+问题  
+如果 `run_trace.json` 缺字段或节点记录中断，如何排查并恢复可观测性？
+
+简要回答  
+先判断是“节点未执行”还是“执行了但 trace 未正确写入”。重点检查 `requirement_review_v1/utils/trace.py` 的 span 生命周期、`requirement_review_v1/workflow.py` 的节点包装器，以及 `server/app.py` 的任务异常处理分支是否提前返回。
+
+排查步骤
+- 比对 `report.json` 与 `run_trace.json` 的节点集合，定位缺失发生在哪个阶段。
+- 检查 `trace.py` 中 start/end 是否成对落盘，是否存在异常分支漏写 end。
+- 检查 `workflow.py` 的节点包装逻辑是否在异常时绕过 trace 记录。
+- 在 `server/app.py` 捕获任务异常并打印 run_id，确保失败路径也能回写最小 trace。
+
+技术要点
+- 追踪实现：`requirement_review_v1/utils/trace.py`。  
+- 编排挂钩：`requirement_review_v1/workflow.py`。  
+- 异常回写：`requirement_review_v1/server/app.py`。  
+- 风险节点一致性：`requirement_review_v1/agents/risk_agent.py` 需保证异常时仍写状态。  
+
+<a id="qd6"></a>
+### D6. FastAPI 任务执行卡住如何排查？
+问题  
+`/api/review` 提交后长时间停留在 running，如何系统化排查“卡住”问题？
+
+简要回答  
+先区分“服务层未调度”还是“工作流某节点阻塞”，再按 run_id 做链路追踪。排查顺序建议是 `server/app.py` 任务状态 -> `workflow.py` 当前节点 -> `trace.py` 最近一条 span -> `risk_agent.py` 等慢节点外部依赖。
+
+排查步骤
+- 在 `server/app.py` 查看任务是否进入后台执行、状态是否持续更新。
+- 根据 run_id 打开 `run_trace.json`，确认卡在具体哪个节点及该节点耗时。
+- 检查 `workflow.py` 对该节点的调用路径是否存在等待外部 I/O 或循环不退出。
+- 若卡在风险节点，检查 `risk_agent.py` 的工具调用是否超时并补充超时保护。
+
+技术要点
+- 任务生命周期：`requirement_review_v1/server/app.py`。  
+- 节点调度：`requirement_review_v1/workflow.py`。  
+- 卡点定位：`requirement_review_v1/utils/trace.py` 的 `duration_ms/status`。  
+- 慢节点分析：`requirement_review_v1/agents/risk_agent.py` 的工具调用链路。  
+
 ## Code Map
 
 | 能力点 | 关键模块/文件 |
@@ -2769,3 +2982,8 @@ Pitfalls
 
 
 
+
+
+## Usage
+- 支持 GitHub/GitLab 渲染，目录链接基于显式 HTML 锚点。
+- 若某些编辑器不支持 HTML 锚点，可退化为标题自动锚点。
