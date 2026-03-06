@@ -33,6 +33,8 @@ function App() {
   const [progress, setProgress] = useState({ percent: 0, current_node: "等待提交", nodes: {}, updated_at: "" });
   const [reportMarkdown, setReportMarkdown] = useState("");
   const [reportMessage, setReportMessage] = useState("任务完成后，这里会显示报告预览和下载入口。");
+  const [formError, setFormError] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [history, setHistory] = useState(() => loadHistory());
   const [logs, setLogs] = useState([{ stamp: formatTime(new Date()), message: "系统已就绪，等待提交任务。" }]);
   const pollRef = useRef(null);
@@ -61,6 +63,12 @@ function App() {
     window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 8)));
   }, [history]);
 
+  useEffect(() => {
+    if (formError) {
+      setFormError("");
+    }
+  }, [mode, prdText, prdPath]);
+
   function appendLog(message) {
     setLogs((current) => {
       const last = current[current.length - 1];
@@ -81,6 +89,7 @@ function App() {
     setProgress({ percent: 0, current_node: "等待提交", nodes: {}, updated_at: "" });
     setReportMarkdown("");
     setReportMessage("任务完成后，这里会显示报告预览和下载入口。");
+    setErrorMessage("");
   }
 
   function clearFallbackTimeout() {
@@ -159,8 +168,10 @@ function App() {
     setStatusLabel(nextStatus === "missing" ? "Missing" : nextStatus);
 
     if (nextProgress.error) {
+      setErrorMessage(nextProgress.error);
       appendLog(`错误: ${nextProgress.error}`);
     } else {
+      setErrorMessage("");
       appendLog(`状态更新(${source}): ${nextStatus} / ${nextProgress.percent ?? 0}% / ${nextProgress.current_node || "等待执行"}`);
     }
 
@@ -229,6 +240,7 @@ function App() {
       appendLog(`轮询失败: ${error.message}`);
       setStatus("failed");
       setStatusLabel("Polling error");
+      setErrorMessage(`任务状态拉取失败：${error.message}`);
       stopListening(false);
     }
   }
@@ -246,9 +258,11 @@ function App() {
       loadedReportRunRef.current = targetRunId;
       setReportMessage("报告已生成，可直接在线预览，也可以下载 Markdown 或 JSON 原始结果。");
       setReportMarkdown(markdown);
+      setErrorMessage("");
     } catch (error) {
       setReportMessage(`报告生成完成，但预览拉取失败：${error.message}`);
       setReportMarkdown("");
+      setErrorMessage(`报告预览加载失败：${error.message}`);
     }
   }
 
@@ -257,10 +271,15 @@ function App() {
     const payload = mode === "text" ? { prd_text: prdText.trim() } : { prd_path: prdPath.trim() };
     const value = mode === "text" ? payload.prd_text : payload.prd_path;
     if (!value) {
-      appendLog(mode === "text" ? "请输入 PRD 文本后再提交。" : "请输入 PRD 文件路径后再提交。");
+      const nextFormError = mode === "text" ? "请输入 PRD 文本后再提交。" : "请输入 PRD 文件路径后再提交。";
+      setFormError(nextFormError);
+      setErrorMessage(nextFormError);
+      appendLog(nextFormError);
       return;
     }
 
+    setFormError("");
+    setErrorMessage("");
     setStatus("running");
     setStatusLabel("Queued");
     resetRunView();
@@ -293,12 +312,15 @@ function App() {
       setStatus("failed");
       setStatusLabel("Failed");
       stopListening(false);
+      setErrorMessage(`创建任务失败：${error.message}`);
       appendLog(`创建任务失败: ${error.message}`);
     }
   }
 
   async function openHistory(item) {
     stopListening(false);
+    setFormError("");
+    setErrorMessage("");
     activeRunIdRef.current = item.runId;
     setRunId(item.runId);
     setStatus("running");
@@ -377,17 +399,21 @@ function App() {
             {mode === "text" ? (
               <div>
                 <label className="field-label" htmlFor="prdText">PRD 内容</label>
-                <textarea id="prdText" className="field-input field-textarea" value={prdText} onChange={(event) => setPrdText(event.target.value)} placeholder="# PRD\n\n背景：...\n目标：...\n验收标准：..." />
+                <textarea id="prdText" className={`field-input field-textarea ${formError && mode === "text" ? "field-input-error" : ""}`} value={prdText} onChange={(event) => setPrdText(event.target.value)} placeholder="# PRD\n\n背景：...\n目标：...\n验收标准：..." aria-invalid={Boolean(formError && mode === "text")} aria-describedby={formError && mode === "text" ? "prd-input-error" : undefined} />
               </div>
             ) : (
               <div>
                 <label className="field-label" htmlFor="prdPath">PRD 文件路径</label>
-                <input id="prdPath" className="field-input" type="text" value={prdPath} onChange={(event) => setPrdPath(event.target.value)} placeholder="例如：docs/sample_prd.md" />
+                <input id="prdPath" className={`field-input ${formError && mode === "path" ? "field-input-error" : ""}`} type="text" value={prdPath} onChange={(event) => setPrdPath(event.target.value)} placeholder="例如：docs/sample_prd.md" aria-invalid={Boolean(formError && mode === "path")} aria-describedby={formError && mode === "path" ? "prd-input-error" : undefined} />
               </div>
             )}
 
+            {formError ? <p id="prd-input-error" className="field-error">{formError}</p> : null}
+
+            {errorMessage ? <div className="inline-alert" role="alert">{errorMessage}</div> : null}
+
             <div className="form-actions">
-              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? "任务已提交" : "开始评审"}</button>
+              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? "评审进行中" : "开始评审"}</button>
               {isSubmitting ? (
                 <button className="btn btn-secondary" type="button" onClick={() => { stopListening(true); }}>
                   停止监听
