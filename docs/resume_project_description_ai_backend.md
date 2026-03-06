@@ -1,41 +1,55 @@
-﻿# 多智能体需求评审与交付规划系统（AI工程岗 / Agent工程岗）
+# 多智能体需求评审与交付规划系统（v3.0.0）
 
 ## 中文版本
-### Version A：2行
-1. 设计并实现基于 LangGraph `StateGraph` 的多智能体编排流程（Parser/Planner/Risk/Reviewer/Reporter + Router），通过条件路由与澄清循环统一 PRD 评审与交付规划，解决传统评审链路割裂与高歧义需求漏检问题，稳定产出 `report.json`、`report.md`、`run_trace.json`。  
-2. 构建结构化 LLM 工程链路（tool-calling 优先 + JSON repair fallback + Pydantic schema validation）并服务化为 FastAPI 异步 API 与 MCP Server，解决输出不稳定、跨客户端接入和回归验证难题，形成可观测 trace 工件与评测指标（`trace_complete`、`coverage_ratio_present`）。
 
-### Version B：4条 bullet
-- 设计并落地 LangGraph 多 Agent 编排（`parser→planner→risk→reviewer→route_decider→reporter`），通过 `ReviewState` 共享状态与节点化职责边界解决需求评审到交付规划的流程割裂问题，形成可扩展的端到端自动化评审系统并稳定沉淀标准化报告产物。  
-- 构建结构化输出链路（provider tool-calling + fallback JSON + `json_repair` + Pydantic 校验），针对 LLM 字段漂移与非结构化响应导致的解析失败问题提供兜底机制，显著提升输出可解析性、可验证性与工程可用性。  
-- 实现风险驱动决策系统（`high_risk_ratio` 阈值 `0.4`、最多 `2` 轮 clarification，自动切换 `parser_prompt_version=v1.1-clarify`），解决高歧义需求单轮评审覆盖不足问题，产出可审计的 `routing_rounds` 决策轨迹并增强 hallucination/歧义控制。  
-- 开发 FastAPI 异步任务接口与 MCP 工具（`review_prd`/`get_report`）并接入 `eval/run_eval.py` 回归评测，解决系统集成与质量门禁缺失问题，实现 API 级调用、报告检索、trace 完整性检查与覆盖率指标验证。  
+### Version A：2行极简版
+1. 面向 PRD 评审与交付规划链路割裂、LLM 输出不稳定的问题，设计并实现基于 LangGraph 的多智能体工作流，串联需求解析、规划、风险识别、评审与报告生成，稳定产出结构化 artifacts。  
+2. 将结构化输出、澄清路由、证据检索、子流复用、并行执行、TTL 缓存、FastAPI 异步服务、MCP 接口、trace/eval/tests 组合为可工程化复用的 Agent 后端系统。  
 
-### Version C：技术深度版
-- 设计 `StateGraph(ReviewState)` 工作流并实现异步节点执行、partial state update 与进度 hook，将多阶段 LLM 任务编排为可维护的状态机，解决跨节点状态一致性与可观测性难题，支持从 CLI、FastAPI 到 MCP 的统一复用。  
-- 实现统一结构化调用抽象 `llm_structured_call`，采用“工具调用优先 + 文本 JSON 回退 + `json_repair` 修复 + schema 校验”四层策略，解决多模型能力差异和输出抖动问题，确保 parser/planner/risk/reviewer 节点均可返回 schema-compatible 对象。  
-- 构建风险证据工具 `risk_catalog_search`（本地 catalog、token 匹配、IDF 加权评分、top-k 召回）并在 Risk Agent 注入 evidence prompt，解决风险结论缺乏依据与可解释性不足问题；当工具不可用时保持 graceful degradation 并记录 `risk_catalog_tool_status`。  
-- 设计 Router 决策节点，将 Reviewer 的 `high_risk_ratio` 与轮次上限组合为条件路由策略，形成“评审-澄清-复审”闭环，解决需求不清导致的虚假确定性输出问题，提升高风险场景下的评审鲁棒性。  
-- 落地 trace 工件体系（节点级 `start/end/duration_ms/model/status/input_chars/output_chars/prompt_version/raw_output_path/error_message`）与评测框架（`report_json_valid`、`trace_complete`、`coverage_ratio_present`），解决 agent 系统难回归、难审计问题，支持工程化质量门禁与版本对比。  
-- 搭建 FastAPI 异步作业模型（`/api/review`、`/api/review/{run_id}`、`/api/report/{run_id}`）与 MCP stdio Server 双入口，解决外部系统接入与交互方式单一问题，实现任务级进度追踪、跨客户端调用和标准化产物交付。  
+### Version B：4条标准版
+- 面向 PRD 评审与交付规划链路分散的问题，设计 LangGraph 多智能体工作流，串联解析、规划、风险、评审与报告节点，并通过澄清路由形成可闭环的自动化评审流程。  
+- 针对 LLM 输出易漂移、难落库的情况，构建 Structured Outputs + schema validation + fallback 链路，统一约束核心 Agent 的结构化结果，减少非标准 JSON 对主流程的影响，提升工作流可解析性与可回归性。  
+- 为增强风险判断的可解释性与复用性，将证据检索封装为技能体系并接入风险分析子流，结合并行执行与进程内 TTL 缓存，沉淀出可复用的 Agent workflow 组件。  
+- 将核心能力封装为 FastAPI 异步服务与 MCP Server，并补齐 trace、eval 和测试体系，支持异步任务提交、运行追踪、报告读取与质量校验，形成可集成的 AI 后端服务。  
+
+### Version C：技术展开版
+- 面向需求评审、交付规划和风险识别分散在不同环节的问题，设计基于 LangGraph `StateGraph` 的多智能体编排流程，将 `Parser / Planner / Risk / Reviewer / Reporter` 解耦为独立节点，并通过 `fan-out/fan-in` 与条件路由实现从解析到报告的闭环，最终沉淀统一的评审与交付 artifacts。  
+- 针对 LLM 输出字段漂移、JSON 不合法和跨模型能力差异，构建 “tool/function calling 优先 + 文本 JSON fallback + `json_repair` 修复 + Pydantic schema validation” 的结构化调用链路，使 parser、planner、risk、reviewer 节点都能返回可校验、可回退的 schema-compatible 结果。  
+- 为降低高歧义输入在单轮评审中的漏检风险，基于 Reviewer 输出设计 risk-driven routing loop，当高风险比例超过阈值时触发 clarify loop 并重新解析需求，形成带 `routing_rounds` 的可审计决策轨迹，强化 Agent orchestration 中的 workflow control。  
+- 将本地风险目录检索封装为 `Skill Registry + SkillExecutor` 能力层，支持 evidence retrieval、trace 注入、graceful degradation 与进程内 TTL cache，使 Risk Agent 在工具可用时生成 grounded 风险结论，在工具异常时也能保持主流程可运行。  
+- 抽象 `risk_analysis` reusable subgraph，将“证据检索 -> 风险生成”封装为独立子流并接入主图，同时让 `planner` 与 `risk` 分支在主工作流中并行执行，记录并聚合缓存命中、延迟与并行指标，支持后续性能分析与子流复用。  
+- 将工作流平台化为 FastAPI async service 与 MCP server 双入口，支持 PRD 提交、异步运行、状态查询和报告读取，并统一落盘 `report.md`、`report.json`、`run_trace.json`，满足 AI 后端服务集成与多客户端接入场景。  
+- 建立 trace artifacts、eval framework 与单元测试体系，覆盖 schema、routing loop、risk tool、cache、MCP、runtime metrics 等关键路径，为多智能体系统提供可观测、可回归、可验证的工程化质量保障。  
 
 ---
 
 ## English Version
-### Version A: 2 lines
-1. Designed and implemented a LangGraph `StateGraph` multi-agent orchestration pipeline (Parser/Planner/Risk/Reviewer/Reporter + Router) with conditional routing and clarification loops, solving fragmented PRD review and high-ambiguity miss issues, and consistently producing `report.json`, `report.md`, and `run_trace.json`.  
-2. Built a structured LLM engineering stack (tool-calling first + JSON-repair fallback + Pydantic schema validation) and productionized it via FastAPI async APIs and an MCP server, solving unstable outputs and integration gaps while enabling trace artifacts and regression metrics (`trace_complete`, `coverage_ratio_present`).
 
-### Version B: 4 bullets
-- Architected a LangGraph multi-agent workflow (`parser→planner→risk→reviewer→route_decider→reporter`) with shared `ReviewState` and node-level responsibility boundaries, solving disconnected requirement-to-delivery review flows and delivering a scalable end-to-end automation pipeline with standardized artifacts.  
-- Implemented structured-output reliability controls (provider tool-calling + fallback JSON parsing + `json_repair` + Pydantic validation), solving parse failures caused by schema drift and free-form model responses, and improving output stability and engineering usability.  
-- Built a risk-driven decision loop (`high_risk_ratio` threshold `0.4`, max `2` clarification rounds, auto-switch to `parser_prompt_version=v1.1-clarify`), solving low-coverage single-pass reviews on ambiguous inputs and producing auditable `routing_rounds` traces for hallucination/ambiguity control.  
-- Delivered FastAPI async APIs and MCP tools (`review_prd`, `get_report`) integrated with `eval/run_eval.py`, solving integration and quality-gate gaps and enabling API-based execution, report retrieval, trace completeness checks, and coverage-ratio validation.  
+### Version A: 2-line concise
+1. Built a LangGraph-based multi-agent workflow for PRD review and delivery planning, combining parsing, planning, risk analysis, review, and reporting to produce stable structured artifacts.  
+2. Productionized the workflow with structured-output reliability, clarify routing, evidence retrieval, reusable subflow, parallel execution, TTL cache, FastAPI async APIs, MCP integration, and trace/eval/test coverage.  
 
-### Version C: Technical-Depth
-- Engineered a `StateGraph(ReviewState)` runtime with async node execution, partial state updates, and progress hooks, turning multi-step LLM collaboration into a maintainable state machine and solving cross-node consistency and observability challenges across CLI/FastAPI/MCP entrypoints.  
-- Developed a unified `llm_structured_call` abstraction with a four-layer strategy (tool-calling first, text-JSON fallback, `json_repair`, schema validation), solving provider capability variance and output jitter while guaranteeing schema-compatible outputs for parser/planner/risk/reviewer nodes.  
-- Integrated a tool-based risk evidence retriever `risk_catalog_search` (local catalog, token matching, IDF-weighted scoring, top-k recall) into the Risk Agent prompt path, solving weakly grounded risk conclusions and improving explainability; added graceful degradation with `risk_catalog_tool_status` tracing when the tool is unavailable.  
-- Designed a router node combining Reviewer `high_risk_ratio` with revision limits into a conditional policy, creating a “review-clarify-re-review” loop that solves false certainty on ambiguous requirements and improves robustness in high-risk scenarios.  
-- Implemented trace artifact instrumentation (`start/end/duration_ms/model/status/input_chars/output_chars/prompt_version/raw_output_path/error_message`) and a regression evaluator (`report_json_valid`, `trace_complete`, `coverage_ratio_present`), solving auditability and regression gaps in agent systems and enabling quality gates across iterations.  
-- Built dual integration surfaces with FastAPI async jobs (`/api/review`, `/api/review/{run_id}`, `/api/report/{run_id}`) and an MCP stdio server, solving single-channel integration bottlenecks and enabling progress tracking, cross-client invocation, and standardized artifact delivery.  
+### Version B: 4 standard bullets
+- For fragmented PRD review and delivery-planning flows, architected a LangGraph multi-agent workflow that connects parsing, planning, risk analysis, review, and reporting, then closes the loop with clarification routing for end-to-end automation.  
+- To make LLM outputs usable in backend pipelines, built a Structured Outputs stack with schema validation and fallback handling, reducing malformed-response failures and improving workflow reliability and regression readiness.  
+- To improve grounding and reuse, packaged risk evidence retrieval into a skill layer and integrated it into a reusable risk-analysis subflow, with parallel execution and in-process TTL caching for more efficient agent workflows.  
+- Productized the system as a FastAPI async service and MCP server with trace artifacts, eval checks, and tests, enabling async job execution, report retrieval, workflow observability, and engineering-grade quality gates.  
+
+### Version C: Technical-depth
+- Designed a LangGraph `StateGraph` multi-agent orchestration pipeline that decomposes `Parser / Planner / Risk / Reviewer / Reporter` into isolated nodes and connects them with fan-out/fan-in execution and conditional routing, turning fragmented PRD review and delivery-planning steps into a single controllable backend workflow.  
+- Built a structured LLM execution path with tool/function-calling first, text-JSON fallback, `json_repair`, and Pydantic schema validation, addressing schema drift, malformed JSON, and provider capability variance while keeping parser/planner/risk/reviewer outputs schema-compatible.  
+- Implemented a risk-driven routing loop that re-enters a clarification pass when review results remain high-risk, creating an auditable workflow-control mechanism with recorded routing history rather than a single-pass agent chain.  
+- Encapsulated local risk-catalog retrieval behind a `Skill Registry + SkillExecutor` abstraction with trace metadata, graceful degradation, and process-local TTL cache, allowing the risk agent to stay evidence-grounded without making the full workflow depend on tool availability.  
+- Extracted a reusable `risk_analysis` subgraph for “evidence retrieval -> risk generation” and integrated it into the main graph, while running planner and risk branches in parallel and exposing runtime metrics for latency, cache hits/misses, and parallel execution behavior.  
+- Exposed the workflow through FastAPI async endpoints and an MCP stdio server, supporting request submission, status polling, artifact retrieval, and standardized outputs including `report.md`, `report.json`, and `run_trace.json`.  
+- Added trace artifacts, regression evals, and unit tests across schema validation, routing, risk-tool behavior, caching, MCP integration, and runtime metrics, giving the agent system a practical observability and verification layer for iterative releases.  
+
+详细 bullet-to-code mapping 见独立 mapping 文件。
+
+## Resume Usage Guide
+
+- `Version B` 最适合直接贴到一页技术简历；长度和信息密度更接近正式简历 bullet。
+- `Version A` 适合放在项目标题下方做 2 行总述，或用于网申系统的“项目简介”栏。
+- `Version C` 适合面试展开、项目答辩、技术博客或长版简历，不建议整段直接贴到一页简历首屏。
+- 如果只保留 3 条，建议保留 `Version B` 的第 1、2、4 条。
+- 如果只保留 3 条且想强调性能工程，可将 `Version B` 的第 3 条并入第 1 条，或用第 3 条替换第 2 条。
