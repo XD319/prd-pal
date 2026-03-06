@@ -1,25 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+ï»¿import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const TRACKED_NODES = ["parser", "clarify", "planner", "risk", "reviewer", "route_decider", "reporter"];
 const HISTORY_KEY = "requirement-review-history";
 const TERMINAL_STATUSES = new Set(["completed", "failed"]);
-const SAMPLE_PRD = `# Ğ£Ô°ÕĞÆ¸¶à Agent ĞèÇóÆÀÉóÏµÍ³
+const SAMPLE_PRD = `# æ ¡å›­æ‹›è˜å¤š Agent éœ€æ±‚è¯„å®¡ç³»ç»Ÿ
 
-## ±³¾°
-ÎªĞ£ÕĞÏîÄ¿Ìá¹©Ò»¸ö¿ÉÌá½» PRD ²¢×Ô¶¯Êä³öÆÀÉó±¨¸æµÄÏµÍ³¡£
+## èƒŒæ™¯
+ä¸ºæ ¡æ‹›é¡¹ç›®æä¾›ä¸€ä¸ªå¯æäº¤ PRD å¹¶è‡ªåŠ¨è¾“å‡ºè¯„å®¡æŠ¥å‘Šçš„ç³»ç»Ÿã€‚
 
-## Ä¿±ê
-1. ÓÃ»§¿ÉÒÔÔÚÍøÒ³ÉÏÌá½» PRD ÎÄ±¾¡£
-2. ÏµÍ³Õ¹Ê¾ parser¡¢planner¡¢risk¡¢reviewer¡¢reporter µÈ½Úµã½ø¶È¡£
-3. Íê³Éºó¿ÉÒÔÏÂÔØ Markdown ºÍ JSON ±¨¸æ¡£
+## ç›®æ ‡
+1. ç”¨æˆ·å¯ä»¥åœ¨ç½‘é¡µä¸Šæäº¤ PRD æ–‡æœ¬ã€‚
+2. ç³»ç»Ÿå±•ç¤º parserã€plannerã€riskã€reviewerã€reporter ç­‰èŠ‚ç‚¹è¿›åº¦ã€‚
+3. å®Œæˆåå¯ä»¥ä¸‹è½½ Markdown å’Œ JSON æŠ¥å‘Šã€‚
 
-## ÑéÊÕ±ê×¼
-- Ìá½»ºó·µ»Ø run_id¡£
-- Ò³ÃæÃ¿ 2 ÃëÂÖÑ¯×´Ì¬¡£
-- ÈÎÎñÍê³ÉºóÌá¹©±¨¸æÔ¤ÀÀºÍÏÂÔØÈë¿Ú¡£
-- Ò³ÃæÖ§³Ö²é¿´×î½üÔËĞĞÀúÊ·¡£`;
+## éªŒæ”¶æ ‡å‡†
+- æäº¤åè¿”å› run_idã€‚
+- é¡µé¢æ¯ 2 ç§’è½®è¯¢çŠ¶æ€ã€‚
+- ä»»åŠ¡å®Œæˆåæä¾›æŠ¥å‘Šé¢„è§ˆå’Œä¸‹è½½å…¥å£ã€‚
+- é¡µé¢æ”¯æŒæŸ¥çœ‹æœ€è¿‘è¿è¡Œå†å²ã€‚`;
 
 function App() {
   const [mode, setMode] = useState("text");
@@ -30,11 +30,11 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [runId, setRunId] = useState("");
   const [transportLabel, setTransportLabel] = useState("Idle");
-  const [progress, setProgress] = useState({ percent: 0, current_node: "µÈ´ıÌá½»", nodes: {}, updated_at: "" });
+  const [progress, setProgress] = useState({ percent: 0, current_node: "ç­‰å¾…æäº¤", nodes: {}, updated_at: "" });
   const [reportMarkdown, setReportMarkdown] = useState("");
-  const [reportMessage, setReportMessage] = useState("ÈÎÎñÍê³Éºó£¬ÕâÀï»áÏÔÊ¾±¨¸æÔ¤ÀÀºÍÏÂÔØÈë¿Ú¡£");
+  const [reportMessage, setReportMessage] = useState("ä»»åŠ¡å®Œæˆåï¼Œè¿™é‡Œä¼šæ˜¾ç¤ºæŠ¥å‘Šé¢„è§ˆå’Œä¸‹è½½å…¥å£ã€‚");
   const [history, setHistory] = useState(() => loadHistory());
-  const [logs, setLogs] = useState([{ stamp: formatTime(new Date()), message: "ÏµÍ³ÒÑ¾ÍĞ÷£¬µÈ´ıÌá½»ÈÎÎñ¡£" }]);
+  const [logs, setLogs] = useState([{ stamp: formatTime(new Date()), message: "ç³»ç»Ÿå·²å°±ç»ªï¼Œç­‰å¾…æäº¤ä»»åŠ¡ã€‚" }]);
   const pollRef = useRef(null);
   const wsRef = useRef(null);
   const transportRef = useRef("idle");
@@ -79,9 +79,9 @@ function App() {
     transportRef.current = "idle";
     activeRunIdRef.current = "";
     loadedReportRunRef.current = "";
-    setProgress({ percent: 0, current_node: "µÈ´ıÌá½»", nodes: {}, updated_at: "" });
+    setProgress({ percent: 0, current_node: "ç­‰å¾…æäº¤", nodes: {}, updated_at: "" });
     setReportMarkdown("");
-    setReportMessage("ÈÎÎñÍê³Éºó£¬ÕâÀï»áÏÔÊ¾±¨¸æÔ¤ÀÀºÍÏÂÔØÈë¿Ú¡£");
+    setReportMessage("ä»»åŠ¡å®Œæˆåï¼Œè¿™é‡Œä¼šæ˜¾ç¤ºæŠ¥å‘Šé¢„è§ˆå’Œä¸‹è½½å…¥å£ã€‚");
   }
 
   function stopPolling(shouldLog = true) {
@@ -89,7 +89,7 @@ function App() {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
       if (shouldLog) {
-        appendLog("ÒÑÍ£Ö¹ÂÖÑ¯¡£" );
+        appendLog("å·²åœæ­¢è½®è¯¢ã€‚");
       }
     }
   }
@@ -104,7 +104,7 @@ function App() {
       ws.onclose = null;
       ws.close();
       if (shouldLog) {
-        appendLog("WebSocket ÒÑ¹Ø±Õ¡£");
+        appendLog("WebSocket å·²å…³é—­ã€‚");
       }
     }
   }
@@ -126,7 +126,7 @@ function App() {
     latestStatusRef.current = nextStatus;
     setProgress({
       percent: Number(nextProgress.percent ?? 0),
-      current_node: nextProgress.current_node || "µÈ´ıÖ´ĞĞ",
+      current_node: nextProgress.current_node || "ç­‰å¾…æ‰§è¡Œ",
       nodes: nextProgress.nodes || {},
       updated_at: nextProgress.updated_at || "",
     });
@@ -134,9 +134,9 @@ function App() {
     setStatusLabel(nextStatus === "missing" ? "Missing" : nextStatus);
 
     if (nextProgress.error) {
-      appendLog(`´íÎó: ${nextProgress.error}`);
+      appendLog(`é”™è¯¯: ${nextProgress.error}`);
     } else {
-      appendLog(`×´Ì¬¸üĞÂ(${source}): ${nextStatus} / ${nextProgress.percent ?? 0}% / ${nextProgress.current_node || "µÈ´ıÖ´ĞĞ"}`);
+      appendLog(`çŠ¶æ€æ›´æ–°(${source}): ${nextStatus} / ${nextProgress.percent ?? 0}% / ${nextProgress.current_node || "ç­‰å¾…æ‰§è¡Œ"}`);
     }
 
     if (TERMINAL_STATUSES.has(nextStatus)) {
@@ -169,7 +169,7 @@ function App() {
 
     socket.onopen = () => {
       setTransport("websocket");
-      appendLog("WebSocket ÒÑÁ¬½Ó£¬ÇĞ»»µ½ÊµÊ±ÍÆËÍ¡£" );
+      appendLog("WebSocket å·²è¿æ¥ï¼Œåˆ‡æ¢åˆ°å®æ—¶æ¨é€ã€‚");
     };
 
     socket.onmessage = (event) => {
@@ -178,7 +178,7 @@ function App() {
     };
 
     socket.onerror = () => {
-      appendLog("WebSocket Á¬½ÓÒì³££¬×¼±¸»ØÍËµ½ÂÖÑ¯¡£" );
+      appendLog("WebSocket è¿æ¥å¼‚å¸¸ï¼Œå‡†å¤‡å›é€€åˆ°è½®è¯¢ã€‚");
     };
 
     socket.onclose = () => {
@@ -186,7 +186,7 @@ function App() {
         wsRef.current = null;
       }
       if (!TERMINAL_STATUSES.has(latestStatusRef.current) && activeRunIdRef.current === nextRunId && listeningRef.current) {
-        startPolling(nextRunId, "WebSocket ÒÑ¶Ï¿ª£¬ÒÑ»ØÍËµ½ÂÖÑ¯¡£" );
+        startPolling(nextRunId, "WebSocket å·²æ–­å¼€ï¼Œå·²å›é€€åˆ°è½®è¯¢ã€‚");
       }
     };
   }
@@ -200,7 +200,7 @@ function App() {
       const data = await response.json();
       applyStatusPayload(data, source);
     } catch (error) {
-      appendLog(`ÂÖÑ¯Ê§°Ü: ${error.message}`);
+      appendLog(`è½®è¯¢å¤±è´¥: ${error.message}`);
       setStatus("failed");
       setStatusLabel("Polling error");
       setTransport("idle");
@@ -221,10 +221,10 @@ function App() {
       }
       const markdown = await response.text();
       loadedReportRunRef.current = targetRunId;
-      setReportMessage("±¨¸æÒÑÉú³É£¬¿ÉÖ±½ÓÔÚÏßÔ¤ÀÀ£¬Ò²¿ÉÒÔÏÂÔØ Markdown »ò JSON Ô­Ê¼½á¹û¡£");
+      setReportMessage("æŠ¥å‘Šå·²ç”Ÿæˆï¼Œå¯ç›´æ¥åœ¨çº¿é¢„è§ˆï¼Œä¹Ÿå¯ä»¥ä¸‹è½½ Markdown æˆ– JSON åŸå§‹ç»“æœã€‚");
       setReportMarkdown(markdown);
     } catch (error) {
-      setReportMessage(`±¨¸æÉú³ÉÍê³É£¬µ«Ô¤ÀÀÀ­È¡Ê§°Ü£º${error.message}`);
+      setReportMessage(`æŠ¥å‘Šç”Ÿæˆå®Œæˆï¼Œä½†é¢„è§ˆæ‹‰å–å¤±è´¥ï¼š${error.message}`);
       setReportMarkdown("");
     }
   }
@@ -234,15 +234,18 @@ function App() {
     const payload = mode === "text" ? { prd_text: prdText.trim() } : { prd_path: prdPath.trim() };
     const value = mode === "text" ? payload.prd_text : payload.prd_path;
     if (!value) {
-      appendLog(mode === "text" ? "ÇëÊäÈë PRD ÎÄ±¾ºóÔÙÌá½»¡£" : "ÇëÊäÈë PRD ÎÄ¼şÂ·¾¶ºóÔÙÌá½»¡£");
+      appendLog(mode === "text" ? "è¯·è¾“å…¥ PRD æ–‡æœ¬åå†æäº¤ã€‚" : "è¯·è¾“å…¥ PRD æ–‡ä»¶è·¯å¾„åå†æäº¤ã€‚");
       return;
     }
 
     setStatus("running");
     setStatusLabel("Queued");
     setIsSubmitting(true);
+    listeningRef.current = true;
     resetRunView();
-    appendLog("ÕıÔÚ´´½¨ÆÀÉóÈÎÎñ...");
+    activeRunIdRef.current = "";
+    loadedReportRunRef.current = "";
+    appendLog("æ­£åœ¨åˆ›å»ºè¯„å®¡ä»»åŠ¡...");
 
     try {
       const response = await fetch("/api/review", {
@@ -257,7 +260,8 @@ function App() {
       setRunId(data.run_id);
       activeRunIdRef.current = data.run_id;
       setIsSubmitting(true);
-      appendLog(`ÈÎÎñÒÑ´´½¨: ${data.run_id}`);
+      listeningRef.current = true;
+      appendLog(`ä»»åŠ¡å·²åˆ›å»º: ${data.run_id}`);
       setHistory((current) => {
         const summary = mode === "text" ? firstLine(prdText.trim()) || "PRD text" : prdPath.trim();
         return [{ runId: data.run_id, mode, summary, createdAt: new Date().toISOString() }, ...current].slice(0, 8);
@@ -265,7 +269,7 @@ function App() {
       connectWebSocket(data.run_id);
       window.setTimeout(() => {
         if (transportRef.current !== "websocket" && activeRunIdRef.current === data.run_id && listeningRef.current) {
-          startPolling(data.run_id, "ÊµÊ±Á¬½ÓÉĞÎ´½¨Á¢£¬ÒÑÊ¹ÓÃÂÖÑ¯¶µµ×¡£" );
+          startPolling(data.run_id, "å®æ—¶è¿æ¥å°šæœªå»ºç«‹ï¼Œå·²ä½¿ç”¨è½®è¯¢å…œåº•ã€‚");
         }
       }, 2500);
     } catch (error) {
@@ -273,7 +277,7 @@ function App() {
       setStatusLabel("Failed");
       setIsSubmitting(false);
       listeningRef.current = false;
-      appendLog(`´´½¨ÈÎÎñÊ§°Ü: ${error.message}`);
+      appendLog(`åˆ›å»ºä»»åŠ¡å¤±è´¥: ${error.message}`);
     }
   }
 
@@ -283,14 +287,15 @@ function App() {
     setStatus("running");
     setStatusLabel("History");
     loadedReportRunRef.current = "";
-    appendLog(`ÒÑÇĞ»»µ½ÀúÊ·ÈÎÎñ ${item.runId}¡£`);
+    appendLog(`å·²åˆ‡æ¢åˆ°å†å²ä»»åŠ¡ ${item.runId}ã€‚`);
     await pollStatus(item.runId, "history");
     if (!TERMINAL_STATUSES.has(latestStatusRef.current)) {
       setIsSubmitting(true);
+      listeningRef.current = true;
       connectWebSocket(item.runId);
       window.setTimeout(() => {
         if (transportRef.current !== "websocket" && activeRunIdRef.current === item.runId && !TERMINAL_STATUSES.has(latestStatusRef.current)) {
-          startPolling(item.runId, "ÀúÊ·ÈÎÎñÊµÊ±Á¬½ÓÊ§°Ü£¬ÒÑ»ØÍËµ½ÂÖÑ¯¡£" );
+          startPolling(item.runId, "å†å²ä»»åŠ¡å®æ—¶è¿æ¥å¤±è´¥ï¼Œå·²å›é€€åˆ°è½®è¯¢ã€‚");
         }
       }, 2500);
     } else {
@@ -307,10 +312,10 @@ function App() {
       <header className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Requirement Review V2</p>
-          <h1>´Ó PRD ÊäÈëµ½ÆÀÉó±¨¸æ£¬Ò»Ò³Íê³É¡£</h1>
+          <h1>ä» PRD è¾“å…¥åˆ°è¯„å®¡æŠ¥å‘Šï¼Œä¸€é¡µå®Œæˆã€‚</h1>
           <p className="hero-text">
-            ÏÖÔÚÇ°¶ËÒÑ¾­ÇĞµ½ React ×é¼ş»¯½á¹¹£¬±£Áô¾É°æ GPT Researcher µÄ´óÃæ°åÌåÑé£¬
-            µ«×´Ì¬¹ÜÀí¡¢ÀúÊ·¼ÇÂ¼ºÍÔËĞĞÇø¿é¶¼¸üÈİÒ×¼ÌĞøÑİ½ø¡£
+            ç°åœ¨å‰ç«¯å·²ç»åˆ‡åˆ° React ç»„ä»¶åŒ–ç»“æ„ï¼Œä¿ç•™æ—§ç‰ˆ GPT Researcher çš„å¤§é¢æ¿ä½“éªŒï¼Œ
+            ä½†çŠ¶æ€ç®¡ç†ã€å†å²è®°å½•å’Œè¿è¡ŒåŒºå—éƒ½æ›´å®¹æ˜“ç»§ç»­æ¼”è¿›ã€‚
           </p>
           <div className="hero-actions">
             <button
@@ -319,22 +324,22 @@ function App() {
               onClick={() => {
                 setMode("text");
                 setPrdText(SAMPLE_PRD);
-                appendLog("ÒÑÌî³äÊ¾Àı PRD¡£");
+                appendLog("å·²å¡«å……ç¤ºä¾‹ PRDã€‚");
               }}
             >
-              Ìî³äÊ¾Àı PRD
+              å¡«å……ç¤ºä¾‹ PRD
             </button>
-            <a className="btn btn-ghost" href="#workspace">¿ªÊ¼Ê¹ÓÃ</a>
+            <a className="btn btn-ghost" href="#workspace">å¼€å§‹ä½¿ç”¨</a>
           </div>
         </div>
         <div className="hero-panel">
           <div className="hero-card">
-            <span className="hero-card-label">ÓÅ»¯ºó½á¹¹</span>
+            <span className="hero-card-label">ä¼˜åŒ–åç»“æ„</span>
             <ul>
-              <li>React ×é¼ş»¯²¼¾ÖÓë×´Ì¬¹ÜÀí</li>
-              <li>°´ÔËĞĞÌ¬ÇĞ»»Ìá½»¡¢ÂÖÑ¯¡¢ÀúÊ·»Ø¿´</li>
-              <li>WebSocket ÊµÊ±½ø¶È + ÂÖÑ¯¶µµ×</li>
-              <li>±¨¸æÔ¤ÀÀÓëÏÂÔØ·ÖÇøÇåÎú</li>
+              <li>React ç»„ä»¶åŒ–å¸ƒå±€ä¸çŠ¶æ€ç®¡ç†</li>
+              <li>æŒ‰è¿è¡Œæ€åˆ‡æ¢æäº¤ã€è½®è¯¢ã€å†å²å›çœ‹</li>
+              <li>WebSocket å®æ—¶è¿›åº¦ + è½®è¯¢å…œåº•</li>
+              <li>æŠ¥å‘Šé¢„è§ˆä¸ä¸‹è½½åˆ†åŒºæ¸…æ™°</li>
             </ul>
           </div>
         </div>
@@ -345,34 +350,34 @@ function App() {
           <div className="panel-header">
             <div>
               <p className="panel-kicker">Submit Review</p>
-              <h2>·¢ÆğĞèÇóÆÀÉó</h2>
+              <h2>å‘èµ·éœ€æ±‚è¯„å®¡</h2>
             </div>
             <div className={statusClass}>{statusLabel}</div>
           </div>
 
           <div className="input-mode-switch" role="tablist" aria-label="Input mode">
-            <button className={`mode-btn ${mode === "text" ? "active" : ""}`} type="button" onClick={() => setMode("text")}>PRD ÎÄ±¾</button>
-            <button className={`mode-btn ${mode === "path" ? "active" : ""}`} type="button" onClick={() => setMode("path")}>ÎÄ¼şÂ·¾¶</button>
+            <button className={`mode-btn ${mode === "text" ? "active" : ""}`} type="button" onClick={() => setMode("text")}>PRD æ–‡æœ¬</button>
+            <button className={`mode-btn ${mode === "path" ? "active" : ""}`} type="button" onClick={() => setMode("path")}>æ–‡ä»¶è·¯å¾„</button>
           </div>
 
           <form className="review-form" onSubmit={handleSubmit}>
             {mode === "text" ? (
               <div>
-                <label className="field-label" htmlFor="prdText">PRD ÄÚÈİ</label>
-                <textarea id="prdText" className="field-input field-textarea" value={prdText} onChange={(event) => setPrdText(event.target.value)} placeholder="# PRD\n\n±³¾°£º...\nÄ¿±ê£º...\nÑéÊÕ±ê×¼£º..." />
+                <label className="field-label" htmlFor="prdText">PRD å†…å®¹</label>
+                <textarea id="prdText" className="field-input field-textarea" value={prdText} onChange={(event) => setPrdText(event.target.value)} placeholder="# PRD\n\nèƒŒæ™¯ï¼š...\nç›®æ ‡ï¼š...\néªŒæ”¶æ ‡å‡†ï¼š..." />
               </div>
             ) : (
               <div>
-                <label className="field-label" htmlFor="prdPath">PRD ÎÄ¼şÂ·¾¶</label>
-                <input id="prdPath" className="field-input" type="text" value={prdPath} onChange={(event) => setPrdPath(event.target.value)} placeholder="ÀıÈç£ºdocs/sample_prd.md" />
+                <label className="field-label" htmlFor="prdPath">PRD æ–‡ä»¶è·¯å¾„</label>
+                <input id="prdPath" className="field-input" type="text" value={prdPath} onChange={(event) => setPrdPath(event.target.value)} placeholder="ä¾‹å¦‚ï¼šdocs/sample_prd.md" />
               </div>
             )}
 
             <div className="form-actions">
-              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? "ÈÎÎñÒÑÌá½»" : "¿ªÊ¼ÆÀÉó"}</button>
+              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? "ä»»åŠ¡å·²æäº¤" : "å¼€å§‹è¯„å®¡"}</button>
               {isSubmitting ? (
-                <button className="btn btn-secondary" type="button" onClick={() => { stopPolling(true); stopWebSocket(true); setIsSubmitting(false); setTransport("idle"); }}>
-                  Í£Ö¹¼àÌı
+                <button className="btn btn-secondary" type="button" onClick={() => { stopPolling(true); stopWebSocket(true); setIsSubmitting(false); setTransport("idle"); listeningRef.current = false; }}>
+                  åœæ­¢ç›‘å¬
                 </button>
               ) : null}
             </div>
@@ -383,12 +388,12 @@ function App() {
           <div className="panel-header">
             <div>
               <p className="panel-kicker">Run Status</p>
-              <h2>Ö´ĞĞ½ø¶È</h2>
+              <h2>æ‰§è¡Œè¿›åº¦</h2>
             </div>
             <div className="run-meta">
               <span>{`run_id: ${runId || "-"}`}</span>
-              <span>{`¸üĞÂÊ±¼ä: ${updatedAtLabel}`}</span>
-              <span>{`Á¬½Ó·½Ê½: ${transportLabel}`}</span>
+              <span>{`æ›´æ–°æ—¶é—´: ${updatedAtLabel}`}</span>
+              <span>{`è¿æ¥æ–¹å¼: ${transportLabel}`}</span>
             </div>
           </div>
 
@@ -398,7 +403,7 @@ function App() {
             </div>
             <div className="progress-meter-info">
               <strong>{progress.percent}%</strong>
-              <span>{`µ±Ç°½Úµã: ${progress.current_node || "µÈ´ıÌá½»"}`}</span>
+              <span>{`å½“å‰èŠ‚ç‚¹: ${progress.current_node || "ç­‰å¾…æäº¤"}`}</span>
             </div>
           </div>
 
@@ -406,16 +411,16 @@ function App() {
             {nodeCards.map((node) => (
               <div className={`node-card ${node.status || "pending"}`} key={node.name}>
                 <h3>{node.name}</h3>
-                <p>{`×´Ì¬: ${node.status || "pending"}`}</p>
-                <p>{`ÔËĞĞ´ÎÊı: ${node.runs || 0}`}</p>
+                <p>{`çŠ¶æ€: ${node.status || "pending"}`}</p>
+                <p>{`è¿è¡Œæ¬¡æ•°: ${node.runs || 0}`}</p>
               </div>
             ))}
           </div>
 
           <div className="activity-log-wrap">
             <div className="subsection-header">
-              <h3>ÔËĞĞÈÕÖ¾</h3>
-              <button className="link-btn" type="button" onClick={() => { setLogs([]); appendLog("ÈÕÖ¾ÒÑÇå¿Õ¡£"); }}>Çå¿Õ</button>
+              <h3>è¿è¡Œæ—¥å¿—</h3>
+              <button className="link-btn" type="button" onClick={() => { setLogs([]); appendLog("æ—¥å¿—å·²æ¸…ç©ºã€‚"); }}>æ¸…ç©º</button>
             </div>
             <div className="activity-log">
               {logs.map((entry, index) => (
@@ -432,7 +437,7 @@ function App() {
           <div className="panel-header">
             <div>
               <p className="panel-kicker">Review Report</p>
-              <h2>±¨¸æÊä³ö</h2>
+              <h2>æŠ¥å‘Šè¾“å‡º</h2>
             </div>
             <div className="report-actions">
               <a className={`btn btn-ghost ${runId ? "" : "disabled"}`} href={`${downloadBase}?format=md`} target="_blank" rel="noreferrer">Markdown</a>
@@ -454,7 +459,7 @@ function App() {
                 {reportMarkdown}
               </ReactMarkdown>
             ) : (
-              <p>ÔİÎŞÔ¤ÀÀ¡£</p>
+              <p>æš‚æ— é¢„è§ˆã€‚</p>
             )}
           </article>
         </section>
@@ -463,17 +468,17 @@ function App() {
           <div className="panel-header">
             <div>
               <p className="panel-kicker">History</p>
-              <h2>×î½üÔËĞĞ</h2>
+              <h2>æœ€è¿‘è¿è¡Œ</h2>
             </div>
-            <button className="link-btn" type="button" onClick={() => { setHistory([]); appendLog("ÀúÊ·¼ÇÂ¼ÒÑÇå¿Õ¡£"); }}>Çå¿ÕÀúÊ·</button>
+            <button className="link-btn" type="button" onClick={() => { setHistory([]); appendLog("å†å²è®°å½•å·²æ¸…ç©ºã€‚"); }}>æ¸…ç©ºå†å²</button>
           </div>
           <div className="history-list">
             {history.length ? history.map((item) => (
               <button className="history-item" type="button" key={`${item.runId}-${item.createdAt}`} onClick={() => void openHistory(item)}>
                 <span className="history-item-title">{truncate(item.summary, 48)}</span>
-                <span className="history-item-meta">{`${item.mode.toUpperCase()} ¡¤ ${item.runId} ¡¤ ${formatDate(item.createdAt)}`}</span>
+                <span className="history-item-meta">{`${item.mode.toUpperCase()} Â· ${item.runId} Â· ${formatDate(item.createdAt)}`}</span>
               </button>
-            )) : <div className="empty-state">»¹Ã»ÓĞÀúÊ·ÔËĞĞ¼ÇÂ¼¡£</div>}
+            )) : <div className="empty-state">è¿˜æ²¡æœ‰å†å²è¿è¡Œè®°å½•ã€‚</div>}
           </div>
         </aside>
       </main>
@@ -528,6 +533,3 @@ function formatTime(date) {
 }
 
 export default App;
-
-
-
