@@ -1,8 +1,4 @@
-"""Reviewer agent — LangGraph node that evaluates each parsed requirement
-on clarity, testability, ambiguity, and plan coverage.
-
-parsed_items + tasks/milestones/estimation  →  review_results + plan_review
-"""
+"""Reviewer agent node that evaluates requirements and plan coverage."""
 
 from __future__ import annotations
 
@@ -14,7 +10,7 @@ from gpt_researcher.config.config import Config
 
 from ..prompts import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 from ..schemas import ReviewerOutput, validate_reviewer_output
-from ..state import ReviewState
+from ..state import ReviewState, plan_from_state
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
@@ -47,7 +43,6 @@ _VAGUE_TERMS = (
 
 
 def _is_high_risk(result: dict[str, Any]) -> bool:
-    """Requirement-quality risk heuristic shared with workflow routing."""
     flags = sum(
         [
             not result.get("is_clear", True),
@@ -67,7 +62,6 @@ def _compute_high_risk_ratio(review_results: list[dict[str, Any]]) -> float:
 
 
 def _compute_ambiguity_ratio(parsed_items: list[dict[str, Any]]) -> float:
-    """Fallback heuristic when model outputs look unrealistically optimistic."""
     total = len(parsed_items)
     if total == 0:
         return 0.0
@@ -83,18 +77,8 @@ def _compute_ambiguity_ratio(parsed_items: list[dict[str, Any]]) -> float:
 
 
 async def run(state: ReviewState) -> ReviewState:
-    """Review every item in *parsed_items* and produce *review_results*.
+    """Review parsed items and cross-check them against the delivery plan."""
 
-    Each result contains ``is_clear``, ``is_testable``, ``is_ambiguous``,
-    a list of concrete ``issues``, and actionable ``suggestions``.
-
-    When a delivery plan is available the reviewer also cross-checks
-    requirement-to-task coverage and produces *plan_review* comments.
-
-    Returns a partial state update with *review_results*, *plan_review*,
-    and *trace*.  On failure the results list is empty and the trace
-    carries the error.
-    """
     parsed_items: list[dict] = state.get("parsed_items", [])
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
@@ -102,10 +86,7 @@ async def run(state: ReviewState) -> ReviewState:
 
     if not parsed_items:
         span = trace_start(_AGENT, model="none", input_chars=0)
-        trace[_AGENT] = span.end(
-            status="error",
-            error_message="parsed_items is empty — nothing to review",
-        )
+        trace[_AGENT] = span.end(status="error", error_message="parsed_items is empty - nothing to review")
         return {
             "review_results": [],
             "plan_review": {},
@@ -114,21 +95,17 @@ async def run(state: ReviewState) -> ReviewState:
         }
 
     items_json = json.dumps(parsed_items, ensure_ascii=False, indent=2)
-
+    plan = plan_from_state(state)
     plan_data = {
-        "tasks": state.get("tasks", []),
-        "milestones": state.get("milestones", []),
-        "estimation": state.get("estimation", {}),
+        "tasks": plan.get("tasks", []),
+        "milestones": plan.get("milestones", []),
+        "estimation": plan.get("estimation", {}),
     }
     plan_json = json.dumps(plan_data, ensure_ascii=False, indent=2)
 
     input_chars = len(items_json) + len(plan_json)
     span = trace_start(_AGENT, input_chars=input_chars)
-
-    prompt = (
-        f"{REVIEWER_SYSTEM_PROMPT}\n\n"
-        f"{REVIEWER_USER_PROMPT.format(items_json=items_json, plan_json=plan_json)}"
-    )
+    prompt = f"{REVIEWER_SYSTEM_PROMPT}\n\n{REVIEWER_USER_PROMPT.format(items_json=items_json, plan_json=plan_json)}"
 
     try:
         cfg = Config()

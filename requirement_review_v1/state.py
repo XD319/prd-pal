@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 
 
 class ParsedItemState(TypedDict):
@@ -35,7 +35,6 @@ DependencyState = TypedDict(
     "DependencyState",
     {"from": str, "to": str, "type": str},
 )
-"""State shape aligned with planner dependency output."""
 
 
 class EstimationState(TypedDict):
@@ -43,6 +42,15 @@ class EstimationState(TypedDict):
 
     total_days: float
     buffer_days: float
+
+
+class PlanState(TypedDict):
+    """Aggregated planner output kept under one state key."""
+
+    tasks: list[TaskState]
+    milestones: list[MilestoneState]
+    dependencies: list[DependencyState]
+    estimation: EstimationState
 
 
 class RiskItemState(TypedDict):
@@ -76,27 +84,54 @@ class PlanReviewState(TypedDict):
     estimation: str
 
 
+def merge_state_dicts(left: dict[str, Any] | None, right: dict[str, Any] | None) -> dict[str, Any]:
+    """Merge dict fragments produced by parallel branches."""
+
+    merged: dict[str, Any] = {}
+    if isinstance(left, dict):
+        merged.update(left)
+    if isinstance(right, dict):
+        merged.update(right)
+    return merged
+
+
+def plan_from_state(state: dict[str, Any]) -> PlanState:
+    """Return a normalized plan view from aggregated or legacy fields."""
+
+    raw_plan = state.get("plan")
+    if isinstance(raw_plan, dict):
+        return PlanState(
+            tasks=list(raw_plan.get("tasks", []) or []),
+            milestones=list(raw_plan.get("milestones", []) or []),
+            dependencies=list(raw_plan.get("dependencies", []) or []),
+            estimation=dict(raw_plan.get("estimation", {}) or {}),
+        )
+
+    return PlanState(
+        tasks=list(state.get("tasks", []) or []),
+        milestones=list(state.get("milestones", []) or []),
+        dependencies=list(state.get("dependencies", []) or []),
+        estimation=dict(state.get("estimation", {}) or {}),
+    )
+
+
 class ReviewState(TypedDict, total=False):
-    """LangGraph state for the requirement-review workflow.
+    """LangGraph state for the requirement-review workflow."""
 
-    `total=False` makes every field optional so that LangGraph can
-    do partial updates without requiring all keys on every node return.
-    """
-
-    # ── core review fields ────────────────────────────────────────
     requirement_doc: str
     run_dir: str
     parsed_items: list[ParsedItemState]
     review_results: list[ReviewResultItemState]
     final_report: str
-    trace: dict[str, Any]
+    trace: Annotated[dict[str, Any], merge_state_dicts]
 
-    # ── delivery-planning fields ──────────────────────────────────
+    plan: PlanState
     tasks: list[TaskState]
     milestones: list[MilestoneState]
     dependencies: list[DependencyState]
     estimation: EstimationState
     risks: list[RiskItemState]
+    evidence: Annotated[dict[str, Any], merge_state_dicts]
     plan_review: PlanReviewState
     metrics: dict[str, Any]
     revision_round: int
@@ -107,17 +142,20 @@ class ReviewState(TypedDict, total=False):
 
 def create_initial_state(requirement_doc: str) -> ReviewState:
     """Build the seed state that kicks off the graph."""
+
     return ReviewState(
         requirement_doc=requirement_doc,
         parsed_items=[],
         review_results=[],
         final_report="",
         trace={},
+        plan={"tasks": [], "milestones": [], "dependencies": [], "estimation": {}},
         tasks=[],
         milestones=[],
         dependencies=[],
         estimation={},
         risks=[],
+        evidence={},
         plan_review={},
         metrics={},
         revision_round=0,

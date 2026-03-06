@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..metrics import compute_requirement_coverage
-from ..state import ReviewState
+from ..state import ReviewState, plan_from_state
 from ..utils.trace import trace_start
 
 # ── risk helpers ──────────────────────────────────────────────────────────
@@ -200,9 +200,10 @@ async def run(state: ReviewState) -> ReviewState:
     """Assemble *final_report* from all state fields."""
     parsed_items: list[dict] = state.get("parsed_items", [])
     review_results: list[dict] = state.get("review_results", [])
-    tasks: list[dict] = state.get("tasks", [])
-    milestones: list[dict] = state.get("milestones", [])
-    estimation: dict = state.get("estimation", {})
+    plan = plan_from_state(state)
+    tasks: list[dict] = plan.get("tasks", [])
+    milestones: list[dict] = plan.get("milestones", [])
+    estimation: dict = plan.get("estimation", {})
     risks: list[dict] = state.get("risks", [])
     plan_review: dict = state.get("plan_review", {})
     trace: dict[str, Any] = dict(state.get("trace", {}))

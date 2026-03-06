@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from ..prompts import RISK_SYSTEM_PROMPT, RISK_USER_PROMPT
 from ..schemas import RiskItem, RiskOutput, validate_risk_output
 from ..skills import get_skill_executor, get_skill_spec
-from ..state import ReviewState
+from ..state import PlanState, ReviewState, plan_from_state
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
@@ -26,10 +26,7 @@ _RISK_TOOL_TOP_K_ENV = "RISK_AGENT_CATALOG_TOP_K"
 
 
 class RiskAnalysisContext(BaseModel):
-    tasks: list[dict[str, Any]] = Field(default_factory=list)
-    milestones: list[dict[str, Any]] = Field(default_factory=list)
-    dependencies: list[dict[str, Any]] = Field(default_factory=list)
-    estimation: dict[str, Any] = Field(default_factory=dict)
+    plan: dict[str, Any] = Field(default_factory=dict)
     run_dir: str = ""
     trace: dict[str, Any] = Field(default_factory=dict)
     node_path: str = "risk"
@@ -89,32 +86,37 @@ def _context_from_state(state: RiskAnalysisState) -> RiskAnalysisContext:
 
 
 def _plan_data(context: RiskAnalysisContext) -> dict[str, Any]:
+    plan = context.plan or {}
     return {
-        "tasks": context.tasks,
-        "milestones": context.milestones,
-        "dependencies": context.dependencies,
-        "estimation": context.estimation,
+        "tasks": list(plan.get("tasks", []) or []),
+        "milestones": list(plan.get("milestones", []) or []),
+        "dependencies": list(plan.get("dependencies", []) or []),
+        "estimation": dict(plan.get("estimation", {}) or {}),
     }
 
 
-def _plan_query(
-    structured_requirements: list[dict[str, Any]],
-    tasks: list[dict[str, Any]],
-    milestones: list[dict[str, Any]],
-    estimation: dict[str, Any],
-) -> str:
-    requirement_titles = "; ".join(
-        str(item.get("description", "")) for item in structured_requirements[:10] if item.get("description")
-    )
+def _requirement_query(structured_requirements: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for item in structured_requirements[:10]:
+        rid = str(item.get("id", "")).strip()
+        desc = str(item.get("description", "")).strip()
+        criteria = "; ".join(str(x).strip() for x in item.get("acceptance_criteria", []) if str(x).strip())
+        if rid or desc or criteria:
+            lines.append(f"{rid}: {desc} | criteria: {criteria}".strip())
+    return "\n".join(lines)
+
+
+def _plan_query(structured_requirements: list[dict[str, Any]], plan: dict[str, Any]) -> str:
+    tasks = list(plan.get("tasks", []) or [])
+    milestones = list(plan.get("milestones", []) or [])
+    estimation = dict(plan.get("estimation", {}) or {})
     task_titles = "; ".join(str(t.get("title", "")) for t in tasks[:20] if t.get("title"))
     owners = ", ".join(sorted({str(t.get("owner", "")).strip() for t in tasks if t.get("owner")}))
-    milestone_titles = "; ".join(
-        str(m.get("title", "")) for m in milestones[:10] if m.get("title")
-    )
+    milestone_titles = "; ".join(str(m.get("title", "")) for m in milestones[:10] if m.get("title"))
     total_days = estimation.get("total_days", "")
     buffer_days = estimation.get("buffer_days", "")
     return (
-        f"requirements: {requirement_titles}\n"
+        f"requirements:\n{_requirement_query(structured_requirements)}\n"
         f"tasks: {task_titles}\n"
         f"owners: {owners}\n"
         f"milestones: {milestone_titles}\n"
@@ -173,12 +175,8 @@ def _tool_action(
 async def _retrieve_evidence_node(state: RiskAnalysisState) -> RiskAnalysisState:
     context = _context_from_state(state)
     trace = dict(context.trace)
-    query = _plan_query(
-        state.get("structured_requirements", []),
-        context.tasks,
-        context.milestones,
-        context.estimation,
-    )
+    plan = _plan_data(context)
+    query = _plan_query(state.get("structured_requirements", []), plan)
     span = trace_start(_EVIDENCE_NODE, input_chars=len(query))
     span.set_attrs({"subflow_id": context.subflow_id, "node_path": _EVIDENCE_NODE})
 
@@ -244,10 +242,7 @@ async def _retrieve_evidence_node(state: RiskAnalysisState) -> RiskAnalysisState
     if tool_error:
         span.set_attr("risk_catalog_tool_error", tool_error)
     if not tool_enabled:
-        span.set_attr(
-            "risk_catalog_tool_reason",
-            f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped",
-        )
+        span.set_attr("risk_catalog_tool_reason", f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped")
 
     trace[_EVIDENCE_NODE] = span.end(status="ok", output_chars=len(json.dumps(evidence_hits, ensure_ascii=False)))
     return {
@@ -275,11 +270,7 @@ async def _retrieve_evidence_node(state: RiskAnalysisState) -> RiskAnalysisState
                 "risk_catalog_top_ids": top_ids,
                 **({"risk_catalog_tool_error": tool_error} if tool_error else {}),
                 **(
-                    {
-                        "risk_catalog_tool_reason": (
-                            f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped"
-                        )
-                    }
+                    {"risk_catalog_tool_reason": f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped"}
                     if not tool_enabled
                     else {}
                 ),
@@ -293,22 +284,27 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
     trace = dict(state.get("trace", {}))
     run_dir = context.run_dir
     raw = ""
+    structured_requirements = list(state.get("structured_requirements", []) or [])
     plan_data = _plan_data(context)
-    plan_json = json.dumps(plan_data, ensure_ascii=False, indent=2)
-    span = trace_start(_GENERATION_NODE, input_chars=len(plan_json))
+    payload_json = json.dumps(
+        {"structured_requirements": structured_requirements, "plan": plan_data},
+        ensure_ascii=False,
+        indent=2,
+    )
+    span = trace_start(_GENERATION_NODE, input_chars=len(payload_json))
     span.set_attrs({"subflow_id": context.subflow_id, "node_path": _GENERATION_NODE})
     trace_meta = dict(state.get("trace_meta", {}))
-    trace_meta["input_chars"] = len(plan_json)
+    trace_meta["input_chars"] = len(payload_json)
 
-    if not context.tasks:
+    if not structured_requirements:
         trace[_GENERATION_NODE] = span.end(
             status="error",
-            error_message="tasks is empty - nothing to assess",
+            error_message="structured_requirements is empty - nothing to assess",
         )
         trace_meta.update(
             {
                 "status": "error",
-                "error_message": "tasks is empty - nothing to assess",
+                "error_message": "structured_requirements is empty - nothing to assess",
                 "model": "none",
                 "raw_output_path": "",
                 "output_chars": 0,
@@ -317,9 +313,12 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
         )
         return {"risks": [], "trace": trace, "trace_meta": trace_meta}
 
-    evidence_hits = state.get("evidence_hits", [])
+    evidence_hits = list(state.get("evidence_hits", []) or [])
     evidence_json = json.dumps(_evidence_for_prompt(evidence_hits), ensure_ascii=False, indent=2)
-    prompt = f"{RISK_SYSTEM_PROMPT}\n\n{RISK_USER_PROMPT.format(plan_json=plan_json, evidence_json=evidence_json)}"
+    prompt = (
+        f"{RISK_SYSTEM_PROMPT}\n\n"
+        f"{RISK_USER_PROMPT.format(requirements_json=json.dumps(structured_requirements, ensure_ascii=False, indent=2), plan_json=json.dumps(plan_data, ensure_ascii=False, indent=2), evidence_json=evidence_json)}"
+    )
 
     try:
         cfg = Config()
@@ -450,41 +449,36 @@ async def run_risk_analysis_subflow(payload: RiskAnalysisInput | dict[str, Any])
     }
 
 
+def _review_state_plan(plan: PlanState | dict[str, Any]) -> dict[str, Any]:
+    return {
+        "tasks": list(plan.get("tasks", []) or []),
+        "milestones": list(plan.get("milestones", []) or []),
+        "dependencies": list(plan.get("dependencies", []) or []),
+        "estimation": dict(plan.get("estimation", {}) or {}),
+    }
+
+
 async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState:
     """Adapter from the main ReviewState to the reusable risk subflow."""
 
     trace = dict(state.get("trace", {}))
-    tasks = state.get("tasks", [])
-    milestones = state.get("milestones", [])
-    dependencies = state.get("dependencies", [])
-    estimation = state.get("estimation", {})
     run_dir = state.get("run_dir", "")
-    structured_requirements = state.get("parsed_items", [])
-    plan_json = (
-        json.dumps(
-            {
-                "tasks": tasks,
-                "milestones": milestones,
-                "dependencies": dependencies,
-                "estimation": estimation,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        if tasks
-        else ""
+    structured_requirements = list(state.get("parsed_items", []) or [])
+    plan = _review_state_plan(plan_from_state(state))
+    input_json = json.dumps(
+        {"structured_requirements": structured_requirements, "plan": plan},
+        ensure_ascii=False,
+        indent=2,
     )
-    span = trace_start("risk", input_chars=len(plan_json), model="none" if not tasks else "unknown")
+
+    span = trace_start("risk", input_chars=len(input_json), model="none" if not structured_requirements else "unknown")
     span.set_attrs({"subflow_id": _SUBFLOW_ID, "node_path": "risk"})
 
     result = await run_risk_analysis_subflow(
         RiskAnalysisInput(
             structured_requirements=structured_requirements,
             context=RiskAnalysisContext(
-                tasks=tasks,
-                milestones=milestones,
-                dependencies=dependencies,
-                estimation=estimation,
+                plan=plan,
                 run_dir=run_dir,
                 trace=trace,
                 node_path="risk",
@@ -510,5 +504,9 @@ async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState
 
     return {
         "risks": result["output"].get("risks", []),
+        "evidence": {
+            "summary": result["output"].get("evidence_summary", {}),
+            "tool_actions": result["output"].get("tool_actions", []),
+        },
         "trace": next_trace,
     }

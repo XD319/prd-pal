@@ -1,8 +1,4 @@
-"""Planner agent — LangGraph node that generates a delivery plan from parsed
-requirement items.
-
-parsed_items  →  tasks, milestones, dependencies, estimation
-"""
+"""Planner agent node that generates a delivery plan from parsed items."""
 
 from __future__ import annotations
 
@@ -21,13 +17,10 @@ from ..utils.trace import trace_start
 
 _AGENT = "planner"
 
-async def run(state: ReviewState) -> ReviewState:
-    """Produce a delivery plan from *parsed_items*.
 
-    Returns a partial state update with *tasks*, *milestones*,
-    *dependencies*, *estimation*, and *trace*.
-    On failure every output list/dict is empty and the trace carries the error.
-    """
+async def run(state: ReviewState) -> ReviewState:
+    """Produce a delivery plan from parsed requirement items."""
+
     parsed_items: list[dict] = state.get("parsed_items", [])
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
@@ -35,15 +28,11 @@ async def run(state: ReviewState) -> ReviewState:
 
     if not parsed_items:
         span = trace_start(_AGENT, model="none", input_chars=0)
-        trace[_AGENT] = span.end(
-            status="error",
-            error_message="parsed_items is empty — nothing to plan",
-        )
+        trace[_AGENT] = span.end(status="error", error_message="parsed_items is empty - nothing to plan")
         return _empty_result(trace)
 
     items_json = json.dumps(parsed_items, ensure_ascii=False, indent=2)
     span = trace_start(_AGENT, input_chars=len(items_json))
-
     prompt = f"{PLANNER_SYSTEM_PROMPT}\n\n{PLANNER_USER_PROMPT.format(items_json=items_json)}"
 
     try:
@@ -76,10 +65,12 @@ async def run(state: ReviewState) -> ReviewState:
             )
 
         return {
-            "tasks": output.get("tasks", []),
-            "milestones": output.get("milestones", []),
-            "dependencies": output.get("dependencies", []),
-            "estimation": output.get("estimation", {}),
+            "plan": {
+                "tasks": output.get("tasks", []),
+                "milestones": output.get("milestones", []),
+                "dependencies": output.get("dependencies", []),
+                "estimation": output.get("estimation", {}),
+            },
             "trace": trace,
         }
 
@@ -106,11 +97,8 @@ async def run(state: ReviewState) -> ReviewState:
         return _empty_result(trace)
 
 
-def _empty_result(trace: dict) -> ReviewState:
+def _empty_result(trace: dict[str, Any]) -> ReviewState:
     return {
-        "tasks": [],
-        "milestones": [],
-        "dependencies": [],
-        "estimation": {},
+        "plan": {"tasks": [], "milestones": [], "dependencies": [], "estimation": {}},
         "trace": trace,
     }
