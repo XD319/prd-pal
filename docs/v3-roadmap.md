@@ -27,3 +27,19 @@ The v3 MVP is accepted only when all of the following gates pass:
 - `sample_prd` runs successfully against the v3 flow.
 - `run_eval` completes successfully with expected evaluation output.
 - `pytest` passes for the relevant repository test suite.
+
+## Tool Cache Scope
+
+- The v3 tool cache is a process-local in-memory TTL cache.
+- Cache entries live only for the lifetime of the current Python process.
+- Independent CLI invocations such as running `python -m requirement_review_v1.main` twice do not share cache state.
+
+## Cache Validation Strategy
+
+- Validate cache hit/miss behavior with unit tests that execute the same skill twice in the same `SkillExecutor` process.
+- For integration validation, prefer a long-lived FastAPI or MCP server process where repeated requests can reuse in-memory skill results.
+- Do not use back-to-back standalone CLI process runs as evidence of cache hit behavior for the current MVP.
+
+## Future Work
+
+- TODO: add an optional persistent cache backend for cross-process reuse, such as SQLite, file-based cache, or Redis.

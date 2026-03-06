@@ -458,12 +458,46 @@ def _review_state_plan(plan: PlanState | dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _legacy_requirements_from_review_state(state: ReviewState) -> list[dict[str, Any]]:
+    tasks = list(state.get("tasks", []) or [])
+    by_requirement: dict[str, dict[str, Any]] = {}
+    fallback_index = 0
+
+    for task in tasks:
+        task_title = str(task.get("title", "")).strip()
+        task_owner = str(task.get("owner", "")).strip()
+        criteria_parts = [part for part in (task_title, f"owner: {task_owner}" if task_owner else "") if part]
+        requirement_ids = [str(req_id).strip() for req_id in task.get("requirement_ids", []) if str(req_id).strip()]
+
+        if not requirement_ids:
+            fallback_index += 1
+            requirement_ids = [f"LEGACY-REQ-{fallback_index:03d}"]
+
+        for requirement_id in requirement_ids:
+            item = by_requirement.setdefault(
+                requirement_id,
+                {
+                    "id": requirement_id,
+                    "description": f"Derived from plan tasks for {requirement_id}",
+                    "acceptance_criteria": [],
+                },
+            )
+            if criteria_parts:
+                criterion = " | ".join(criteria_parts)
+                if criterion not in item["acceptance_criteria"]:
+                    item["acceptance_criteria"].append(criterion)
+
+    return list(by_requirement.values())
+
+
 async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState:
     """Adapter from the main ReviewState to the reusable risk subflow."""
 
     trace = dict(state.get("trace", {}))
     run_dir = state.get("run_dir", "")
     structured_requirements = list(state.get("parsed_items", []) or [])
+    if not structured_requirements:
+        structured_requirements = _legacy_requirements_from_review_state(state)
     plan = _review_state_plan(plan_from_state(state))
     input_json = json.dumps(
         {"structured_requirements": structured_requirements, "plan": plan},
