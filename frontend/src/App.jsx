@@ -37,6 +37,7 @@ function App() {
   const [logs, setLogs] = useState([{ stamp: formatTime(new Date()), message: "系统已就绪，等待提交任务。" }]);
   const pollRef = useRef(null);
   const wsRef = useRef(null);
+  const fallbackTimeoutRef = useRef(null);
   const transportRef = useRef("idle");
   const latestStatusRef = useRef("idle");
   const activeRunIdRef = useRef("");
@@ -52,8 +53,7 @@ function App() {
 
   useEffect(() => {
     return () => {
-      stopPolling(false);
-      stopWebSocket(false);
+      stopListening(false);
     };
   }, []);
 
@@ -72,8 +72,7 @@ function App() {
   }
 
   function resetRunView() {
-    stopPolling(false);
-    stopWebSocket(false);
+    stopListening(false);
     setRunId("");
     setTransportLabel("Idle");
     transportRef.current = "idle";
@@ -82,6 +81,13 @@ function App() {
     setProgress({ percent: 0, current_node: "等待提交", nodes: {}, updated_at: "" });
     setReportMarkdown("");
     setReportMessage("任务完成后，这里会显示报告预览和下载入口。");
+  }
+
+  function clearFallbackTimeout() {
+    if (fallbackTimeoutRef.current) {
+      window.clearTimeout(fallbackTimeoutRef.current);
+      fallbackTimeoutRef.current = null;
+    }
   }
 
   function stopPolling(shouldLog = true) {
@@ -107,6 +113,25 @@ function App() {
         appendLog("WebSocket 已关闭。");
       }
     }
+  }
+
+  function stopListening(shouldLog = true) {
+    clearFallbackTimeout();
+    stopPolling(shouldLog);
+    stopWebSocket(shouldLog);
+    listeningRef.current = false;
+    setIsSubmitting(false);
+    setTransport("idle");
+  }
+
+  function schedulePollingFallback(nextRunId, message) {
+    clearFallbackTimeout();
+    fallbackTimeoutRef.current = window.setTimeout(() => {
+      fallbackTimeoutRef.current = null;
+      if (transportRef.current !== "websocket" && activeRunIdRef.current === nextRunId && listeningRef.current && !TERMINAL_STATUSES.has(latestStatusRef.current)) {
+        startPolling(nextRunId, message);
+      }
+    }, 2500);
   }
 
   function setTransport(nextTransport) {
@@ -140,17 +165,14 @@ function App() {
     }
 
     if (TERMINAL_STATUSES.has(nextStatus)) {
-      setIsSubmitting(false);
-      listeningRef.current = false;
-      setTransport("idle");
-      stopPolling(false);
-      stopWebSocket(false);
+      stopListening(false);
       void loadReport(data.run_id);
     }
   }
 
   function startPolling(nextRunId, reason = "") {
     stopPolling(false);
+    clearFallbackTimeout();
     setTransport("polling");
     if (reason) {
       appendLog(reason);
@@ -173,8 +195,12 @@ function App() {
     };
 
     socket.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
-      applyStatusPayload(payload, "websocket");
+      try {
+        const payload = JSON.parse(event.data);
+        applyStatusPayload(payload, "websocket");
+      } catch {
+        appendLog("WebSocket 消息解析失败，已忽略该条更新。");
+      }
     };
 
     socket.onerror = () => {
@@ -203,10 +229,7 @@ function App() {
       appendLog(`轮询失败: ${error.message}`);
       setStatus("failed");
       setStatusLabel("Polling error");
-      setTransport("idle");
-      stopPolling(false);
-      setIsSubmitting(false);
-      listeningRef.current = false;
+      stopListening(false);
     }
   }
 
@@ -240,11 +263,9 @@ function App() {
 
     setStatus("running");
     setStatusLabel("Queued");
+    resetRunView();
     setIsSubmitting(true);
     listeningRef.current = true;
-    resetRunView();
-    activeRunIdRef.current = "";
-    loadedReportRunRef.current = "";
     appendLog("正在创建评审任务...");
 
     try {
@@ -267,21 +288,17 @@ function App() {
         return [{ runId: data.run_id, mode, summary, createdAt: new Date().toISOString() }, ...current].slice(0, 8);
       });
       connectWebSocket(data.run_id);
-      window.setTimeout(() => {
-        if (transportRef.current !== "websocket" && activeRunIdRef.current === data.run_id && listeningRef.current) {
-          startPolling(data.run_id, "实时连接尚未建立，已使用轮询兜底。");
-        }
-      }, 2500);
+      schedulePollingFallback(data.run_id, "实时连接尚未建立，已使用轮询兜底。");
     } catch (error) {
       setStatus("failed");
       setStatusLabel("Failed");
-      setIsSubmitting(false);
-      listeningRef.current = false;
+      stopListening(false);
       appendLog(`创建任务失败: ${error.message}`);
     }
   }
 
   async function openHistory(item) {
+    stopListening(false);
     activeRunIdRef.current = item.runId;
     setRunId(item.runId);
     setStatus("running");
@@ -293,11 +310,7 @@ function App() {
       setIsSubmitting(true);
       listeningRef.current = true;
       connectWebSocket(item.runId);
-      window.setTimeout(() => {
-        if (transportRef.current !== "websocket" && activeRunIdRef.current === item.runId && !TERMINAL_STATUSES.has(latestStatusRef.current)) {
-          startPolling(item.runId, "历史任务实时连接失败，已回退到轮询。");
-        }
-      }, 2500);
+      schedulePollingFallback(item.runId, "历史任务实时连接失败，已回退到轮询。");
     } else {
       await loadReport(item.runId);
     }
@@ -376,7 +389,7 @@ function App() {
             <div className="form-actions">
               <button className="btn btn-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? "任务已提交" : "开始评审"}</button>
               {isSubmitting ? (
-                <button className="btn btn-secondary" type="button" onClick={() => { stopPolling(true); stopWebSocket(true); setIsSubmitting(false); setTransport("idle"); listeningRef.current = false; }}>
+                <button className="btn btn-secondary" type="button" onClick={() => { stopListening(true); }}>
                   停止监听
                 </button>
               ) : null}
