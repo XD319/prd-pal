@@ -35,6 +35,17 @@ REQUIRED_TRACE_FIELDS = (
     "raw_output_path",
     "error_message",
 )
+REQUIRED_METRICS_FIELDS = (
+    "coverage_ratio",
+    "uncovered_requirements",
+    "requirement_to_tasks",
+    "total_latency_ms",
+    "planner_latency_ms",
+    "risk_latency_ms",
+    "cache_hit_count",
+    "cache_miss_count",
+    "parallel_enabled",
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -185,6 +196,18 @@ def _check_coverage_ratio(report_data: dict[str, Any]) -> tuple[bool, list[str],
     return len(errors) == 0, errors, ratio_value
 
 
+def _check_metrics_fields_present(report_data: dict[str, Any]) -> tuple[bool, list[str]]:
+    errors: list[str] = []
+    metrics = report_data.get("metrics")
+    if not isinstance(metrics, dict):
+        return False, ["metrics is not an object"]
+
+    for field in REQUIRED_METRICS_FIELDS:
+        if field not in metrics:
+            errors.append(f"metrics missing field: {field}")
+    return len(errors) == 0, errors
+
+
 async def _run_case(
     graph: Any,
     case: dict[str, Any],
@@ -223,11 +246,13 @@ async def _run_case(
         report_ok, report_errors = _check_report_json_valid(report_data)
         trace_ok, trace_errors = _check_trace_complete(trace)
         coverage_ok, coverage_errors, coverage_ratio = _check_coverage_ratio(report_data)
+        metrics_fields_ok, metrics_fields_errors = _check_metrics_fields_present(report_data)
 
         checks = {
             "report_json_valid": {"passed": report_ok, "errors": report_errors},
             "trace_complete": {"passed": trace_ok, "errors": trace_errors},
             "coverage_ratio_present": {"passed": coverage_ok, "errors": coverage_errors},
+            "metrics_fields_present": {"passed": metrics_fields_ok, "errors": metrics_fields_errors},
         }
         all_ok = all(item["passed"] for item in checks.values())
 
@@ -259,6 +284,7 @@ async def _run_case(
                 "report_json_valid": {"passed": False, "errors": ["workflow failed before report validation"]},
                 "trace_complete": {"passed": False, "errors": ["workflow failed before trace validation"]},
                 "coverage_ratio_present": {"passed": False, "errors": ["workflow failed before coverage validation"]},
+                "metrics_fields_present": {"passed": False, "errors": ["workflow failed before metrics validation"]},
             },
             "coverage_ratio": None,
             "trace_status": {},

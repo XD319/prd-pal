@@ -8,14 +8,16 @@
 
 ## Latest Release
 
-- Version: `v2.1.0`
+- Version: `v3.0.0`
 - Core capabilities:
   - Structured Outputs (schema validation + repair fallback)
   - LangGraph conditional routing with review loop
   - Tool-based evidence (risk catalog retrieval with graceful fallback)
   - FastAPI service entry (`requirement_review_v1/server/app.py`)
   - MCP Server support (`requirement_review_v1/mcp_server`)
-  - Eval + Metrics (`eval/run_eval.py`, `metrics.coverage_ratio`)
+  - Parallel planner/risk fan-out with traceable latency metrics
+  - Cache-aware report artifacts (`cache_hit_count`, `cache_miss_count`)
+  - Eval + Metrics (`eval/run_eval.py`, `metrics.coverage_ratio`, latency/cache fields)
 
 ### Quick Verification
 
@@ -227,9 +229,19 @@ All authentication events must be logged for compliance purposes, with appropria
 | `uncovered_requirements` | list[str] | 未被任何任务覆盖的需求 ID 列表 |
 | `requirement_to_tasks` | dict[str, list[str]] | 每个需求 ID 对应的任务 ID 列表 |
 
+### v3 additional metrics
+
+- `total_latency_ms`: end-to-end run latency aggregated from trace spans
+- `planner_latency_ms`: planner span latency
+- `risk_latency_ms`: risk span latency
+- `cache_hit_count` / `cache_miss_count`: run-level cache totals aggregated from skill spans
+- `parallel_enabled`: whether planner/risk fan-out ran in parallel
+
 ---
 
 ## Eval
+
+v3 adds `metrics_fields_present`, which asserts that latency/cache/parallel fields exist in `report.json -> metrics`.
 
 项目提供最小回归评估脚本 `eval/run_eval.py`，用于批量执行测试 case 并校验核心质量门禁：
 

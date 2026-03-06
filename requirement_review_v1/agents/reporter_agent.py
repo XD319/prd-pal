@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..metrics import compute_requirement_coverage
+from ..metrics import compute_requirement_coverage, compute_runtime_metrics
 from ..state import ReviewState, plan_from_state
 from ..utils.trace import trace_start
 
@@ -216,6 +216,7 @@ async def run(state: ReviewState) -> ReviewState:
 
     results_by_id = {r["id"]: r for r in review_results if "id" in r}
     metrics = compute_requirement_coverage(parsed_items, tasks)
+    metrics.update(compute_runtime_metrics(trace))
 
     parts: list[str] = ["# Requirement Review Report\n"]
     ratio = metrics.get("coverage_ratio", 0.0)
