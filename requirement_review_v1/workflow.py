@@ -17,11 +17,11 @@ from langgraph.graph import END, StateGraph
 from .agents import (
     planner_agent,
     parser_agent,
-    risk_agent,
     reporter_agent,
     reviewer_agent,
 )
 from .state import ReviewState
+from .subflows.risk_analysis import run_risk_analysis_from_review_state
 
 _MAX_REVISION_ROUNDS = 2
 _HIGH_RISK_THRESHOLD = 0.4
@@ -135,7 +135,7 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
     workflow.add_node("parser", _build_async_node("parser", parser_agent.run, progress_hook))
     workflow.add_node("clarify", _build_async_node("clarify", _clarify_node, progress_hook))
     workflow.add_node("planner", _build_async_node("planner", planner_agent.run, progress_hook))
-    workflow.add_node("risk", _build_async_node("risk", risk_agent.run, progress_hook))
+    workflow.add_node("risk", _build_async_node("risk", run_risk_analysis_from_review_state, progress_hook))
     workflow.add_node("reviewer", _build_async_node("reviewer", reviewer_agent.run, progress_hook))
     workflow.add_node("route_decider", _build_sync_node("route_decider", _route_decider_node, progress_hook))
     workflow.add_node("reporter", _build_async_node("reporter", reporter_agent.run, progress_hook))

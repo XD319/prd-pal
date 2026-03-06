@@ -15,6 +15,9 @@ import os
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
+from requirement_review_v1.skills.executor import SkillExecutor
+from requirement_review_v1.skills.registry import get_skill_spec
+from requirement_review_v1.subflows.risk_analysis import run_risk_analysis_subflow
 from requirement_review_v1.tools.risk_catalog_search import search_risk_catalog
 from requirement_review_v1.state import ReviewState
 
@@ -115,6 +118,55 @@ class TestRiskCatalogSearch:
         assert "backend" in hit["matched_terms"] or "bottleneck" in hit["matched_terms"]
 
 
+@pytest.fixture(autouse=True)
+def _clear_skill_cache():
+    SkillExecutor.clear_cache()
+    yield
+    SkillExecutor.clear_cache()
+
+
+class TestSkillExecutorCache:
+    """SkillExecutor cache behavior within one process lifecycle."""
+
+    @pytest.mark.asyncio
+    async def test_same_executor_second_call_hits_cache(self):
+        executor = SkillExecutor(cache_enabled=True)
+        trace_first: dict = {}
+        trace_second: dict = {}
+        spec = get_skill_spec("risk_catalog.search")
+        mock_hits = [
+            {
+                "id": "RC-003",
+                "title": "Insufficient schedule buffer",
+                "score": 5.0,
+                "snippet": "Buffer below 15%",
+                "matched_terms": ["buffer"],
+            }
+        ]
+
+        with patch(
+            "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+            return_value=mock_hits,
+        ) as mock_search:
+            first = await executor.execute(
+                spec,
+                {"query": "buffer estimation schedule", "top_k": 5},
+                trace=trace_first,
+            )
+            second = await executor.execute(
+                spec,
+                {"query": "buffer estimation schedule", "top_k": 5},
+                trace=trace_second,
+            )
+
+        assert first.hits[0].id == "RC-003"
+        assert second.hits[0].id == "RC-003"
+        assert trace_first["risk_catalog.search"]["cache_hit"] is False
+        assert trace_second["risk_catalog.search"]["cache_hit"] is True
+        assert trace_second["risk_catalog.search"]["ttl_sec"] == 300
+        mock_search.assert_called_once()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Risk agent: tool enabled + hits
 # ═══════════════════════════════════════════════════════════════════════════
@@ -164,16 +216,16 @@ class TestRiskAgentToolEnabled:
         ]
         with (
             patch(
-                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch("requirement_review_v1.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
                 return_value=catalog_hits,
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true"}),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
         ):
             from requirement_review_v1.agents import risk_agent
 
@@ -183,21 +235,25 @@ class TestRiskAgentToolEnabled:
         risk = result["risks"][0]
         assert "RC-003" in risk["evidence_ids"]
         assert result["trace"]["risk"]["status"] == "ok"
+        assert result["trace"]["risk"]["subflow_id"] == "risk_analysis.v1"
+        assert result["trace"]["risk_analysis.evidence"]["node_path"] == "risk_analysis.evidence"
+        assert result["trace"]["risk_catalog.search"]["cache_hit"] is False
+        assert result["trace"]["risk_catalog.search"]["ttl_sec"] == 300
 
     @pytest.mark.asyncio
     async def test_tool_miss_returns_risks_without_evidence(self):
         with (
             patch(
-                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch("requirement_review_v1.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
                 return_value=[],
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true"}),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
         ):
             from requirement_review_v1.agents import risk_agent
 
@@ -207,6 +263,36 @@ class TestRiskAgentToolEnabled:
         risk = result["risks"][0]
         assert risk["evidence_ids"] == []
         assert result["trace"]["risk"]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_tool_second_run_hits_cache(self):
+        catalog_hits = [
+            {"id": "RC-003", "title": "Insufficient schedule buffer", "score": 5.0, "snippet": "Buffer below 15%", "matched_terms": ["buffer"]},
+        ]
+        mock_search = MagicMock(return_value=catalog_hits)
+        with (
+            patch(
+                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=MOCK_LLM_RISK_OUTPUT,
+            ),
+            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch(
+                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                mock_search,
+            ),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
+        ):
+            from requirement_review_v1.agents import risk_agent
+
+            first = await risk_agent.run(_base_state())
+            second = await risk_agent.run(_base_state())
+
+        assert first["trace"]["risk_catalog.search"]["cache_hit"] is False
+        assert second["trace"]["risk_catalog.search"]["cache_hit"] is True
+        assert second["trace"]["risk_catalog.search"]["cache_key_hash"]
+        assert second["trace"]["risk_catalog.search"]["ttl_sec"] == 300
+        mock_search.assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -222,16 +308,16 @@ class TestRiskAgentToolDisabled:
         mock_search = MagicMock(return_value=[])
         with (
             patch(
-                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch("requirement_review_v1.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "false"}),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "false", "SKILLS_CACHE_ENABLED": "true"}),
         ):
             from requirement_review_v1.agents import risk_agent
 
@@ -248,16 +334,16 @@ class TestRiskAgentToolDisabled:
         mock_search = MagicMock(return_value=[])
         with (
             patch(
-                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch("requirement_review_v1.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "0"}),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "0", "SKILLS_CACHE_ENABLED": "true"}),
         ):
             from requirement_review_v1.agents import risk_agent
 
@@ -279,16 +365,16 @@ class TestRiskAgentToolError:
     async def test_tool_error_degrades_gracefully(self):
         with (
             patch(
-                "requirement_review_v1.agents.risk_agent.llm_structured_call",
+                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.agents.risk_agent.Config"),
+            patch("requirement_review_v1.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.agents.risk_agent.search_risk_catalog",
+                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
                 side_effect=RuntimeError("catalog file missing"),
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true"}),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
         ):
             from requirement_review_v1.agents import risk_agent
 
@@ -325,3 +411,46 @@ class TestRiskAgentEmptyTasks:
         assert result["risks"] == []
         assert result["trace"]["risk"]["status"] == "error"
         assert "empty" in result["trace"]["risk"]["error_message"]
+
+
+class TestRiskAnalysisSubflowContract:
+    @pytest.mark.asyncio
+    async def test_subflow_returns_contract_fields(self):
+        with (
+            patch(
+                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=MOCK_LLM_RISK_OUTPUT,
+            ),
+            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch(
+                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                return_value=[],
+            ),
+            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
+        ):
+            result = await run_risk_analysis_subflow(
+                {
+                    "structured_requirements": [
+                        {
+                            "id": "REQ-001",
+                            "description": "System supports review planning",
+                            "acceptance_criteria": ["Planner output is available"],
+                        }
+                    ],
+                    "context": {
+                        "tasks": _base_state()["tasks"],
+                        "milestones": _base_state()["milestones"],
+                        "dependencies": _base_state()["dependencies"],
+                        "estimation": _base_state()["estimation"],
+                        "trace": {},
+                    },
+                }
+            )
+
+        output = result["output"]
+        assert list(output) == ["risks", "evidence_summary", "tool_actions"]
+        assert isinstance(output["risks"], list)
+        assert isinstance(output["evidence_summary"], dict)
+        assert isinstance(output["tool_actions"], list)
+        assert result["trace"]["risk_analysis.generate"]["subflow_id"] == "risk_analysis.v1"
