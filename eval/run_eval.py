@@ -12,6 +12,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from dotenv import load_dotenv
@@ -46,6 +47,12 @@ REQUIRED_METRICS_FIELDS = (
     "cache_miss_count",
     "parallel_enabled",
 )
+DEFAULT_PROFILE = "full"
+SMOKE_CASE_IDS = (
+    "prd_case_01",
+    "prd_case_05",
+    "prd_case_11",
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -67,6 +74,12 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("eval/runs"),
         help="Directory to store per-case workflow outputs",
+    )
+    parser.add_argument(
+        "--profile",
+        choices=("smoke", "full"),
+        default=DEFAULT_PROFILE,
+        help="Eval profile to run. Defaults to full.",
     )
     return parser.parse_args()
 
@@ -91,6 +104,20 @@ def _load_cases(cases_path: Path) -> list[dict[str, Any]]:
             raise ValueError(f"Missing or invalid case_id at line {index}")
         cases.append(item)
     return cases
+
+
+def _select_cases(cases: list[dict[str, Any]], profile: str) -> list[dict[str, Any]]:
+    if profile == "full":
+        return cases
+
+    smoke_cases = [case for case in cases if str(case.get("case_id")) in SMOKE_CASE_IDS]
+    if smoke_cases:
+        return smoke_cases
+
+    raise ValueError(
+        "Smoke profile selected but no smoke cases were found. "
+        f"Expected one of: {', '.join(SMOKE_CASE_IDS)}"
+    )
 
 
 def _case_to_requirement_doc(case: dict[str, Any]) -> str:
@@ -215,6 +242,7 @@ async def _run_case(
 ) -> dict[str, Any]:
     case_id = str(case.get("case_id"))
     started_at = datetime.now(timezone.utc)
+    started_perf = perf_counter()
     run_id = f"{case_id}_{started_at.strftime('%Y%m%dT%H%M%SZ')}"
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -269,6 +297,7 @@ async def _run_case(
                 agent: (trace.get(agent, {}) if isinstance(trace, dict) else {}).get("status")
                 for agent in REQUIRED_TRACE_AGENTS
             },
+            "case_duration_sec": round(perf_counter() - started_perf, 4),
             "started_at": started_at.isoformat(),
             "finished_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -289,49 +318,117 @@ async def _run_case(
             "coverage_ratio": None,
             "trace_status": {},
             "error": str(exc),
+            "case_duration_sec": round(perf_counter() - started_perf, 4),
             "started_at": started_at.isoformat(),
             "finished_at": datetime.now(timezone.utc).isoformat(),
         }
+
+
+def _build_duration_summary(case_results: list[dict[str, Any]], total_duration_sec: float) -> dict[str, Any]:
+    per_case_duration_sec = {
+        str(item.get("case_id")): round(float(item.get("case_duration_sec", 0.0)), 4)
+        for item in case_results
+    }
+    avg_case_duration_sec = round(total_duration_sec / len(case_results), 4) if case_results else 0.0
+    slowest_cases = sorted(
+        (
+            {
+                "case_id": str(item.get("case_id")),
+                "duration_sec": round(float(item.get("case_duration_sec", 0.0)), 4),
+                "status": item.get("status"),
+            }
+            for item in case_results
+        ),
+        key=lambda item: item["duration_sec"],
+        reverse=True,
+    )[:3]
+    return {
+        "total_duration_sec": round(total_duration_sec, 4),
+        "avg_case_duration_sec": avg_case_duration_sec,
+        "per_case_duration_sec": per_case_duration_sec,
+        "slowest_cases_top_3": slowest_cases,
+    }
+
+
+def _print_summary(
+    profile: str,
+    cases_file: Path,
+    summary: dict[str, int],
+    duration_summary: dict[str, Any],
+    out_path: Path,
+) -> None:
+    print("")
+    print("Eval summary")
+    print(f"  profile: {profile}")
+    print(f"  cases_file: {cases_file}")
+    print(
+        "  results: "
+        f"{summary['passed_cases']} passed, "
+        f"{summary['failed_cases']} failed, "
+        f"{summary['error_cases']} error, "
+        f"{summary['total_cases']} total"
+    )
+    print(
+        "  timing: "
+        f"{duration_summary['total_duration_sec']:.4f}s total, "
+        f"{duration_summary['avg_case_duration_sec']:.4f}s avg/case"
+    )
+    if duration_summary["slowest_cases_top_3"]:
+        print("  slowest cases:")
+        for item in duration_summary["slowest_cases_top_3"]:
+            print(f"    - {item['case_id']}: {item['duration_sec']:.4f}s ({item['status']})")
+    print(f"  report: {out_path}")
 
 
 async def _amain() -> int:
     load_dotenv()
     args = _parse_args()
 
-    cases = _load_cases(args.cases)
+    all_cases = _load_cases(args.cases)
+    cases = _select_cases(all_cases, args.profile)
     args.runs_dir.mkdir(parents=True, exist_ok=True)
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     graph = build_review_graph()
     case_results: list[dict[str, Any]] = []
+    eval_started_at = datetime.now(timezone.utc)
+    eval_started_perf = perf_counter()
 
     for idx, case in enumerate(cases, start=1):
         case_id = case.get("case_id", f"case_{idx}")
-        print(f"[{idx}/{len(cases)}] Running case: {case_id}")
+        print(f"[{idx}/{len(cases)}] Running case: {case_id} (profile={args.profile})")
         case_result = await _run_case(graph, case, args.runs_dir)
         case_results.append(case_result)
-        print(f"  -> {case_result['status']}")
+        print(f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)")
 
     total = len(case_results)
     passed = sum(1 for item in case_results if item.get("status") == "passed")
     failed = sum(1 for item in case_results if item.get("status") == "failed")
     errored = sum(1 for item in case_results if item.get("status") == "error")
+    summary = {
+        "total_cases": total,
+        "passed_cases": passed,
+        "failed_cases": failed,
+        "error_cases": errored,
+    }
+    duration_summary = _build_duration_summary(case_results, perf_counter() - eval_started_perf)
 
     eval_report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": eval_started_at.isoformat(),
+        "finished_at": datetime.now(timezone.utc).isoformat(),
         "cases_file": str(args.cases),
+        "profile": args.profile,
+        "selected_case_ids": [str(case.get("case_id")) for case in cases],
+        "available_case_ids": [str(case.get("case_id")) for case in all_cases],
         "runs_dir": str(args.runs_dir),
-        "summary": {
-            "total_cases": total,
-            "passed_cases": passed,
-            "failed_cases": failed,
-            "error_cases": errored,
-        },
+        "summary": summary,
+        "duration_summary": duration_summary,
         "cases": case_results,
     }
 
     args.out.write_text(json.dumps(eval_report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Eval report written to: {args.out}")
+    _print_summary(args.profile, args.cases, summary, duration_summary, args.out)
 
     # Non-zero on failed/error to support CI usage.
     return 0 if (failed == 0 and errored == 0) else 1
