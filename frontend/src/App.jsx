@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const TRACKED_NODES = ["parser", "clarify", "planner", "risk", "reviewer", "route_decider", "reporter"];
 const HISTORY_KEY = "requirement-review-history";
@@ -27,7 +29,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [runId, setRunId] = useState("");
   const [progress, setProgress] = useState({ percent: 0, current_node: "等待提交", nodes: {}, updated_at: "" });
-  const [reportHtml, setReportHtml] = useState("");
+  const [reportMarkdown, setReportMarkdown] = useState("");
   const [reportMessage, setReportMessage] = useState("任务完成后，这里会显示报告预览和下载入口。");
   const [history, setHistory] = useState(() => loadHistory());
   const [logs, setLogs] = useState([{ stamp: formatTime(new Date()), message: "系统已就绪，等待提交任务。" }]);
@@ -61,7 +63,7 @@ function App() {
   function resetRunView() {
     setRunId("");
     setProgress({ percent: 0, current_node: "等待提交", nodes: {}, updated_at: "" });
-    setReportHtml("");
+    setReportMarkdown("");
     setReportMessage("任务完成后，这里会显示报告预览和下载入口。");
   }
 
@@ -135,10 +137,10 @@ function App() {
       }
       const markdown = await response.text();
       setReportMessage("报告已生成，可直接在线预览，也可以下载 Markdown 或 JSON 原始结果。");
-      setReportHtml(renderMarkdown(markdown));
+      setReportMarkdown(markdown);
     } catch (error) {
       setReportMessage(`报告生成完成，但预览拉取失败：${error.message}`);
-      setReportHtml("");
+      setReportMarkdown("");
     }
   }
 
@@ -206,7 +208,15 @@ function App() {
             但状态管理、历史记录和运行区块都更容易继续演进。
           </p>
           <div className="hero-actions">
-            <button className="btn btn-secondary" type="button" onClick={() => { setMode("text"); setPrdText(SAMPLE_PRD); appendLog("已填充示例 PRD。"); }}>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => {
+                setMode("text");
+                setPrdText(SAMPLE_PRD);
+                appendLog("已填充示例 PRD。");
+              }}
+            >
               填充示例 PRD
             </button>
             <a className="btn btn-ghost" href="#workspace">开始使用</a>
@@ -323,7 +333,20 @@ function App() {
           <div className="report-summary">
             <p>{reportMessage}</p>
           </div>
-          <article className={`report-preview ${reportHtml ? "" : "empty"}`} dangerouslySetInnerHTML={{ __html: reportHtml || "<p>暂无预览。</p>" }} />
+          <article className={`report-preview markdown-body ${reportMarkdown ? "" : "empty"}`}>
+            {reportMarkdown ? (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+                }}
+              >
+                {reportMarkdown}
+              </ReactMarkdown>
+            ) : (
+              <p>暂无预览。</p>
+            )}
+          </article>
         </section>
 
         <aside className="panel history-panel">
@@ -387,60 +410,6 @@ function formatDate(value) {
 
 function formatTime(date) {
   return date.toLocaleTimeString("zh-CN", { hour12: false });
-}
-
-function escapeHtml(value) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function renderMarkdown(markdown) {
-  const escaped = escapeHtml(markdown);
-  const codeBlocks = [];
-  let html = escaped.replace(/```([\s\S]*?)```/g, (_, block) => {
-    const token = `__CODE_BLOCK_${codeBlocks.length}__`;
-    codeBlocks.push(`<pre><code>${block.trim()}</code></pre>`);
-    return token;
-  });
-
-  html = html
-    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.*)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.*)$/gm, "<h1>$1</h1>")
-    .replace(/^\> (.*)$/gm, "<blockquote>$1</blockquote>")
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-
-  html = html
-    .split(/\n{2,}/)
-    .map((block) => {
-      if (/^<h\d|^<pre>|^<blockquote>/.test(block) || /^__CODE_BLOCK_/.test(block)) {
-        return block;
-      }
-      if (/^[-*] /m.test(block)) {
-        const items = block
-          .split("\n")
-          .filter((line) => line.trim())
-          .map((line) => line.replace(/^[-*] /, "").trim())
-          .map((line) => `<li>${line}</li>`)
-          .join("");
-        return `<ul>${items}</ul>`;
-      }
-      return `<p>${block.replace(/\n/g, "<br />")}</p>`;
-    })
-    .join("");
-
-  codeBlocks.forEach((block, index) => {
-    html = html.replace(`__CODE_BLOCK_${index}__`, block);
-  });
-
-  return html;
 }
 
 export default App;
