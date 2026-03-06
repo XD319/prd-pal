@@ -1,15 +1,11 @@
-"""Parser agent — LangGraph node that decomposes a requirement document
-into structured items.
-
-requirement_doc  →  parsed_items
-"""
+"""Parser agent LangGraph node that decomposes a requirement document into structured items.\n\nrequirement_doc -> parsed_items\n"""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
-from gpt_researcher.config.config import Config
+from review_runtime.config.config import Config
 
 from ..prompts import (
     CLARIFY_PARSER_SYSTEM_PROMPT,
@@ -107,3 +103,5 @@ async def run(state: ReviewState) -> ReviewState:
             error_message=str(exc),
         )
         return {"parsed_items": [], "trace": trace}
+
+

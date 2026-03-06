@@ -6,7 +6,7 @@ import json
 import os
 from typing import Any, TypedDict
 
-from gpt_researcher.config.config import Config
+from review_runtime.config.config import Config
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 
@@ -544,3 +544,4 @@ async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState
         },
         "trace": next_trace,
     }
+

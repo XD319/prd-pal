@@ -6,7 +6,7 @@ import json
 import os
 from typing import Any
 
-from gpt_researcher.config.config import Config
+from review_runtime.config.config import Config
 
 from ..prompts import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 from ..schemas import ReviewerOutput, validate_reviewer_output
@@ -181,3 +181,4 @@ async def run(state: ReviewState) -> ReviewState:
             "high_risk_ratio": 0.0,
             "trace": trace,
         }
+

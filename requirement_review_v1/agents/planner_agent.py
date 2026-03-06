@@ -6,7 +6,7 @@ import json
 import os
 from typing import Any
 
-from gpt_researcher.config.config import Config
+from review_runtime.config.config import Config
 
 from ..prompts import PLANNER_SYSTEM_PROMPT, PLANNER_USER_PROMPT
 from ..schemas import PlannerOutput, validate_planner_output
@@ -102,3 +102,4 @@ def _empty_result(trace: dict[str, Any]) -> ReviewState:
         "plan": {"tasks": [], "milestones": [], "dependencies": [], "estimation": {}},
         "trace": trace,
     }
+

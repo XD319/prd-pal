@@ -17,8 +17,8 @@ from langchain_community.adapters.openai import convert_openai_messages
 from langchain_core.utils.json import parse_json_markdown
 from pydantic import BaseModel
 
-from gpt_researcher.config.config import Config
-from gpt_researcher.utils.llm import create_chat_completion, get_llm
+from review_runtime.config.config import Config
+from review_runtime.utils.llm import create_chat_completion, get_llm
 
 
 class StructuredCallError(RuntimeError):
@@ -169,3 +169,4 @@ async def llm_structured_call(
             raw_output=str(metadata.get("raw_output", "") or ""),
             structured_mode=str(metadata.get("structured_mode", "unknown")),
         ) from exc
+

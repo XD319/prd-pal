@@ -139,7 +139,7 @@ def _resolve_model_provider(result: dict[str, Any]) -> tuple[str, str]:
     model = "unknown"
     provider = "unknown"
     try:
-        from gpt_researcher.config.config import Config as _Cfg
+        from review_runtime.config.config import Config as _Cfg
 
         cfg = _Cfg()
         model = cfg.smart_llm_model or "unknown"
@@ -497,3 +497,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
