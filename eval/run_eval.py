@@ -48,6 +48,7 @@ REQUIRED_METRICS_FIELDS = (
     "parallel_enabled",
 )
 DEFAULT_PROFILE = "full"
+DEFAULT_WORKERS = 1
 SMOKE_CASE_IDS = (
     "prd_case_01",
     "prd_case_05",
@@ -81,7 +82,16 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_PROFILE,
         help="Eval profile to run. Defaults to full.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help="Maximum number of eval cases to execute concurrently. Defaults to 1.",
+    )
+    args = parser.parse_args()
+    if args.workers < 1:
+        parser.error("--workers must be >= 1")
+    return args
 
 
 def _load_cases(cases_path: Path) -> list[dict[str, Any]]:
@@ -324,12 +334,53 @@ async def _run_case(
         }
 
 
-def _build_duration_summary(case_results: list[dict[str, Any]], total_duration_sec: float) -> dict[str, Any]:
+async def _run_cases(
+    graph: Any,
+    cases: list[dict[str, Any]],
+    runs_dir: Path,
+    workers: int,
+) -> list[dict[str, Any]]:
+    if workers == 1:
+        case_results: list[dict[str, Any]] = []
+        for idx, case in enumerate(cases, start=1):
+            case_id = case.get("case_id", f"case_{idx}")
+            print(f"[{idx}/{len(cases)}] Running case: {case_id} (workers={workers})")
+            case_result = await _run_case(graph, case, runs_dir)
+            case_results.append(case_result)
+            print(f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)")
+        return case_results
+
+    semaphore = asyncio.Semaphore(workers)
+    indexed_results: list[tuple[int, dict[str, Any]]] = []
+
+    async def _run_indexed_case(idx: int, case: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        case_id = case.get("case_id", f"case_{idx + 1}")
+        async with semaphore:
+            print(f"[{idx + 1}/{len(cases)}] Running case: {case_id} (workers={workers})")
+            case_result = await _run_case(graph, case, runs_dir)
+            print(f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)")
+            return idx, case_result
+
+    tasks = [asyncio.create_task(_run_indexed_case(idx, case)) for idx, case in enumerate(cases)]
+    for task in asyncio.as_completed(tasks):
+        indexed_results.append(await task)
+
+    indexed_results.sort(key=lambda item: item[0])
+    return [item[1] for item in indexed_results]
+
+
+def _build_duration_summary(
+    case_results: list[dict[str, Any]],
+    wall_time_sec: float,
+    workers: int,
+) -> dict[str, Any]:
     per_case_duration_sec = {
         str(item.get("case_id")): round(float(item.get("case_duration_sec", 0.0)), 4)
         for item in case_results
     }
-    avg_case_duration_sec = round(total_duration_sec / len(case_results), 4) if case_results else 0.0
+    sum_case_time_sec = round(sum(per_case_duration_sec.values()), 4)
+    avg_case_duration_sec = round(sum_case_time_sec / len(case_results), 4) if case_results else 0.0
+    speedup_estimate = round(sum_case_time_sec / wall_time_sec, 4) if wall_time_sec > 0 else 0.0
     slowest_cases = sorted(
         (
             {
@@ -343,15 +394,21 @@ def _build_duration_summary(case_results: list[dict[str, Any]], total_duration_s
         reverse=True,
     )[:3]
     return {
-        "total_duration_sec": round(total_duration_sec, 4),
+        "total_duration_sec": round(wall_time_sec, 4),
+        "wall_time_sec": round(wall_time_sec, 4),
+        "sum_case_time_sec": sum_case_time_sec,
         "avg_case_duration_sec": avg_case_duration_sec,
         "per_case_duration_sec": per_case_duration_sec,
         "slowest_cases_top_3": slowest_cases,
+        "workers": workers,
+        "parallel_enabled": workers > 1,
+        "speedup_estimate": speedup_estimate,
     }
 
 
 def _print_summary(
     profile: str,
+    workers: int,
     cases_file: Path,
     summary: dict[str, int],
     duration_summary: dict[str, Any],
@@ -360,6 +417,8 @@ def _print_summary(
     print("")
     print("Eval summary")
     print(f"  profile: {profile}")
+    print(f"  workers: {workers}")
+    print(f"  parallel_enabled: {duration_summary['parallel_enabled']}")
     print(f"  cases_file: {cases_file}")
     print(
         "  results: "
@@ -370,8 +429,10 @@ def _print_summary(
     )
     print(
         "  timing: "
-        f"{duration_summary['total_duration_sec']:.4f}s total, "
-        f"{duration_summary['avg_case_duration_sec']:.4f}s avg/case"
+        f"wall={duration_summary['wall_time_sec']:.4f}s, "
+        f"sum_case={duration_summary['sum_case_time_sec']:.4f}s, "
+        f"avg_case={duration_summary['avg_case_duration_sec']:.4f}s, "
+        f"speedup_estimate={duration_summary['speedup_estimate']:.4f}x"
     )
     if duration_summary["slowest_cases_top_3"]:
         print("  slowest cases:")
@@ -390,16 +451,10 @@ async def _amain() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     graph = build_review_graph()
-    case_results: list[dict[str, Any]] = []
     eval_started_at = datetime.now(timezone.utc)
     eval_started_perf = perf_counter()
-
-    for idx, case in enumerate(cases, start=1):
-        case_id = case.get("case_id", f"case_{idx}")
-        print(f"[{idx}/{len(cases)}] Running case: {case_id} (profile={args.profile})")
-        case_result = await _run_case(graph, case, args.runs_dir)
-        case_results.append(case_result)
-        print(f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)")
+    case_results = await _run_cases(graph, cases, args.runs_dir, args.workers)
+    wall_time_sec = perf_counter() - eval_started_perf
 
     total = len(case_results)
     passed = sum(1 for item in case_results if item.get("status") == "passed")
@@ -411,7 +466,7 @@ async def _amain() -> int:
         "failed_cases": failed,
         "error_cases": errored,
     }
-    duration_summary = _build_duration_summary(case_results, perf_counter() - eval_started_perf)
+    duration_summary = _build_duration_summary(case_results, wall_time_sec, args.workers)
 
     eval_report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -419,6 +474,8 @@ async def _amain() -> int:
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "cases_file": str(args.cases),
         "profile": args.profile,
+        "workers": args.workers,
+        "parallel_enabled": args.workers > 1,
         "selected_case_ids": [str(case.get("case_id")) for case in cases],
         "available_case_ids": [str(case.get("case_id")) for case in all_cases],
         "runs_dir": str(args.runs_dir),
@@ -428,7 +485,7 @@ async def _amain() -> int:
     }
 
     args.out.write_text(json.dumps(eval_report, ensure_ascii=False, indent=2), encoding="utf-8")
-    _print_summary(args.profile, args.cases, summary, duration_summary, args.out)
+    _print_summary(args.profile, args.workers, args.cases, summary, duration_summary, args.out)
 
     # Non-zero on failed/error to support CI usage.
     return 0 if (failed == 0 and errored == 0) else 1
