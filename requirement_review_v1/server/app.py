@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, model_validator
@@ -74,6 +74,8 @@ class JobRecord:
 app = FastAPI(title="Requirement Review V2 API", version="2.0")
 _jobs: dict[str, JobRecord] = {}
 _jobs_lock = asyncio.Lock()
+_subscribers: dict[str, set[WebSocket]] = {}
+_subscribers_lock = asyncio.Lock()
 
 if FRONTEND_ROOT.exists():
     app.mount("/site", StaticFiles(directory=FRONTEND_ROOT), name="frontend")
@@ -91,6 +93,80 @@ def _resolve_input_text(payload: ReviewCreateRequest) -> str:
     if not prd_file.exists() or not prd_file.is_file():
         raise HTTPException(status_code=404, detail=f"PRD file not found: {prd_file}")
     return prd_file.read_text(encoding="utf-8")
+
+
+def _job_status_payload(job: JobRecord) -> dict[str, Any]:
+    return {
+        "run_id": job.run_id,
+        "status": job.status,
+        "progress": job.as_progress_payload(),
+        "report_paths": job.report_paths,
+    }
+
+
+def _disk_status_payload(run_id: str, run_dir: Path) -> dict[str, Any]:
+    report_md = run_dir / "report.md"
+    report_json = run_dir / "report.json"
+    trace_nodes = _read_trace_progress(run_dir)
+    completed = report_md.exists() and report_json.exists()
+    return {
+        "run_id": run_id,
+        "status": "completed" if completed else "running",
+        "progress": {
+            "percent": 100 if completed else 0,
+            "current_node": "",
+            "nodes": trace_nodes or {},
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "error": "",
+        },
+        "report_paths": {
+            "report_md": str(report_md),
+            "report_json": str(report_json),
+            "run_trace": str(run_dir / "run_trace.json"),
+        },
+    }
+
+
+async def _register_websocket(run_id: str, websocket: WebSocket) -> None:
+    async with _subscribers_lock:
+        subscribers = _subscribers.setdefault(run_id, set())
+        subscribers.add(websocket)
+
+
+async def _unregister_websocket(run_id: str, websocket: WebSocket) -> None:
+    async with _subscribers_lock:
+        subscribers = _subscribers.get(run_id)
+        if not subscribers:
+            return
+        subscribers.discard(websocket)
+        if not subscribers:
+            _subscribers.pop(run_id, None)
+
+
+async def _broadcast_payload(run_id: str, payload: dict[str, Any]) -> None:
+    async with _subscribers_lock:
+        subscribers = list(_subscribers.get(run_id, set()))
+
+    stale: list[WebSocket] = []
+    for websocket in subscribers:
+        try:
+            await websocket.send_json(payload)
+        except Exception:
+            stale.append(websocket)
+
+    for websocket in stale:
+        await _unregister_websocket(run_id, websocket)
+
+
+async def _broadcast_job_update(job: JobRecord) -> None:
+    await _broadcast_payload(job.run_id, _job_status_payload(job))
+
+
+def _schedule_job_broadcast(job: JobRecord) -> None:
+    try:
+        asyncio.get_running_loop().create_task(_broadcast_job_update(job))
+    except RuntimeError:
+        pass
 
 
 def _apply_progress_event(job: JobRecord, event: str, node_name: str, state: dict[str, Any]) -> None:
@@ -113,6 +189,7 @@ def _apply_progress_event(job: JobRecord, event: str, node_name: str, state: dic
         if node_status == "failed":
             job.error = f"node failed: {node_name}"
     job.updated_at = now
+    _schedule_job_broadcast(job)
 
 
 def _read_trace_progress(run_dir: Path) -> dict[str, Any] | None:
@@ -143,6 +220,7 @@ def _read_trace_progress(run_dir: Path) -> dict[str, Any] | None:
 async def _run_job(job: JobRecord, requirement_doc: str) -> None:
     job.status = "running"
     job.updated_at = datetime.now(timezone.utc).isoformat()
+    await _broadcast_job_update(job)
     try:
         summary = await review_prd_text_async(
             prd_text=requirement_doc,
@@ -161,6 +239,7 @@ async def _run_job(job: JobRecord, requirement_doc: str) -> None:
         job.current_node = ""
     finally:
         job.updated_at = datetime.now(timezone.utc).isoformat()
+        await _broadcast_job_update(job)
 
 
 @app.on_event("startup")
@@ -198,37 +277,13 @@ async def get_review_status(run_id: str) -> dict[str, Any]:
         job = _jobs.get(run_id)
 
     if job:
-        return {
-            "run_id": run_id,
-            "status": job.status,
-            "progress": job.as_progress_payload(),
-            "report_paths": job.report_paths,
-        }
+        return _job_status_payload(job)
 
     run_dir = OUTPUTS_ROOT / run_id
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
 
-    report_md = run_dir / "report.md"
-    report_json = run_dir / "report.json"
-    trace_nodes = _read_trace_progress(run_dir)
-    completed = report_md.exists() and report_json.exists()
-    return {
-        "run_id": run_id,
-        "status": "completed" if completed else "running",
-        "progress": {
-            "percent": 100 if completed else 0,
-            "current_node": "",
-            "nodes": trace_nodes or {},
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "error": "",
-        },
-        "report_paths": {
-            "report_md": str(report_md),
-            "report_json": str(report_json),
-            "run_trace": str(run_dir / "run_trace.json"),
-        },
-    }
+    return _disk_status_payload(run_id, run_dir)
 
 
 @app.get("/api/report/{run_id}")
@@ -244,3 +299,36 @@ async def get_report(run_id: str, format: Literal["md", "json"] = Query(default=
 
     media_type = "text/markdown; charset=utf-8" if format == "md" else "application/json"
     return FileResponse(path=str(path), media_type=media_type, filename=filename)
+
+
+@app.websocket("/ws/review/{run_id}")
+async def review_progress_websocket(websocket: WebSocket, run_id: str) -> None:
+    await websocket.accept()
+    await _register_websocket(run_id, websocket)
+    try:
+        async with _jobs_lock:
+            job = _jobs.get(run_id)
+
+        if job:
+            await websocket.send_json(_job_status_payload(job))
+        else:
+            run_dir = OUTPUTS_ROOT / run_id
+            if not run_dir.exists():
+                await websocket.send_json({
+                    "run_id": run_id,
+                    "status": "missing",
+                    "progress": {"percent": 0, "current_node": "", "nodes": {}, "updated_at": datetime.now(timezone.utc).isoformat(), "error": "run_id not found"},
+                    "report_paths": {},
+                })
+                await websocket.close(code=1008)
+                return
+            await websocket.send_json(_disk_status_payload(run_id, run_dir))
+            await websocket.close(code=1000)
+            return
+
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await _unregister_websocket(run_id, websocket)

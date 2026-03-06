@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 
 const TRACKED_NODES = ["parser", "clarify", "planner", "risk", "reviewer", "route_decider", "reporter"];
 const HISTORY_KEY = "requirement-review-history";
+const TERMINAL_STATUSES = new Set(["completed", "failed"]);
 const SAMPLE_PRD = `# 校园招聘多 Agent 需求评审系统
 
 ## 背景
@@ -28,12 +29,19 @@ function App() {
   const [statusLabel, setStatusLabel] = useState("Idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [runId, setRunId] = useState("");
+  const [transportLabel, setTransportLabel] = useState("Idle");
   const [progress, setProgress] = useState({ percent: 0, current_node: "等待提交", nodes: {}, updated_at: "" });
   const [reportMarkdown, setReportMarkdown] = useState("");
   const [reportMessage, setReportMessage] = useState("任务完成后，这里会显示报告预览和下载入口。");
   const [history, setHistory] = useState(() => loadHistory());
   const [logs, setLogs] = useState([{ stamp: formatTime(new Date()), message: "系统已就绪，等待提交任务。" }]);
   const pollRef = useRef(null);
+  const wsRef = useRef(null);
+  const transportRef = useRef("idle");
+  const latestStatusRef = useRef("idle");
+  const activeRunIdRef = useRef("");
+  const loadedReportRunRef = useRef("");
+  const listeningRef = useRef(false);
 
   const nodeCards = useMemo(() => {
     return TRACKED_NODES.map((nodeName) => ({
@@ -43,7 +51,10 @@ function App() {
   }, [progress.nodes]);
 
   useEffect(() => {
-    return () => stopPolling(false);
+    return () => {
+      stopPolling(false);
+      stopWebSocket(false);
+    };
   }, []);
 
   useEffect(() => {
@@ -61,7 +72,13 @@ function App() {
   }
 
   function resetRunView() {
+    stopPolling(false);
+    stopWebSocket(false);
     setRunId("");
+    setTransportLabel("Idle");
+    transportRef.current = "idle";
+    activeRunIdRef.current = "";
+    loadedReportRunRef.current = "";
     setProgress({ percent: 0, current_node: "等待提交", nodes: {}, updated_at: "" });
     setReportMarkdown("");
     setReportMessage("任务完成后，这里会显示报告预览和下载入口。");
@@ -72,70 +89,138 @@ function App() {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
       if (shouldLog) {
-        appendLog("已停止轮询。");
+        appendLog("已停止轮询。" );
       }
     }
-    setIsSubmitting(false);
   }
 
-  function startPolling(nextRunId) {
-    if (pollRef.current) {
-      window.clearInterval(pollRef.current);
+  function stopWebSocket(shouldLog = true) {
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws) {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      ws.close();
+      if (shouldLog) {
+        appendLog("WebSocket 已关闭。");
+      }
     }
-    void pollStatus(nextRunId);
+  }
+
+  function setTransport(nextTransport) {
+    transportRef.current = nextTransport;
+    setTransportLabel(
+      nextTransport === "websocket"
+        ? "WebSocket"
+        : nextTransport === "polling"
+          ? "Polling"
+          : "Idle"
+    );
+  }
+
+  function applyStatusPayload(data, source) {
+    const nextProgress = data.progress ?? {};
+    const nextStatus = data.status || "idle";
+    latestStatusRef.current = nextStatus;
+    setProgress({
+      percent: Number(nextProgress.percent ?? 0),
+      current_node: nextProgress.current_node || "等待执行",
+      nodes: nextProgress.nodes || {},
+      updated_at: nextProgress.updated_at || "",
+    });
+    setStatus(nextStatus);
+    setStatusLabel(nextStatus === "missing" ? "Missing" : nextStatus);
+
+    if (nextProgress.error) {
+      appendLog(`错误: ${nextProgress.error}`);
+    } else {
+      appendLog(`状态更新(${source}): ${nextStatus} / ${nextProgress.percent ?? 0}% / ${nextProgress.current_node || "等待执行"}`);
+    }
+
+    if (TERMINAL_STATUSES.has(nextStatus)) {
+      setIsSubmitting(false);
+      listeningRef.current = false;
+      setTransport("idle");
+      stopPolling(false);
+      stopWebSocket(false);
+      void loadReport(data.run_id);
+    }
+  }
+
+  function startPolling(nextRunId, reason = "") {
+    stopPolling(false);
+    setTransport("polling");
+    if (reason) {
+      appendLog(reason);
+    }
+    void pollStatus(nextRunId, "polling");
     pollRef.current = window.setInterval(() => {
-      void pollStatus(nextRunId);
+      void pollStatus(nextRunId, "polling");
     }, 2000);
   }
 
-  async function pollStatus(targetRunId) {
+  function connectWebSocket(nextRunId) {
+    stopWebSocket(false);
+    const socket = new WebSocket(buildWebSocketUrl(nextRunId));
+    wsRef.current = socket;
+    setTransportLabel("Connecting");
+
+    socket.onopen = () => {
+      setTransport("websocket");
+      appendLog("WebSocket 已连接，切换到实时推送。" );
+    };
+
+    socket.onmessage = (event) => {
+      const payload = JSON.parse(event.data);
+      applyStatusPayload(payload, "websocket");
+    };
+
+    socket.onerror = () => {
+      appendLog("WebSocket 连接异常，准备回退到轮询。" );
+    };
+
+    socket.onclose = () => {
+      if (wsRef.current === socket) {
+        wsRef.current = null;
+      }
+      if (!TERMINAL_STATUSES.has(latestStatusRef.current) && activeRunIdRef.current === nextRunId && listeningRef.current) {
+        startPolling(nextRunId, "WebSocket 已断开，已回退到轮询。" );
+      }
+    };
+  }
+
+  async function pollStatus(targetRunId, source = "polling") {
     try {
       const response = await fetch(`/api/review/${encodeURIComponent(targetRunId)}`);
       if (!response.ok) {
         throw new Error(await readError(response));
       }
       const data = await response.json();
-      const nextProgress = data.progress ?? {};
-      setProgress({
-        percent: Number(nextProgress.percent ?? 0),
-        current_node: nextProgress.current_node || "等待执行",
-        nodes: nextProgress.nodes || {},
-        updated_at: nextProgress.updated_at || "",
-      });
-      setStatus(data.status || "idle");
-      setStatusLabel(data.status || "idle");
-      if (nextProgress.error) {
-        appendLog(`错误: ${nextProgress.error}`);
-      } else {
-        appendLog(`状态更新: ${data.status} / ${nextProgress.percent ?? 0}% / ${nextProgress.current_node || "等待执行"}`);
-      }
-
-      if (data.status === "completed") {
-        appendLog("任务执行完成，正在拉取报告。");
-        stopPolling(false);
-        await loadReport(targetRunId);
-      }
-      if (data.status === "failed") {
-        appendLog(`任务失败: ${nextProgress.error || "未知错误"}`);
-        setStatus("failed");
-        setStatusLabel("Failed");
-        stopPolling(false);
-      }
+      applyStatusPayload(data, source);
     } catch (error) {
       appendLog(`轮询失败: ${error.message}`);
       setStatus("failed");
       setStatusLabel("Polling error");
+      setTransport("idle");
       stopPolling(false);
+      setIsSubmitting(false);
+      listeningRef.current = false;
     }
   }
 
   async function loadReport(targetRunId) {
+    if (!targetRunId || loadedReportRunRef.current === targetRunId) {
+      return;
+    }
     try {
       const response = await fetch(`/api/report/${encodeURIComponent(targetRunId)}?format=md`);
       if (!response.ok) {
         throw new Error(await readError(response));
       }
       const markdown = await response.text();
+      loadedReportRunRef.current = targetRunId;
       setReportMessage("报告已生成，可直接在线预览，也可以下载 Markdown 或 JSON 原始结果。");
       setReportMarkdown(markdown);
     } catch (error) {
@@ -170,27 +255,47 @@ function App() {
       }
       const data = await response.json();
       setRunId(data.run_id);
+      activeRunIdRef.current = data.run_id;
+      setIsSubmitting(true);
       appendLog(`任务已创建: ${data.run_id}`);
       setHistory((current) => {
         const summary = mode === "text" ? firstLine(prdText.trim()) || "PRD text" : prdPath.trim();
         return [{ runId: data.run_id, mode, summary, createdAt: new Date().toISOString() }, ...current].slice(0, 8);
       });
-      startPolling(data.run_id);
+      connectWebSocket(data.run_id);
+      window.setTimeout(() => {
+        if (transportRef.current !== "websocket" && activeRunIdRef.current === data.run_id && listeningRef.current) {
+          startPolling(data.run_id, "实时连接尚未建立，已使用轮询兜底。" );
+        }
+      }, 2500);
     } catch (error) {
       setStatus("failed");
       setStatusLabel("Failed");
       setIsSubmitting(false);
+      listeningRef.current = false;
       appendLog(`创建任务失败: ${error.message}`);
     }
   }
 
   async function openHistory(item) {
+    activeRunIdRef.current = item.runId;
     setRunId(item.runId);
     setStatus("running");
     setStatusLabel("History");
+    loadedReportRunRef.current = "";
     appendLog(`已切换到历史任务 ${item.runId}。`);
-    await pollStatus(item.runId);
-    await loadReport(item.runId);
+    await pollStatus(item.runId, "history");
+    if (!TERMINAL_STATUSES.has(latestStatusRef.current)) {
+      setIsSubmitting(true);
+      connectWebSocket(item.runId);
+      window.setTimeout(() => {
+        if (transportRef.current !== "websocket" && activeRunIdRef.current === item.runId && !TERMINAL_STATUSES.has(latestStatusRef.current)) {
+          startPolling(item.runId, "历史任务实时连接失败，已回退到轮询。" );
+        }
+      }, 2500);
+    } else {
+      await loadReport(item.runId);
+    }
   }
 
   const statusClass = ["status-badge", status].join(" ");
@@ -228,8 +333,8 @@ function App() {
             <ul>
               <li>React 组件化布局与状态管理</li>
               <li>按运行态切换提交、轮询、历史回看</li>
+              <li>WebSocket 实时进度 + 轮询兜底</li>
               <li>报告预览与下载分区清晰</li>
-              <li>继续扩展 WebSocket 或聊天面板更容易</li>
             </ul>
           </div>
         </div>
@@ -265,7 +370,11 @@ function App() {
 
             <div className="form-actions">
               <button className="btn btn-primary" type="submit" disabled={isSubmitting}>{isSubmitting ? "任务已提交" : "开始评审"}</button>
-              {isSubmitting ? <button className="btn btn-secondary" type="button" onClick={() => stopPolling(true)}>停止轮询</button> : null}
+              {isSubmitting ? (
+                <button className="btn btn-secondary" type="button" onClick={() => { stopPolling(true); stopWebSocket(true); setIsSubmitting(false); setTransport("idle"); }}>
+                  停止监听
+                </button>
+              ) : null}
             </div>
           </form>
         </section>
@@ -279,6 +388,7 @@ function App() {
             <div className="run-meta">
               <span>{`run_id: ${runId || "-"}`}</span>
               <span>{`更新时间: ${updatedAtLabel}`}</span>
+              <span>{`连接方式: ${transportLabel}`}</span>
             </div>
           </div>
 
@@ -380,6 +490,11 @@ function loadHistory() {
   }
 }
 
+function buildWebSocketUrl(runId) {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws/review/${encodeURIComponent(runId)}`;
+}
+
 function firstLine(value) {
   return value.split("\n").find((line) => line.trim()) ?? "";
 }
@@ -413,3 +528,6 @@ function formatTime(date) {
 }
 
 export default App;
+
+
+
