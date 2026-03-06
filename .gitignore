@@ -60,3 +60,8 @@ CURSOR_RULES.md
 # Eval run outputs
 eval/eval_report.json
 eval/runs/
+
+# Frontend build artifacts we intentionally ship
+!frontend/package-lock.json
+!frontend/dist/
+!frontend/dist/**

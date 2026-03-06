@@ -10,12 +10,15 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, model_validator
 
 from requirement_review_v1.run_review import make_run_id
 from requirement_review_v1.service.review_service import review_prd_text_async
 
 OUTPUTS_ROOT = Path("outputs")
+FRONTEND_SOURCE_ROOT = Path(__file__).resolve().parents[2] / "frontend"
+FRONTEND_ROOT = FRONTEND_SOURCE_ROOT / "dist" if (FRONTEND_SOURCE_ROOT / "dist").exists() else FRONTEND_SOURCE_ROOT
 PRIMARY_NODES = ("parser", "planner", "risk", "reviewer", "reporter")
 TRACKED_NODES = ("parser", "clarify", "planner", "risk", "reviewer", "route_decider", "reporter")
 
@@ -71,6 +74,9 @@ class JobRecord:
 app = FastAPI(title="Requirement Review V2 API", version="2.0")
 _jobs: dict[str, JobRecord] = {}
 _jobs_lock = asyncio.Lock()
+
+if FRONTEND_ROOT.exists():
+    app.mount("/site", StaticFiles(directory=FRONTEND_ROOT), name="frontend")
 
 
 def _resolve_input_text(payload: ReviewCreateRequest) -> str:
@@ -160,6 +166,14 @@ async def _run_job(job: JobRecord, requirement_doc: str) -> None:
 @app.on_event("startup")
 async def _load_env() -> None:
     load_dotenv()
+
+
+@app.get("/", include_in_schema=False)
+async def index() -> FileResponse:
+    index_path = FRONTEND_ROOT / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend index not found")
+    return FileResponse(index_path)
 
 
 @app.post("/api/review")
