@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
+from requirement_review_v1.packs import ExecutionPackBuilder, ImplementationPackBuilder, TestPackBuilder
 from requirement_review_v1.run_review import run_review
 
 
@@ -21,12 +24,18 @@ class ReviewResultSummary:
     revision_round: int
     status: str
     run_trace_path: str = ""
+    implementation_pack_path: str = ""
+    test_pack_path: str = ""
+    execution_pack_path: str = ""
 
     def to_report_paths(self) -> dict[str, str]:
         return {
             "report_md": self.report_md_path,
             "report_json": self.report_json_path,
             "run_trace": self.run_trace_path,
+            "implementation_pack": self.implementation_pack_path,
+            "test_pack": self.test_pack_path,
+            "execution_pack": self.execution_pack_path,
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -47,6 +56,8 @@ def _derive_status(result: dict[str, Any]) -> str:
     for span in trace.values():
         if not isinstance(span, dict):
             continue
+        if span.get("non_blocking") is True:
+            continue
         status = str(span.get("status", "") or "").lower()
         if status and status not in ("ok", "success", "completed"):
             return "failed"
@@ -62,11 +73,146 @@ def _build_summary(run_output: dict[str, Any]) -> ReviewResultSummary:
         report_md_path=str(report_paths.get("report_md", "")),
         report_json_path=str(report_paths.get("report_json", "")),
         run_trace_path=str(report_paths.get("run_trace", "")),
+        implementation_pack_path=str(report_paths.get("implementation_pack", "")),
+        test_pack_path=str(report_paths.get("test_pack", "")),
+        execution_pack_path=str(report_paths.get("execution_pack", "")),
         high_risk_ratio=_to_float(result.get("high_risk_ratio") if isinstance(result, dict) else 0.0),
         coverage_ratio=_to_float(metrics.get("coverage_ratio") if isinstance(metrics, dict) else 0.0),
         revision_round=int((result.get("revision_round", 0) if isinstance(result, dict) else 0) or 0),
         status=_derive_status(result if isinstance(result, dict) else {}),
     )
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]:
+    result = run_output.get("result", {})
+    if not isinstance(result, dict):
+        return {}
+
+    run_dir_raw = str(run_output.get("run_dir", "") or "")
+    if not run_dir_raw:
+        return {}
+    run_dir = Path(run_dir_raw)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    trace = result.get("trace")
+    if not isinstance(trace, dict):
+        trace = {}
+        result["trace"] = trace
+
+    started = perf_counter()
+    pack_builder_trace: dict[str, Any] = {
+        "start": _utc_now_iso(),
+        "end": "",
+        "duration_ms": 0,
+        "status": "running",
+        "input_chars": len(json.dumps(result, ensure_ascii=False, default=str)),
+        "output_chars": 0,
+        "model": "none",
+        "prompt_version": "handoff_pack_v1",
+        "raw_output_path": "",
+        "error_message": "",
+        "non_blocking": True,
+        "packs": {},
+    }
+
+    builder_inputs = {
+        "requirements": result.get("parsed_items"),
+        "tasks": result.get("tasks"),
+        "risks": result.get("risks"),
+        "implementation_plan_output": result.get("implementation_plan"),
+        "test_plan_output": result.get("test_plan"),
+        "codex_prompt_output": result.get("codex_prompt_handoff"),
+        "claude_code_prompt_output": result.get("claude_code_prompt_handoff"),
+    }
+    builders = (
+        ("implementation_pack", ImplementationPackBuilder(), run_dir / "implementation_pack.json"),
+        ("test_pack", TestPackBuilder(), run_dir / "test_pack.json"),
+        ("execution_pack", ExecutionPackBuilder(), run_dir / "execution_pack.json"),
+    )
+
+    artifact_paths: dict[str, str] = {}
+    failed_packs: list[str] = []
+
+    for pack_name, builder, output_path in builders:
+        pack_started = perf_counter()
+        pack_trace = {
+            "status": "running",
+            "duration_ms": 0,
+            "output_path": str(output_path),
+            "error_message": "",
+        }
+        try:
+            pack = builder.build(**builder_inputs)
+            payload = pack.model_dump(mode="python")
+            serialized = json.dumps(payload, ensure_ascii=False, indent=2)
+            output_path.write_text(serialized, encoding="utf-8")
+            artifact_paths[pack_name] = str(output_path)
+            pack_trace["status"] = "ok"
+        except Exception as exc:
+            failed_packs.append(pack_name)
+            pack_trace["status"] = "error"
+            pack_trace["error_message"] = str(exc)
+        finally:
+            pack_trace["duration_ms"] = round((perf_counter() - pack_started) * 1000)
+            pack_builder_trace["packs"][pack_name] = pack_trace
+
+    pack_builder_trace["end"] = _utc_now_iso()
+    pack_builder_trace["duration_ms"] = round((perf_counter() - started) * 1000)
+    if not failed_packs:
+        pack_builder_trace["status"] = "ok"
+    elif len(failed_packs) == len(builders):
+        pack_builder_trace["status"] = "failed"
+    else:
+        pack_builder_trace["status"] = "partial_success"
+    pack_builder_trace["error_message"] = ", ".join(failed_packs)
+    pack_builder_trace["output_chars"] = sum(
+        len(Path(path).read_text(encoding="utf-8"))
+        for path in artifact_paths.values()
+        if Path(path).exists()
+    )
+    trace["pack_builder"] = pack_builder_trace
+
+    report_paths = run_output.get("report_paths", {})
+    if isinstance(report_paths, dict):
+        report_paths.update(artifact_paths)
+
+    trace_path_raw = str(report_paths.get("run_trace", "") or "")
+    if trace_path_raw:
+        Path(trace_path_raw).write_text(json.dumps(trace, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    report_json_raw = str(report_paths.get("report_json", "") or "")
+    if report_json_raw:
+        report_json_path = Path(report_json_raw)
+        report_payload = _load_json_object(report_json_path)
+        if report_payload:
+            report_trace = report_payload.get("trace")
+            if not isinstance(report_trace, dict):
+                report_trace = {}
+            report_trace["pack_builder"] = pack_builder_trace
+            report_payload["trace"] = report_trace
+
+            artifacts = report_payload.get("artifacts")
+            if not isinstance(artifacts, dict):
+                artifacts = {}
+            artifacts.update(artifact_paths)
+            report_payload["artifacts"] = artifacts
+            report_json_path.write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return artifact_paths
 
 
 async def review_prd_text_async(
@@ -87,6 +233,7 @@ async def review_prd_text_async(
         outputs_root=outputs_root,
         progress_hook=progress_hook,
     )
+    build_delivery_handoff_outputs(run_output)
     return _build_summary(run_output)
 
 
@@ -204,6 +351,9 @@ async def review_prd_for_mcp_async(
             "report_md_path": summary.report_md_path,
             "report_json_path": summary.report_json_path,
             "trace_path": summary.run_trace_path,
+            "implementation_pack_path": summary.implementation_pack_path,
+            "test_pack_path": summary.test_pack_path,
+            "execution_pack_path": summary.execution_pack_path,
         },
     }
 
