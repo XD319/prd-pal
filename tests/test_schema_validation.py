@@ -19,8 +19,10 @@ from requirement_review_v1.schemas.planner_schema import (
     validate_planner_output,
 )
 from requirement_review_v1.schemas.planning_skill_schema import (
+    CodingAgentPromptOutput,
     ImplementationPlanOutput,
     QaPlanningOutput,
+    validate_coding_agent_prompt_output,
     validate_implementation_plan_output,
     validate_test_plan_generate_output,
 )
@@ -334,6 +336,28 @@ class TestDeliveryPlanningSkillValidation:
         assert out.test_scope == []
         assert out.edge_cases == []
         assert out.regression_focus == []
+
+    def test_valid_coding_agent_prompt_output(self):
+        out = validate_coding_agent_prompt_output(
+            {
+                "agent_prompt": "Inspect auth modules, implement login changes, then run targeted tests.",
+                "recommended_execution_order": ["Inspect auth flow", "Implement backend changes", "Validate login regressions"],
+                "non_goals": ["Do not redesign unrelated account settings flows"],
+                "validation_checklist": ["Acceptance criteria mapped to tests", "Pytest passes for auth scope"],
+            }
+        )
+        assert isinstance(out, CodingAgentPromptOutput)
+        assert out.recommended_execution_order[0] == "Inspect auth flow"
+
+    def test_empty_coding_agent_prompt_defaults(self):
+        out = validate_coding_agent_prompt_output({})
+        assert out.agent_prompt == ""
+        assert out.recommended_execution_order == []
+        assert out.non_goals == []
+        assert out.validation_checklist == []
+
+
+
 
 
 

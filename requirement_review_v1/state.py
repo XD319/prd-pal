@@ -65,6 +65,13 @@ class TestPlanState(TypedDict):
     regression_focus: list[str]
 
 
+class CodingAgentPromptState(TypedDict):
+    agent_prompt: str
+    recommended_execution_order: list[str]
+    non_goals: list[str]
+    validation_checklist: list[str]
+
+
 class RiskItemState(TypedDict):
     """State shape aligned with ``schemas.RiskItem``."""
 
@@ -144,6 +151,8 @@ class ReviewState(TypedDict, total=False):
     estimation: EstimationState
     implementation_plan: ImplementationPlanState
     test_plan: TestPlanState
+    codex_prompt_handoff: CodingAgentPromptState
+    claude_code_prompt_handoff: CodingAgentPromptState
     risks: list[RiskItemState]
     evidence: Annotated[dict[str, Any], merge_state_dicts]
     plan_review: PlanReviewState
@@ -170,6 +179,8 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         estimation={},
         implementation_plan={"implementation_steps": [], "target_modules": [], "constraints": []},
         test_plan={"test_scope": [], "edge_cases": [], "regression_focus": []},
+        codex_prompt_handoff={"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+        claude_code_prompt_handoff={"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
         risks=[],
         evidence={},
         plan_review={},

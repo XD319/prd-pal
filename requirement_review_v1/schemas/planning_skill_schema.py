@@ -27,6 +27,22 @@ class QaPlanningOutput(AgentSchemaModel):
     regression_focus: list[str] = Field(default_factory=list)
 
 
+class PromptGenerationSkillInput(AgentSchemaModel):
+    model_config = ConfigDict(extra="forbid")
+
+    implementation_plan: dict[str, Any] = Field(default_factory=dict)
+    test_plan: dict[str, Any] = Field(default_factory=dict)
+    constraints: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+
+
+class CodingAgentPromptOutput(AgentSchemaModel):
+    agent_prompt: str = ""
+    recommended_execution_order: list[str] = Field(default_factory=list)
+    non_goals: list[str] = Field(default_factory=list)
+    validation_checklist: list[str] = Field(default_factory=list)
+
+
 def validate_implementation_plan_output(data: dict[str, Any]) -> ImplementationPlanOutput:
     return ImplementationPlanOutput.model_validate(data)
 
@@ -34,3 +50,6 @@ def validate_implementation_plan_output(data: dict[str, Any]) -> ImplementationP
 def validate_test_plan_generate_output(data: dict[str, Any]) -> QaPlanningOutput:
     return QaPlanningOutput.model_validate(data)
 
+
+def validate_coding_agent_prompt_output(data: dict[str, Any]) -> CodingAgentPromptOutput:
+    return CodingAgentPromptOutput.model_validate(data)

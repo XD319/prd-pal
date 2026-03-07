@@ -165,6 +165,28 @@ def _build_bullet_section(items: list[str], empty_message: str) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
+def _build_prompt_handoff_section(title: str, prompt_handoff: dict[str, Any]) -> str:
+    agent_prompt = str(prompt_handoff.get("agent_prompt", "") or "").strip()
+    recommended_execution_order = list(prompt_handoff.get("recommended_execution_order", []) or [])
+    non_goals = list(prompt_handoff.get("non_goals", []) or [])
+    validation_checklist = list(prompt_handoff.get("validation_checklist", []) or [])
+
+    parts = [f"#### {title}\n"]
+    if agent_prompt:
+        parts.append("**Agent Prompt**")
+        parts.append(agent_prompt)
+    else:
+        parts.append("_No agent prompt generated._")
+
+    parts.append("\n**Recommended Execution Order**")
+    parts.append(_build_bullet_section(recommended_execution_order, "_No execution order generated._"))
+    parts.append("\n**Non-Goals**")
+    parts.append(_build_bullet_section(non_goals, "_No non-goals generated._"))
+    parts.append("\n**Validation Checklist**")
+    parts.append(_build_bullet_section(validation_checklist, "_No validation checklist generated._"))
+    return "\n".join(parts)
+
+
 _AGENT = "reporter"
 
 
@@ -177,6 +199,8 @@ async def run(state: ReviewState) -> ReviewState:
     estimation: dict = plan.get("estimation", {})
     implementation_plan: dict = dict(state.get("implementation_plan", {}) or {})
     test_plan: dict = dict(state.get("test_plan", {}) or {})
+    codex_prompt_handoff: dict = dict(state.get("codex_prompt_handoff", {}) or {})
+    claude_code_prompt_handoff: dict = dict(state.get("claude_code_prompt_handoff", {}) or {})
     risks: list[dict] = state.get("risks", [])
     plan_review: dict = state.get("plan_review", {})
     trace: dict[str, Any] = dict(state.get("trace", {}))
@@ -189,6 +213,8 @@ async def run(state: ReviewState) -> ReviewState:
         estimation,
         implementation_plan,
         test_plan,
+        codex_prompt_handoff,
+        claude_code_prompt_handoff,
         risks,
         plan_review,
     ))
@@ -243,6 +269,11 @@ async def run(state: ReviewState) -> ReviewState:
     parts.append(_build_bullet_section(test_plan.get("edge_cases", []), "_No edge cases generated._"))
     parts.append("\n**Regression Focus**")
     parts.append(_build_bullet_section(test_plan.get("regression_focus", []), "_No regression focus generated._"))
+
+    parts.append("\n### 4.6 Coding-Agent Handoff Prompts\n")
+    parts.append(_build_prompt_handoff_section("Codex", codex_prompt_handoff))
+    parts.append("")
+    parts.append(_build_prompt_handoff_section("Claude Code", claude_code_prompt_handoff))
 
     parts.append("\n## 5. Delivery Risk Register\n")
     parts.append(_build_risk_register(risks) if risks else "_No delivery risks identified._")
