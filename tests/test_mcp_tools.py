@@ -193,3 +193,99 @@ def test_approve_handoff_invalid_transition_returns_error(tmp_path):
     )
 
     assert result["error"]["code"] == "invalid_input"
+
+
+def _write_approved_bundle_fixture(tmp_path, run_id: str = "20260307T010206Z") -> str:
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "implementation_pack.json").write_text(
+        json.dumps({"pack_type": "implementation_pack", "task_id": "TASK-001", "title": "Implement login"}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / "test_pack.json").write_text(
+        json.dumps({"pack_type": "test_pack", "task_id": "TASK-001", "title": "Test login"}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / "execution_pack.json").write_text(
+        json.dumps({"risk_pack": [{"id": "RISK-001", "level": "low"}]}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / "report.json").write_text(
+        json.dumps(
+            {
+                "parsed_items": [{"id": "REQ-001", "description": "Support login"}],
+                "review_results": [{"id": "REQ-001", "issues": ["Clarify SSO provider"]}],
+                "tasks": [{"id": "TASK-001", "title": "Implement login", "requirement_ids": ["REQ-001"]}],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    bundle_payload = {
+        "bundle_id": f"bundle-{run_id}",
+        "bundle_version": "1.0",
+        "created_at": "2026-03-07T12:00:00+00:00",
+        "status": "approved",
+        "source_run_id": run_id,
+        "artifacts": {
+            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
+            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
+            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
+            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
+            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
+            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
+            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
+            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+        },
+        "approval_history": [],
+        "metadata": {"source_report_paths": {"report_json": str(run_dir / "report.json")}},
+    }
+    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return bundle_payload["bundle_id"]
+
+
+@pytest.mark.asyncio
+async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_path):
+    bundle_id = _write_approved_bundle_fixture(tmp_path)
+
+    result = await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    assert "error" not in result
+    assert result["status"] == "routed"
+    assert result["task_count"] == 2
+    assert (tmp_path / "20260307T010206Z" / "execution_tasks.json").exists()
+    assert (tmp_path / "20260307T010206Z" / "traceability_map.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_get_execution_status_returns_bundle_tasks_and_task_lookup(tmp_path):
+    bundle_id = _write_approved_bundle_fixture(tmp_path)
+    run_dir = tmp_path / "20260307T010206Z"
+    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    by_bundle = mcp_server.get_execution_status(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    by_task = mcp_server.get_execution_status(
+        task_id="bundle-20260307T010206Z:implementation_pack",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    assert by_bundle["task_count"] == 2
+    assert by_bundle["tasks"][0]["bundle_id"] == bundle_id
+    assert by_task["task"]["task_id"] == "bundle-20260307T010206Z:implementation_pack"
+    assert by_task["traceability"]["counts"]["total"] == 1
+    assert (run_dir / "execution_tasks.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_get_traceability_supports_bundle_and_requirement_queries(tmp_path):
+    bundle_id = _write_approved_bundle_fixture(tmp_path)
+    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    by_bundle = mcp_server.get_traceability(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    by_requirement = mcp_server.get_traceability(requirement_id="REQ-001", options={"outputs_root": str(tmp_path)})
+
+    assert by_bundle["bundle_id"] == bundle_id
+    assert by_bundle["counts"]["full"] >= 1
+    assert by_requirement["count"] >= 1
+    assert by_requirement["links"][0]["requirement_id"] == "REQ-001"

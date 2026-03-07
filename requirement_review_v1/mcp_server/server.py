@@ -10,6 +10,11 @@ from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from requirement_review_v1.service.execution_service import (
+    get_execution_status_for_mcp,
+    get_traceability_for_mcp,
+    handoff_to_executor_for_mcp,
+)
 from requirement_review_v1.service.report_service import get_report_for_mcp
 from requirement_review_v1.service.review_service import (
     approve_handoff_for_mcp,
@@ -134,6 +139,63 @@ def approve_handoff(
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "internal_error", "message": f"approve_handoff failed: {exc}"}}
+
+
+@mcp.tool()
+async def handoff_to_executor(
+    bundle_id: str,
+    execution_mode: str = "agent_assisted",
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Turn one approved delivery bundle into persisted execution tasks."""
+    try:
+        return handoff_to_executor_for_mcp(bundle_id=bundle_id, execution_mode=execution_mode, options=options)
+    except FileNotFoundError as exc:
+        return {"bundle_id": str(bundle_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"bundle_id": str(bundle_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"bundle_id": str(bundle_id or ""), "error": {"code": "internal_error", "message": f"handoff_to_executor failed: {exc}"}}
+
+
+@mcp.tool()
+def get_execution_status(
+    bundle_id: str | None = None,
+    task_id: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Query persisted execution task status by bundle or task identifier."""
+    try:
+        return get_execution_status_for_mcp(bundle_id=bundle_id, task_id=task_id, options=options)
+    except FileNotFoundError as exc:
+        return {"error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"error": {"code": "internal_error", "message": f"get_execution_status failed: {exc}"}}
+
+
+@mcp.tool()
+def get_traceability(
+    requirement_id: str | None = None,
+    task_id: str | None = None,
+    bundle_id: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Query persisted traceability links by requirement, task, or bundle."""
+    try:
+        return get_traceability_for_mcp(
+            requirement_id=requirement_id,
+            task_id=task_id,
+            bundle_id=bundle_id,
+            options=options,
+        )
+    except FileNotFoundError as exc:
+        return {"error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"error": {"code": "internal_error", "message": f"get_traceability failed: {exc}"}}
 
 
 def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None) -> dict[str, Any]:
