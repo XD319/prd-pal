@@ -35,6 +35,6 @@ CODEX_PROMPT_TEMPLATE = PromptTemplate(
 
 CLAUDE_CODE_PROMPT_TEMPLATE = PromptTemplate(
     agent_name="Claude Code",
-    role_summary="Use the execution pack as the source of truth and focus on delivery validation, safety checks, and test completeness.",
-    output_hint="Return a concise validation summary, remaining risks, and the tests or checks you ran.",
+    role_summary="Start with a repository analysis instruction, then use the execution pack as the source of truth to focus on delivery validation, safety checks, and test completeness.",
+    output_hint="Return a concise implementation summary, the changed files, and the test results or checks you ran.",
 )

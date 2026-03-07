@@ -50,7 +50,8 @@ def _render_section(title: str, body: str) -> str:
 def _build_project_context(pack: ExecutionPack) -> str:
     implementation_pack = pack.implementation_pack
     risk_lines = [
-        f"{risk.id} ({risk.level}): {risk.summary}" + (f" Mitigation: {risk.mitigation}" if risk.mitigation else "")
+        f"{risk.id} ({risk.level}): {risk.summary or 'Summary not provided.'}"
+        + (f" Mitigation: {risk.mitigation}" if risk.mitigation else "")
         for risk in pack.risk_pack
     ]
     lines = [
@@ -62,14 +63,18 @@ def _build_project_context(pack: ExecutionPack) -> str:
     if implementation_pack.context:
         lines.append("")
         lines.append(implementation_pack.context.strip())
+    lines.append("")
+    lines.append("Target modules:")
     if implementation_pack.target_modules:
-        lines.append("")
-        lines.append("Target modules:")
         lines.extend(f"- `{module}`" for module in implementation_pack.target_modules)
+    else:
+        lines.append("- Target modules were not provided.")
+    lines.append("")
+    lines.append("Known delivery risks:")
     if risk_lines:
-        lines.append("")
-        lines.append("Known delivery risks:")
         lines.extend(f"- {line}" for line in risk_lines)
+    else:
+        lines.append("- No delivery risks were provided.")
     return "\n".join(lines)
 
 
