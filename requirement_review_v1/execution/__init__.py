@@ -12,6 +12,7 @@ from .task_lifecycle import (
     request_review,
     start_task,
 )
+from .traceability import TraceabilityMap
 
 __all__ = [
     "BundleNotApprovedError",
@@ -22,6 +23,7 @@ __all__ = [
     "ExecutorRouter",
     "InvalidExecutionTaskTransitionError",
     "TraceLink",
+    "TraceabilityMap",
     "VALID_TASK_TRANSITIONS",
     "assign_task",
     "cancel_task",
