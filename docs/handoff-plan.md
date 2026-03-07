@@ -1,84 +1,76 @@
 # Handoff Plan
 
-## v5 handoff model
+## v6 orchestration model
 
-The v5 handoff flow uses `delivery_bundle.json` as the canonical source of truth for delivery preparation.
+The v6 handoff flow keeps `delivery_bundle.json` as the approval source of truth, then adds an execution orchestration layer on top of approved bundles.
 
-Each completed review now produces three layers of output:
+Each completed and approved review can now produce five layers of output:
 
-- Standardized standalone review artifacts:
-  - `prd_review_report.md`
-  - `open_questions.md`
-  - `scope_boundary.md`
-  - `tech_design_draft.md`
-  - `test_checklist.md`
-- Structured machine-readable packs:
-  - `implementation_pack.json`
-  - `test_pack.json`
-  - `execution_pack.json`
-- Agent-facing prompt views:
-  - `codex_prompt.md`
-  - `claude_code_prompt.md`
+- Standardized standalone review artifacts
+- Structured machine-readable packs
+- Agent-facing prompt views
+- Persisted execution tasks in `execution_tasks.json`
+- End-to-end traceability in `traceability_map.json`
 
-`delivery_bundle.json` references all of the above and carries approval status plus approval history.
+## Bundle to execution flow
 
-## Why keep both bundle and standalone artifacts
-
-The bundle solves a different problem from the individual files.
-
-- The standalone Markdown artifacts are optimized for human review and handoff reading.
-- The JSON packs are optimized for stable downstream programmatic consumption.
-- The bundle unifies both into one approval-ready manifest.
-
-This means:
-
-- `delivery_bundle.json` is the source of truth for status and artifact references.
-- Individual `.md` and `.json` files remain directly consumable by humans and downstream tools.
-
-## Approval loop
-
-The v5 approval loop is intentionally minimal.
-
-States:
-
-- `draft`: default state after generation
-- `need_more_info`: reviewer requests clarification or missing details
-- `blocked_by_risk`: reviewer stops handoff because material risk is unresolved
-- `approved`: handoff package is ready for downstream execution
-
-Valid transitions:
-
-- `draft -> need_more_info`
-- `draft -> approved`
-- `draft -> blocked_by_risk`
-- `need_more_info -> draft`
-- `need_more_info -> blocked_by_risk`
-- `blocked_by_risk -> draft`
-
-`approved` is terminal in v5.
-
-## Codex and Claude Code usage
-
-Recommended usage is:
+Recommended flow:
 
 1. Run the requirement review workflow.
-2. Review the standalone Markdown artifacts and the delivery bundle.
-3. If needed, move the bundle through `need_more_info` or `blocked_by_risk`.
-4. Once approved, open `codex_prompt.md` or `claude_code_prompt.md`.
-5. Use the prompt in the downstream coding agent workspace.
+2. Review the standalone Markdown artifacts and `delivery_bundle.json`.
+3. Move the bundle through approval until it reaches `approved`.
+4. Call `handoff_to_executor` to route implementation and test work.
+5. Track the routed work with `get_execution_status`.
+6. Inspect upstream/downstream relationships with `get_traceability`.
 
-The prompts still come from `execution_pack.json`, but the handoff decision should now be anchored on `delivery_bundle.json` status instead of only checking whether pack files exist.
+`delivery_bundle.json` remains the decision gate. Execution only starts from an approved bundle.
+
+## Execution modes
+
+v6 supports three execution modes:
+
+- `agent_auto`: lowest-friction execution, best for low-risk bounded work
+- `agent_assisted`: default mode, allows manual checkpoints during execution
+- `human_only`: no autonomous execution is assumed
+
+When the execution pack contains high-risk items, routing automatically downgrades to `agent_assisted` unless the mode is already `human_only`.
+
+## Execution task lifecycle
+
+Execution tasks move through these states:
+
+- `pending`
+- `assigned`
+- `in_progress`
+- `waiting_review`
+- `completed`
+- `failed`
+- `cancelled`
+
+This gives the system a minimal but explicit orchestration model for downstream work without requiring a database or external scheduler.
+
+## Traceability
+
+The traceability layer links:
+
+- requirement ids
+- review item ids
+- planned implementation tasks
+- derived test items
+- routed execution tasks
+
+This makes it possible to answer both of these questions programmatically:
+
+- which execution tasks implement one requirement?
+- what upstream requirement and review context produced one execution task?
 
 ## Current boundaries
 
-The current handoff layer still stops at delivery preparation.
+The v6 orchestration layer still does not:
 
-It does not yet:
+- invoke real external coding agents through a live adapter
+- stream asynchronous execution callbacks
+- send notifications or reminders
+- persist orchestration state in a database
 
-- invoke external coding agents automatically
-- create execution tasks or routing decisions
-- store approval records in a database
-- push notifications to reviewers or executors
-- track downstream execution completion
-
-Those are reserved for a later orchestration layer beyond v5.
+Those remain future extensions beyond the current file-based orchestration model.
