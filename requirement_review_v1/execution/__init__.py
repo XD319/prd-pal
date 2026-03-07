@@ -2,6 +2,16 @@
 
 from .models import ExecutionEvent, ExecutionMode, ExecutionTask, ExecutionTaskStatus, TraceLink
 from .router import BundleNotApprovedError, ExecutorRouter
+from .task_lifecycle import (
+    InvalidExecutionTaskTransitionError,
+    VALID_TASK_TRANSITIONS,
+    assign_task,
+    cancel_task,
+    complete_task,
+    fail_task,
+    request_review,
+    start_task,
+)
 
 __all__ = [
     "BundleNotApprovedError",
@@ -10,5 +20,13 @@ __all__ = [
     "ExecutionTask",
     "ExecutionTaskStatus",
     "ExecutorRouter",
+    "InvalidExecutionTaskTransitionError",
     "TraceLink",
+    "VALID_TASK_TRANSITIONS",
+    "assign_task",
+    "cancel_task",
+    "complete_task",
+    "fail_task",
+    "request_review",
+    "start_task",
 ]
