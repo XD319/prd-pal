@@ -10,6 +10,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
 from requirement_review_v1.packs import ExecutionPackBuilder, ImplementationPackBuilder, TestPackBuilder
 from requirement_review_v1.run_review import run_review
 
@@ -95,6 +96,79 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def build_handoff_prompts(
+    execution_pack_path: str | Path | None,
+    *,
+    trace: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    renderer_trace: dict[str, Any] = {
+        "start": _utc_now_iso(),
+        "end": "",
+        "duration_ms": 0,
+        "status": "running",
+        "template_version": "handoff_markdown_v1",
+        "output_paths": {},
+        "error_message": "",
+        "non_blocking": True,
+    }
+    prompt_paths: dict[str, str] = {}
+    handoff_render_error = ""
+    started = perf_counter()
+
+    try:
+        execution_pack_path_str = str(execution_pack_path or "").strip()
+        if not execution_pack_path_str:
+            renderer_trace["status"] = "skipped"
+            renderer_trace["error_message"] = "execution_pack_path_missing"
+            return {}
+
+        execution_pack_file = Path(execution_pack_path_str)
+        if not execution_pack_file.exists():
+            renderer_trace["status"] = "skipped"
+            renderer_trace["error_message"] = "execution_pack_not_found"
+            return {}
+
+        execution_pack = json.loads(execution_pack_file.read_text(encoding="utf-8"))
+        output_dir = execution_pack_file.parent
+        render_targets = (
+            ("codex_prompt", output_dir / "codex_prompt.md", render_codex_prompt),
+            ("claude_code_prompt", output_dir / "claude_code_prompt.md", render_claude_code_prompt),
+        )
+        render_failures: list[str] = []
+
+        for prompt_name, output_path, renderer in render_targets:
+            try:
+                rendered = renderer(execution_pack)
+                output_path.write_text(rendered, encoding="utf-8")
+                prompt_paths[prompt_name] = str(output_path)
+            except Exception as exc:
+                render_failures.append(prompt_name)
+                if not handoff_render_error:
+                    handoff_render_error = str(exc)
+
+        renderer_trace["output_paths"] = dict(prompt_paths)
+        if not render_failures:
+            renderer_trace["status"] = "ok"
+        elif len(render_failures) == len(render_targets):
+            renderer_trace["status"] = "failed"
+        else:
+            renderer_trace["status"] = "partial_success"
+        renderer_trace["error_message"] = ", ".join(render_failures) if render_failures else ""
+    except Exception as exc:
+        handoff_render_error = str(exc)
+        renderer_trace["status"] = "failed"
+        renderer_trace["error_message"] = str(exc)
+    finally:
+        renderer_trace["end"] = _utc_now_iso()
+        renderer_trace["duration_ms"] = round((perf_counter() - started) * 1000)
+        if isinstance(trace, dict):
+            trace["handoff_renderer"] = renderer_trace
+            if handoff_render_error:
+                trace["handoff_render_error"] = handoff_render_error
+
+    return prompt_paths
 
 
 def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]:
@@ -186,6 +260,9 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
     )
     trace["pack_builder"] = pack_builder_trace
 
+    prompt_paths = build_handoff_prompts(artifact_paths.get("execution_pack"), trace=trace)
+    artifact_paths.update(prompt_paths)
+
     report_paths = run_output.get("report_paths", {})
     if isinstance(report_paths, dict):
         report_paths.update(artifact_paths)
@@ -203,6 +280,11 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
             if not isinstance(report_trace, dict):
                 report_trace = {}
             report_trace["pack_builder"] = pack_builder_trace
+            handoff_renderer_trace = trace.get("handoff_renderer")
+            if isinstance(handoff_renderer_trace, dict):
+                report_trace["handoff_renderer"] = handoff_renderer_trace
+            if "handoff_render_error" in trace:
+                report_trace["handoff_render_error"] = trace["handoff_render_error"]
             report_payload["trace"] = report_trace
 
             artifacts = report_payload.get("artifacts")
