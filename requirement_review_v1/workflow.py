@@ -8,7 +8,7 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
-from .agents import planner_agent, parser_agent, reporter_agent, reviewer_agent
+from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent
 from .state import ReviewState, plan_from_state
 from .subflows.risk_analysis import run_risk_analysis_from_review_state
 
@@ -55,7 +55,6 @@ def _parallel_start_node(state: ReviewState) -> ReviewState:
 def _review_join_node(state: ReviewState) -> ReviewState:
     trace: dict[str, Any] = dict(state.get("trace", {}))
     plan = plan_from_state(state)
-    evidence = dict(state.get("evidence", {}) or {})
     planner_span = trace.get("planner", {}) if isinstance(trace.get("planner"), dict) else {}
     risk_span = trace.get("risk", {}) if isinstance(trace.get("risk"), dict) else {}
     start_span = trace.get(_PARALLEL_TRACE_KEY, {}) if isinstance(trace.get(_PARALLEL_TRACE_KEY), dict) else {}
@@ -212,6 +211,10 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
     workflow.add_node("planner", _build_async_node("planner", planner_agent.run, progress_hook))
     workflow.add_node("risk", _build_async_node("risk", run_risk_analysis_from_review_state, progress_hook))
     workflow.add_node("review_join", _build_sync_node("review_join", _review_join_node, progress_hook))
+    workflow.add_node(
+        "delivery_planning",
+        _build_async_node("delivery_planning", delivery_planning_agent.run, progress_hook),
+    )
     workflow.add_node("reviewer", _build_async_node("reviewer", reviewer_agent.run, progress_hook))
     workflow.add_node("route_decider", _build_sync_node("route_decider", _route_decider_node, progress_hook))
     workflow.add_node("reporter", _build_async_node("reporter", reporter_agent.run, progress_hook))
@@ -223,7 +226,8 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
     workflow.add_edge("parallel_start", "risk")
     workflow.add_edge("planner", "review_join")
     workflow.add_edge("risk", "review_join")
-    workflow.add_edge("review_join", "reviewer")
+    workflow.add_edge("review_join", "delivery_planning")
+    workflow.add_edge("delivery_planning", "reviewer")
     workflow.add_edge("reviewer", "route_decider")
     workflow.add_conditional_edges("route_decider", _route_next, {"clarify": "clarify", "reporter": "reporter"})
     workflow.add_edge("reporter", END)

@@ -53,6 +53,18 @@ class PlanState(TypedDict):
     estimation: EstimationState
 
 
+class ImplementationPlanState(TypedDict):
+    implementation_steps: list[str]
+    target_modules: list[str]
+    constraints: list[str]
+
+
+class TestPlanState(TypedDict):
+    test_scope: list[str]
+    edge_cases: list[str]
+    regression_focus: list[str]
+
+
 class RiskItemState(TypedDict):
     """State shape aligned with ``schemas.RiskItem``."""
 
@@ -130,6 +142,8 @@ class ReviewState(TypedDict, total=False):
     milestones: list[MilestoneState]
     dependencies: list[DependencyState]
     estimation: EstimationState
+    implementation_plan: ImplementationPlanState
+    test_plan: TestPlanState
     risks: list[RiskItemState]
     evidence: Annotated[dict[str, Any], merge_state_dicts]
     plan_review: PlanReviewState
@@ -154,6 +168,8 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         milestones=[],
         dependencies=[],
         estimation={},
+        implementation_plan={"implementation_steps": [], "target_modules": [], "constraints": []},
+        test_plan={"test_scope": [], "edge_cases": [], "regression_focus": []},
         risks=[],
         evidence={},
         plan_review={},
