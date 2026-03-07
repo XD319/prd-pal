@@ -11,8 +11,20 @@ from time import perf_counter
 from typing import Any
 
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
-from requirement_review_v1.packs import ExecutionPackBuilder, ImplementationPackBuilder, TestPackBuilder
+from requirement_review_v1.packs import (
+    ArtifactSplitter,
+    DeliveryBundle,
+    DeliveryBundleBuilder,
+    ExecutionPackBuilder,
+    ImplementationPackBuilder,
+    TestPackBuilder,
+    approve_bundle,
+    block_by_risk,
+    request_more_info,
+    reset_to_draft,
+)
 from requirement_review_v1.run_review import run_review
+from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 
 
 @dataclass(slots=True)
@@ -28,6 +40,7 @@ class ReviewResultSummary:
     implementation_pack_path: str = ""
     test_pack_path: str = ""
     execution_pack_path: str = ""
+    delivery_bundle_path: str = ""
 
     def to_report_paths(self) -> dict[str, str]:
         return {
@@ -37,6 +50,7 @@ class ReviewResultSummary:
             "implementation_pack": self.implementation_pack_path,
             "test_pack": self.test_pack_path,
             "execution_pack": self.execution_pack_path,
+            "delivery_bundle": self.delivery_bundle_path,
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,6 +91,7 @@ def _build_summary(run_output: dict[str, Any]) -> ReviewResultSummary:
         implementation_pack_path=str(report_paths.get("implementation_pack", "")),
         test_pack_path=str(report_paths.get("test_pack", "")),
         execution_pack_path=str(report_paths.get("execution_pack", "")),
+        delivery_bundle_path=str(report_paths.get("delivery_bundle", "")),
         high_risk_ratio=_to_float(result.get("high_risk_ratio") if isinstance(result, dict) else 0.0),
         coverage_ratio=_to_float(metrics.get("coverage_ratio") if isinstance(metrics, dict) else 0.0),
         revision_round=int((result.get("revision_round", 0) if isinstance(result, dict) else 0) or 0),
@@ -96,6 +111,64 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _resolve_outputs_root(outputs_root: str | Path = "outputs") -> Path:
+    return Path(outputs_root).resolve()
+
+
+def _resolve_run_dir(run_id: str, outputs_root: str | Path = "outputs") -> Path:
+    normalized_run_id = str(run_id or "").strip()
+    if not RUN_ID_PATTERN.fullmatch(normalized_run_id):
+        raise ValueError("run_id must match YYYYMMDDTHHMMSSZ")
+    outputs_root_path = _resolve_outputs_root(outputs_root)
+    run_dir = (outputs_root_path / normalized_run_id).resolve()
+    if outputs_root_path not in run_dir.parents and run_dir != outputs_root_path:
+        raise ValueError("run_id resolves outside outputs root")
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise FileNotFoundError(f"run_id not found: {normalized_run_id}")
+    return run_dir
+
+
+def _locate_bundle_path(bundle_id: str, outputs_root: str | Path = "outputs") -> Path:
+    normalized_bundle_id = str(bundle_id or "").strip()
+    if not normalized_bundle_id:
+        raise ValueError("bundle_id is required")
+    outputs_root_path = _resolve_outputs_root(outputs_root)
+    for candidate in outputs_root_path.glob("*/delivery_bundle.json"):
+        payload = _load_json_object(candidate)
+        if payload.get("bundle_id") == normalized_bundle_id:
+            return candidate
+    raise FileNotFoundError(f"delivery bundle not found: {normalized_bundle_id}")
+
+
+def _generate_delivery_bundle(run_output: dict[str, Any]) -> tuple[dict[str, str], DeliveryBundle]:
+    result = run_output.get("result", {})
+    if not isinstance(result, dict):
+        raise TypeError("run_output.result must be an object")
+
+    run_dir_raw = str(run_output.get("run_dir", "") or "")
+    if not run_dir_raw:
+        raise ValueError("run_dir is required")
+    run_dir = Path(run_dir_raw)
+
+    report_paths = run_output.get("report_paths", {})
+    pack_paths = {
+        "implementation_pack": str(report_paths.get("implementation_pack", "") or ""),
+        "test_pack": str(report_paths.get("test_pack", "") or ""),
+        "execution_pack": str(report_paths.get("execution_pack", "") or ""),
+    }
+    missing = [name for name, path in pack_paths.items() if not path]
+    if missing:
+        raise ValueError(f"missing pack paths: {', '.join(missing)}")
+
+    artifact_refs = ArtifactSplitter().split(result, run_dir)
+    bundle = DeliveryBundleBuilder().build(run_output=run_output, artifact_refs=artifact_refs, pack_paths=pack_paths)
+    bundle_path = DeliveryBundleBuilder().save(bundle, run_dir)
+
+    artifact_paths = {artifact_type: ref.path for artifact_type, ref in artifact_refs.items()}
+    artifact_paths["delivery_bundle"] = str(bundle_path)
+    return artifact_paths, bundle
 
 
 def build_handoff_prompts(
@@ -263,6 +336,34 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
     prompt_paths = build_handoff_prompts(artifact_paths.get("execution_pack"), trace=trace)
     artifact_paths.update(prompt_paths)
 
+    bundle_builder_trace: dict[str, Any] = {
+        "start": _utc_now_iso(),
+        "end": "",
+        "duration_ms": 0,
+        "status": "running",
+        "error_message": "",
+        "non_blocking": True,
+        "output_paths": {},
+    }
+    bundle_started = perf_counter()
+    try:
+        report_paths = run_output.get("report_paths", {})
+        if isinstance(report_paths, dict):
+            report_paths.update(artifact_paths)
+        bundle_artifact_paths, _bundle = _generate_delivery_bundle(run_output)
+        artifact_paths.update(bundle_artifact_paths)
+        if isinstance(report_paths, dict):
+            report_paths.update(bundle_artifact_paths)
+        bundle_builder_trace["status"] = "ok"
+        bundle_builder_trace["output_paths"] = bundle_artifact_paths
+    except Exception as exc:
+        bundle_builder_trace["status"] = "failed"
+        bundle_builder_trace["error_message"] = str(exc)
+    finally:
+        bundle_builder_trace["end"] = _utc_now_iso()
+        bundle_builder_trace["duration_ms"] = round((perf_counter() - bundle_started) * 1000)
+        trace["bundle_builder"] = bundle_builder_trace
+
     report_paths = run_output.get("report_paths", {})
     if isinstance(report_paths, dict):
         report_paths.update(artifact_paths)
@@ -285,6 +386,7 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
                 report_trace["handoff_renderer"] = handoff_renderer_trace
             if "handoff_render_error" in trace:
                 report_trace["handoff_render_error"] = trace["handoff_render_error"]
+            report_trace["bundle_builder"] = bundle_builder_trace
             report_payload["trace"] = report_trace
 
             artifacts = report_payload.get("artifacts")
@@ -394,6 +496,86 @@ def _attach_trace_invocation(summary: ReviewResultSummary, invocation_meta: dict
                 pass
 
 
+def generate_delivery_bundle_for_mcp(
+    *,
+    run_id: str,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolved_options = options or {}
+    if not isinstance(resolved_options, dict):
+        raise TypeError("options must be an object")
+
+    outputs_root = resolved_options.get("outputs_root", "outputs")
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    report_json = _load_json_object(run_dir / "report.json")
+    if not report_json:
+        raise FileNotFoundError(f"report.json not found for run_id={run_id}")
+
+    run_output = {
+        "run_id": run_id,
+        "run_dir": str(run_dir),
+        "result": report_json,
+        "report_paths": {
+            "report_md": str(run_dir / "report.md"),
+            "report_json": str(run_dir / "report.json"),
+            "run_trace": str(run_dir / "run_trace.json"),
+            "implementation_pack": str(run_dir / "implementation_pack.json"),
+            "test_pack": str(run_dir / "test_pack.json"),
+            "execution_pack": str(run_dir / "execution_pack.json"),
+        },
+    }
+    artifact_paths, bundle = _generate_delivery_bundle(run_output)
+    report_payload = _load_json_object(run_dir / "report.json")
+    artifacts = report_payload.get("artifacts") if isinstance(report_payload, dict) else {}
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+    artifacts.update(artifact_paths)
+    if isinstance(report_payload, dict):
+        report_payload["artifacts"] = artifacts
+        (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "run_id": run_id,
+        "bundle_id": bundle.bundle_id,
+        "status": bundle.status,
+        "artifacts": artifact_paths,
+    }
+
+
+def approve_handoff_for_mcp(
+    *,
+    bundle_id: str,
+    action: str,
+    reviewer: str = "",
+    comment: str = "",
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolved_options = options or {}
+    if not isinstance(resolved_options, dict):
+        raise TypeError("options must be an object")
+
+    bundle_path = _locate_bundle_path(bundle_id, resolved_options.get("outputs_root", "outputs"))
+    bundle = DeliveryBundle.model_validate(_load_json_object(bundle_path))
+
+    actions = {
+        "approve": approve_bundle,
+        "need_more_info": request_more_info,
+        "block_by_risk": block_by_risk,
+        "reset_to_draft": reset_to_draft,
+    }
+    if action not in actions:
+        raise ValueError("action must be one of approve, need_more_info, block_by_risk, reset_to_draft")
+
+    updated_bundle = actions[action](bundle, reviewer, comment)
+    bundle_path.write_text(json.dumps(updated_bundle.model_dump(mode="python"), ensure_ascii=False, indent=2), encoding="utf-8")
+    return {
+        "bundle_id": updated_bundle.bundle_id,
+        "status": updated_bundle.status,
+        "approval_history": [event.model_dump(mode="python") for event in updated_bundle.approval_history],
+        "bundle_path": str(bundle_path),
+    }
+
+
 async def review_prd_for_mcp_async(
     *,
     prd_text: str | None,
@@ -436,6 +618,7 @@ async def review_prd_for_mcp_async(
             "implementation_pack_path": summary.implementation_pack_path,
             "test_pack_path": summary.test_pack_path,
             "execution_pack_path": summary.execution_pack_path,
+            "delivery_bundle_path": summary.delivery_bundle_path,
         },
     }
 

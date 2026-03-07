@@ -143,7 +143,7 @@
 - ApprovalEvent 状态转换合法性
 - ArtifactRef 基本字段验证
 
-运行 `python -m pytest tests/test_delivery_bundle_schema.py -v` 确认通过。
+在虚拟环境 D:\venvs\marrdp 中运行 `python -m pytest tests/test_delivery_bundle_schema.py -v` 确认通过。
 提交：`git commit -am "feat(v5): define DeliveryBundle schema with approval status model"`
 ```
 

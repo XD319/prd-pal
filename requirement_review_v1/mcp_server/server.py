@@ -11,7 +11,11 @@ from typing import Any, Literal
 from mcp.server.fastmcp import Context, FastMCP
 
 from requirement_review_v1.service.report_service import get_report_for_mcp
-from requirement_review_v1.service.review_service import review_prd_for_mcp_async
+from requirement_review_v1.service.review_service import (
+    approve_handoff_for_mcp,
+    generate_delivery_bundle_for_mcp,
+    review_prd_for_mcp_async,
+)
 
 mcp = FastMCP("requirement-review-v1")
 
@@ -89,6 +93,47 @@ def get_report(
             },
             "error": {"code": "internal_error", "message": f"get_report failed: {exc}"},
         }
+
+
+@mcp.tool()
+async def generate_delivery_bundle(
+    run_id: str,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Generate or regenerate the standardized delivery bundle for a completed run."""
+    try:
+        return generate_delivery_bundle_for_mcp(run_id=run_id, options=options)
+    except FileNotFoundError as exc:
+        return {"run_id": str(run_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"run_id": str(run_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"run_id": str(run_id or ""), "error": {"code": "internal_error", "message": f"generate_delivery_bundle failed: {exc}"}}
+
+
+@mcp.tool()
+def approve_handoff(
+    bundle_id: str,
+    action: Literal["approve", "need_more_info", "block_by_risk", "reset_to_draft"],
+    reviewer: str = "",
+    comment: str = "",
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Apply one approval operation to a persisted delivery bundle."""
+    try:
+        return approve_handoff_for_mcp(
+            bundle_id=bundle_id,
+            action=action,
+            reviewer=reviewer,
+            comment=comment,
+            options=options,
+        )
+    except FileNotFoundError as exc:
+        return {"bundle_id": str(bundle_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"bundle_id": str(bundle_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"bundle_id": str(bundle_id or ""), "error": {"code": "internal_error", "message": f"approve_handoff failed: {exc}"}}
 
 
 def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None) -> dict[str, Any]:
