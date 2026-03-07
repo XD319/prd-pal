@@ -1,22 +1,67 @@
 # Multi-Agent Requirement Review and Delivery Planning System
 
-A LangGraph-based workflow that turns a PRD into a structured requirement review, delivery plan, risk register, and runnable artifacts.
+A LangGraph-based system for requirement review, delivery planning, and coding-agent handoff artifact generation.
 
-## What remains in this repository
+## System position
 
-- `requirement_review_v1/`: the review workflow, API, MCP server, schemas, and services
-- `review_runtime/`: the minimal shared runtime for config loading and LLM provider access
+This repository is the v4 mainline baseline for turning a PRD into:
+
+- a structured requirement review report
+- delivery planning outputs for implementation and testing
+- coding-agent handoff artifacts for Codex and Claude Code
+
+The current scope is delivery preparation, not autonomous execution.
+
+## Core capabilities
+
+- LangGraph-based requirement review workflow with parser, planner, risk, reviewer, and reporter stages
+- Delivery planning outputs embedded in the review flow
+- Structured handoff artifacts:
+  - `implementation_pack.json`
+  - `test_pack.json`
+  - `execution_pack.json`
+- Markdown prompts derived from the execution pack:
+  - `codex_prompt.md`
+  - `claude_code_prompt.md`
+- Shared service layer across CLI, FastAPI, and MCP entrypoints
+- Trace output for pack building and handoff rendering
+
+## Explicit boundaries
+
+This system currently does not:
+
+- directly modify the target repository
+- directly execute commands inside the target repository
+- provide a full approval, tracking, or scheduling loop
+- route work to external executors automatically
+- persist traceability across downstream execution tasks
+
+## Repository layout
+
+- `requirement_review_v1/`: review workflow, delivery planning, handoff rendering, API, MCP server, schemas, and services
+- `review_runtime/`: shared runtime utilities for config loading and model provider access
 - `eval/`: regression evaluation cases and runner
 - `data/risk_catalog.json`: local risk knowledge base
-- `docs/`: project-specific notes, API docs, and sample PRD
-- `tests/`: requirement-review focused tests only
+- `docs/`: project notes, release notes, API docs, and sample PRD
+- `tests/`: automated test suite
 
-## Quickstart
+## Installation
 
 ```bash
 pip install -e .
+```
+
+## Usage
+
+### CLI
+
+Run one review from a local PRD file:
+
+```bash
 python -m requirement_review_v1.main --input docs/sample_prd.md
 ```
+
+### FastAPI
 
 Start the API server:
 
@@ -24,12 +69,25 @@ Start the API server:
 python main.py
 ```
 
-Run evaluation and tests:
+Primary endpoints:
+
+- `POST /api/review`
+- `GET /api/review/{run_id}`
+- `GET /api/report/{run_id}?format=md|json`
+
+### MCP
+
+Run the MCP server in stdio mode:
 
 ```bash
-python eval/run_eval.py
-pytest -q
+python -m requirement_review_v1.mcp_server.server
 ```
+
+Current MCP tools:
+
+- `ping`
+- `review_prd`
+- `get_report`
 
 ## Runtime configuration
 
@@ -51,11 +109,17 @@ Each run writes artifacts under `outputs/<run_id>/`:
 - `report.md`
 - `report.json`
 - `run_trace.json`
+- `implementation_pack.json`
+- `test_pack.json`
+- `execution_pack.json`
+- `codex_prompt.md`
+- `claude_code_prompt.md`
 
-## MCP server
+## Validation
 
-Run the MCP server in stdio mode:
+Run evaluation and tests:
 
 ```bash
-python -m requirement_review_v1.mcp_server.server
+python eval/run_eval.py
+pytest -q
 ```
