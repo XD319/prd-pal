@@ -1,6 +1,7 @@
 """Source connector abstractions and shared schemas."""
 
 from .base import BaseConnector
+from .feishu import FeishuConnector
 from .local_file import LocalFileConnector
 from .registry import ConnectorRegistry
 from .schemas import SourceDocument, SourceMetadata, SourceType
@@ -9,6 +10,7 @@ from .url import URLConnector
 __all__ = [
     "BaseConnector",
     "ConnectorRegistry",
+    "FeishuConnector",
     "LocalFileConnector",
     "SourceDocument",
     "SourceMetadata",

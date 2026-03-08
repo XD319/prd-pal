@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from requirement_review_v1.connectors.schemas import SourceMetadata
 from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
 from requirement_review_v1.service import review_service
 from requirement_review_v1.service.review_service import build_delivery_handoff_outputs
@@ -123,6 +124,91 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path):
     assert report_payload["artifacts"]["implementation_pack"].endswith("implementation_pack.json")
     assert report_payload["artifacts"]["delivery_bundle"].endswith("delivery_bundle.json")
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
+
+
+def test_build_delivery_handoff_outputs_preserves_source_metadata(tmp_path):
+    source_metadata = SourceMetadata(
+        mime_type="text/markdown",
+        encoding="utf-8",
+        size_bytes=128,
+        extra={"extension": ".md"},
+    ).model_dump(mode="python")
+    report_json_path = tmp_path / "report.json"
+    trace_path = tmp_path / "run_trace.json"
+    report_json_path.write_text(
+        json.dumps({"trace": {}, "source_metadata": source_metadata}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    trace_path.write_text(json.dumps({"source_metadata": source_metadata}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    run_output = {
+        "run_dir": str(tmp_path),
+        "run_id": "20260307T010206Z",
+        "source_metadata": source_metadata,
+        "report_paths": {
+            "report_json": str(report_json_path),
+            "run_trace": str(trace_path),
+        },
+        "result": {
+            "final_report": "# Requirement Review Report\n\nSummary.",
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Support source ingestion",
+                    "acceptance_criteria": ["Source metadata is persisted"],
+                }
+            ],
+            "review_results": [
+                {
+                    "id": "REQ-001",
+                    "description": "Support source ingestion",
+                    "is_ambiguous": False,
+                    "issues": [],
+                }
+            ],
+            "tasks": [
+                {
+                    "id": "TASK-001",
+                    "title": "Persist source metadata",
+                    "owner": "BE",
+                    "requirement_ids": ["REQ-001"],
+                }
+            ],
+            "risks": [],
+            "implementation_plan": {
+                "implementation_steps": ["Write metadata to artifacts"],
+                "target_modules": ["service.review_service"],
+                "constraints": [],
+            },
+            "test_plan": {
+                "test_scope": ["Connector metadata persistence"],
+                "edge_cases": [],
+                "regression_focus": [],
+            },
+            "codex_prompt_handoff": {
+                "agent_prompt": "Persist source metadata.",
+                "recommended_execution_order": ["Write metadata", "Run tests"],
+                "non_goals": [],
+                "validation_checklist": ["Artifacts include metadata"],
+            },
+            "claude_code_prompt_handoff": {
+                "agent_prompt": "Validate source metadata persistence.",
+                "recommended_execution_order": ["Inspect artifacts", "Run tests"],
+                "non_goals": [],
+                "validation_checklist": ["Metadata preserved"],
+            },
+            "trace": {},
+        },
+    }
+
+    artifact_paths = build_delivery_handoff_outputs(run_output)
+
+    bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
+    trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
+    assert bundle_payload["metadata"]["source_metadata"] == source_metadata
+    assert trace_payload["source_metadata"] == source_metadata
+    assert report_payload["source_metadata"] == source_metadata
 
 
 def test_build_delivery_handoff_outputs_is_non_blocking_on_pack_failure(tmp_path):

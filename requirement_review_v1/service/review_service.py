@@ -10,6 +10,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from requirement_review_v1.connectors import ConnectorRegistry
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
 from requirement_review_v1.packs import (
     ArtifactSplitter,
@@ -164,11 +165,43 @@ def _generate_delivery_bundle(run_output: dict[str, Any]) -> tuple[dict[str, str
 
     artifact_refs = ArtifactSplitter().split(result, run_dir)
     bundle = DeliveryBundleBuilder().build(run_output=run_output, artifact_refs=artifact_refs, pack_paths=pack_paths)
+    source_metadata = _extract_source_metadata(run_output)
+    if source_metadata:
+        bundle.metadata["source_metadata"] = source_metadata
     bundle_path = DeliveryBundleBuilder().save(bundle, run_dir)
 
     artifact_paths = {artifact_type: ref.path for artifact_type, ref in artifact_refs.items()}
     artifact_paths["delivery_bundle"] = str(bundle_path)
     return artifact_paths, bundle
+
+
+def _extract_source_metadata(run_output: dict[str, Any]) -> dict[str, Any]:
+    direct_metadata = run_output.get("source_metadata")
+    if isinstance(direct_metadata, dict):
+        return dict(direct_metadata)
+
+    result = run_output.get("result")
+    if isinstance(result, dict):
+        result_metadata = result.get("source_metadata")
+        if isinstance(result_metadata, dict):
+            return dict(result_metadata)
+
+    return {}
+
+
+def _resolve_requirement_doc(
+    prd_text: str | None,
+    prd_path: str | None,
+    source: str | None,
+) -> tuple[str, dict[str, Any]]:
+    has_source = isinstance(source, str) and bool(source.strip())
+    if has_source:
+        normalized_source = source.strip()
+        source_document = ConnectorRegistry().resolve(normalized_source).get_content(normalized_source)
+        return source_document.content_markdown, {
+            "source_metadata": source_document.metadata.model_dump(mode="python"),
+        }
+    return _read_prd_text(prd_text=prd_text, prd_path=prd_path), {}
 
 
 def build_handoff_prompts(
@@ -259,6 +292,10 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
     if not isinstance(trace, dict):
         trace = {}
         result["trace"] = trace
+
+    source_metadata = _extract_source_metadata(run_output)
+    if source_metadata:
+        result["source_metadata"] = source_metadata
 
     started = perf_counter()
     pack_builder_trace: dict[str, Any] = {
@@ -370,7 +407,12 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
 
     trace_path_raw = str(report_paths.get("run_trace", "") or "")
     if trace_path_raw:
-        Path(trace_path_raw).write_text(json.dumps(trace, ensure_ascii=False, indent=2), encoding="utf-8")
+        trace_path = Path(trace_path_raw)
+        trace_payload = _load_json_object(trace_path)
+        trace_payload.update(trace)
+        if source_metadata:
+            trace_payload["source_metadata"] = source_metadata
+        trace_path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     report_json_raw = str(report_paths.get("report_json", "") or "")
     if report_json_raw:
@@ -388,6 +430,8 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
                 report_trace["handoff_render_error"] = trace["handoff_render_error"]
             report_trace["bundle_builder"] = bundle_builder_trace
             report_payload["trace"] = report_trace
+            if source_metadata:
+                report_payload["source_metadata"] = source_metadata
 
             artifacts = report_payload.get("artifacts")
             if not isinstance(artifacts, dict):
@@ -400,8 +444,10 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
 
 
 async def review_prd_text_async(
-    prd_text: str,
+    prd_text: str | None = None,
     *,
+    prd_path: str | None = None,
+    source: str | None = None,
     run_id: str | None = None,
     config_overrides: dict[str, Any] | None = None,
 ) -> ReviewResultSummary:
@@ -411,19 +457,31 @@ async def review_prd_text_async(
     if progress_hook is not None and not callable(progress_hook):
         raise TypeError("config_overrides['progress_hook'] must be callable")
 
+    requirement_doc, source_context = _resolve_requirement_doc(
+        prd_text=prd_text,
+        prd_path=prd_path,
+        source=source,
+    )
     run_output = await run_review(
-        requirement_doc=prd_text,
+        requirement_doc=requirement_doc,
         run_id=run_id,
         outputs_root=outputs_root,
         progress_hook=progress_hook,
     )
+    if source_context:
+        run_output.update(source_context)
+        result = run_output.get("result")
+        if isinstance(result, dict):
+            result.update(source_context)
     build_delivery_handoff_outputs(run_output)
     return _build_summary(run_output)
 
 
 def review_prd_text(
-    prd_text: str,
+    prd_text: str | None = None,
     *,
+    prd_path: str | None = None,
+    source: str | None = None,
     run_id: str | None = None,
     config_overrides: dict[str, Any] | None = None,
 ) -> ReviewResultSummary:
@@ -433,6 +491,8 @@ def review_prd_text(
         return asyncio.run(
             review_prd_text_async(
                 prd_text=prd_text,
+                prd_path=prd_path,
+                source=source,
                 run_id=run_id,
                 config_overrides=config_overrides,
             )
@@ -580,6 +640,7 @@ async def review_prd_for_mcp_async(
     *,
     prd_text: str | None,
     prd_path: str | None,
+    source: str | None,
     options: dict[str, Any] | None = None,
     invocation_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -587,13 +648,14 @@ async def review_prd_for_mcp_async(
     if not isinstance(resolved_options, dict):
         raise TypeError("options must be an object")
 
-    requirement_doc = _read_prd_text(prd_text=prd_text, prd_path=prd_path)
     run_id_raw = resolved_options.get("run_id")
     run_id = str(run_id_raw).strip() if run_id_raw is not None else ""
     outputs_root = str(resolved_options.get("outputs_root", "outputs"))
 
     summary = await review_prd_text_async(
-        prd_text=requirement_doc,
+        prd_text=prd_text,
+        prd_path=prd_path,
+        source=source,
         run_id=run_id or None,
         config_overrides={"outputs_root": outputs_root},
     )
@@ -627,6 +689,7 @@ def review_prd_for_mcp(
     *,
     prd_text: str | None,
     prd_path: str | None,
+    source: str | None,
     options: dict[str, Any] | None = None,
     invocation_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -637,6 +700,7 @@ def review_prd_for_mcp(
             review_prd_for_mcp_async(
                 prd_text=prd_text,
                 prd_path=prd_path,
+                source=source,
                 options=options,
                 invocation_meta=invocation_meta,
             )

@@ -23,13 +23,18 @@ TRACKED_NODES = ("parser", "clarify", "planner", "risk", "reviewer", "route_deci
 class ReviewCreateRequest(BaseModel):
     prd_text: str | None = None
     prd_path: str | None = None
+    source: str | None = None
 
     @model_validator(mode="after")
     def _validate_input(self) -> "ReviewCreateRequest":
+        has_source = bool(self.source and self.source.strip())
+        if has_source:
+            return self
+
         has_text = bool(self.prd_text and self.prd_text.strip())
         has_path = bool(self.prd_path and self.prd_path.strip())
         if has_text == has_path:
-            raise ValueError("Exactly one of prd_text or prd_path must be provided.")
+            raise ValueError("Provide source, or exactly one of prd_text or prd_path.")
         return self
 
 
@@ -73,9 +78,13 @@ _jobs: dict[str, JobRecord] = {}
 _jobs_lock = asyncio.Lock()
 
 
-def _resolve_input_text(payload: ReviewCreateRequest) -> str:
+def _resolve_review_inputs(payload: ReviewCreateRequest) -> dict[str, str | None]:
+    if payload.source and payload.source.strip():
+        return {"prd_text": None, "prd_path": None, "source": payload.source.strip()}
+
     if payload.prd_text:
-        return payload.prd_text
+        return {"prd_text": payload.prd_text, "prd_path": None, "source": None}
+
     if not payload.prd_path:
         raise HTTPException(status_code=400, detail="Missing prd_path")
 
@@ -84,7 +93,7 @@ def _resolve_input_text(payload: ReviewCreateRequest) -> str:
         prd_file = Path.cwd() / prd_file
     if not prd_file.exists() or not prd_file.is_file():
         raise HTTPException(status_code=404, detail=f"PRD file not found: {prd_file}")
-    return prd_file.read_text(encoding="utf-8")
+    return {"prd_text": None, "prd_path": str(prd_file), "source": None}
 
 
 def _apply_progress_event(job: JobRecord, event: str, node_name: str, state: dict[str, Any]) -> None:
@@ -121,7 +130,8 @@ def _read_trace_progress(run_dir: Path) -> dict[str, Any] | None:
         return None
 
     nodes = {name: {"status": "pending", "runs": 0} for name in TRACKED_NODES}
-    for node_name, node_trace in trace_data.items():
+    for node_name in TRACKED_NODES:
+        node_trace = trace_data.get(node_name)
         if not isinstance(node_trace, dict):
             continue
         status = node_trace.get("status", "ok")
@@ -134,12 +144,20 @@ def _read_trace_progress(run_dir: Path) -> dict[str, Any] | None:
     return nodes
 
 
-async def _run_job(job: JobRecord, requirement_doc: str) -> None:
+async def _run_job(
+    job: JobRecord,
+    *,
+    prd_text: str | None = None,
+    prd_path: str | None = None,
+    source: str | None = None,
+) -> None:
     job.status = "running"
     job.updated_at = datetime.now(timezone.utc).isoformat()
     try:
         summary = await review_prd_text_async(
-            prd_text=requirement_doc,
+            prd_text=prd_text,
+            prd_path=prd_path,
+            source=source,
             run_id=job.run_id,
             config_overrides={
                 "outputs_root": OUTPUTS_ROOT,
@@ -164,13 +182,13 @@ async def _load_env() -> None:
 
 @app.post("/api/review")
 async def create_review(payload: ReviewCreateRequest) -> dict[str, str]:
-    requirement_doc = _resolve_input_text(payload)
+    review_inputs = _resolve_review_inputs(payload)
     run_id = make_run_id()
     run_dir = OUTPUTS_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
     job = JobRecord(run_id=run_id, run_dir=run_dir)
-    task = asyncio.create_task(_run_job(job, requirement_doc))
+    task = asyncio.create_task(_run_job(job, **review_inputs))
     job.task = task
 
     async with _jobs_lock:

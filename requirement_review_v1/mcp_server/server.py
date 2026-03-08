@@ -35,6 +35,7 @@ def ping() -> dict[str, Any]:
 async def review_prd(
     prd_text: str | None = None,
     prd_path: str | None = None,
+    source: str | None = None,
     options: dict[str, Any] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
@@ -44,11 +45,14 @@ async def review_prd(
         return await review_prd_for_mcp_async(
             prd_text=prd_text,
             prd_path=prd_path,
+            source=source,
             options=options,
             invocation_meta={"client_metadata": client_meta} if client_meta else {},
         )
     except FileNotFoundError as exc:
         return _error_response("PRD_NOT_FOUND", str(exc))
+    except NotImplementedError as exc:
+        return _error_response("NOT_IMPLEMENTED", str(exc))
     except (TypeError, ValueError) as exc:
         return _error_response("INVALID_INPUT", str(exc))
     except Exception as exc:
