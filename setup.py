@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="multi-agent-requirement-review-system",
-    version="6.0.0",
+    version="0.6.0",
     description="LangGraph-based requirement review and delivery planning workflow",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

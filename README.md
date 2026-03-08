@@ -4,7 +4,7 @@ A LangGraph-based system for requirement review, delivery planning, standardized
 
 ## System position
 
-This repository is the v6 baseline for turning a PRD into:
+This repository currently implements the milestone-v6 capability baseline for turning a PRD into:
 
 - a structured requirement review report
 - standardized delivery artifacts and a canonical `delivery_bundle.json`
@@ -13,6 +13,20 @@ This repository is the v6 baseline for turning a PRD into:
 - persisted execution tasks and traceability for approved bundles
 
 The current scope is orchestration and tracking around execution, not direct external agent control.
+
+## Versioning
+
+This project now uses three separate version concepts:
+
+- Plan document version: e.g. `v2.1`, used for architecture and roadmap documents
+- Capability milestone: e.g. `v4`, `v5`, `v6`, used to describe major feature stages
+- Package version: `0.6.0`, used for the installable Python package
+
+Why `0.6.0` instead of `6.0.0`:
+
+- the repository is still evolving and several planned platform capabilities are not implemented yet
+- current `v6` means "milestone 6 capability baseline", not "sixth major stable release"
+- `0.6.0` keeps the milestone mapping while making the package semantics more honest
 
 ## Core capabilities
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "multi-agent-requirement-review-system"
-version = "6.0.0"
+version = "0.6.0"
 description = "LangGraph-based requirement review, delivery planning, and coding-agent handoff system"
 readme = "README.md"
 requires-python = ">=3.11"
