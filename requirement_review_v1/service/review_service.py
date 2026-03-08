@@ -13,6 +13,7 @@ from typing import Any
 from requirement_review_v1.connectors import ConnectorRegistry
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
 from requirement_review_v1.handoff.templates import CLAUDE_CODE_PROMPT_TEMPLATE, CODEX_PROMPT_TEMPLATE
+from requirement_review_v1.monitoring import append_audit_event, retry_metadata_for_status
 from requirement_review_v1.packs import (
     ArtifactSplitter,
     DeliveryBundle,
@@ -83,6 +84,21 @@ def _derive_status(result: dict[str, Any]) -> str:
     return "completed"
 
 
+def _combine_operation_status(*statuses: str) -> str:
+    normalized = [str(status or "").strip().lower() for status in statuses if str(status or "").strip()]
+    if not normalized:
+        return "unknown"
+
+    success_statuses = {"ok", "success", "completed"}
+    if all(status in success_statuses | {"skipped"} for status in normalized):
+        return "ok"
+    if any(status in {"failed", "error"} for status in normalized):
+        return "partial_success" if any(status in success_statuses | {"partial_success"} for status in normalized) else "failed"
+    if any(status == "partial_success" for status in normalized):
+        return "partial_success"
+    return normalized[-1]
+
+
 def _build_summary(run_output: dict[str, Any]) -> ReviewResultSummary:
     result = run_output.get("result", {})
     report_paths = run_output.get("report_paths", {})
@@ -105,6 +121,33 @@ def _build_summary(run_output: dict[str, Any]) -> ReviewResultSummary:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _resolve_audit_context(payload: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    audit_context = payload.get("audit_context")
+    return dict(audit_context) if isinstance(audit_context, dict) else {}
+
+
+def _append_audit_event_safe(
+    run_dir: str | Path,
+    *,
+    operation: str,
+    status: str,
+    audit_context: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> None:
+    try:
+        append_audit_event(
+            run_dir,
+            operation=operation,
+            status=status,
+            audit_context=audit_context,
+            **kwargs,
+        )
+    except Exception:
+        pass
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
@@ -229,6 +272,7 @@ def build_handoff_prompts(
         "output_paths": {},
         "error_message": "",
         "non_blocking": True,
+        "retry": {},
     }
     prompt_paths: dict[str, str] = {}
     handoff_render_error = ""
@@ -280,6 +324,11 @@ def build_handoff_prompts(
     finally:
         renderer_trace["end"] = _utc_now_iso()
         renderer_trace["duration_ms"] = round((perf_counter() - started) * 1000)
+        renderer_trace["retry"] = retry_metadata_for_status(
+            status=str(renderer_trace.get("status", "")),
+            non_blocking=bool(renderer_trace.get("non_blocking")),
+            error_message=str(renderer_trace.get("error_message", "") or handoff_render_error),
+        )
         if isinstance(trace, dict):
             trace["handoff_renderer"] = renderer_trace
             if handoff_render_error:
@@ -288,7 +337,11 @@ def build_handoff_prompts(
     return prompt_paths
 
 
-def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]:
+def build_delivery_handoff_outputs(
+    run_output: dict[str, Any],
+    *,
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, str]:
     result = run_output.get("result", {})
     if not isinstance(result, dict):
         return {}
@@ -298,6 +351,7 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
         return {}
     run_dir = Path(run_dir_raw)
     run_dir.mkdir(parents=True, exist_ok=True)
+    resolved_audit_context = dict(audit_context) if isinstance(audit_context, dict) else {}
 
     trace = result.get("trace")
     if not isinstance(trace, dict):
@@ -321,6 +375,7 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
         "raw_output_path": "",
         "error_message": "",
         "non_blocking": True,
+        "retry": {},
         "packs": {},
     }
 
@@ -349,6 +404,7 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
             "duration_ms": 0,
             "output_path": str(output_path),
             "error_message": "",
+            "retry": {},
         }
         try:
             pack = builder.build(**builder_inputs)
@@ -363,6 +419,11 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
             pack_trace["error_message"] = str(exc)
         finally:
             pack_trace["duration_ms"] = round((perf_counter() - pack_started) * 1000)
+            pack_trace["retry"] = retry_metadata_for_status(
+                status=str(pack_trace.get("status", "")),
+                non_blocking=True,
+                error_message=str(pack_trace.get("error_message", "")),
+            )
             pack_builder_trace["packs"][pack_name] = pack_trace
 
     pack_builder_trace["end"] = _utc_now_iso()
@@ -379,6 +440,11 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
         for path in artifact_paths.values()
         if Path(path).exists()
     )
+    pack_builder_trace["retry"] = retry_metadata_for_status(
+        status=str(pack_builder_trace.get("status", "")),
+        non_blocking=bool(pack_builder_trace.get("non_blocking")),
+        error_message=str(pack_builder_trace.get("error_message", "")),
+    )
     trace["pack_builder"] = pack_builder_trace
 
     prompt_paths = build_handoff_prompts(artifact_paths.get("execution_pack"), trace=trace)
@@ -391,6 +457,7 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
         "status": "running",
         "error_message": "",
         "non_blocking": True,
+        "retry": {},
         "output_paths": {},
         "artifact_templates": {},
     }
@@ -413,6 +480,11 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
     finally:
         bundle_builder_trace["end"] = _utc_now_iso()
         bundle_builder_trace["duration_ms"] = round((perf_counter() - bundle_started) * 1000)
+        bundle_builder_trace["retry"] = retry_metadata_for_status(
+            status=str(bundle_builder_trace.get("status", "")),
+            non_blocking=bool(bundle_builder_trace.get("non_blocking")),
+            error_message=str(bundle_builder_trace.get("error_message", "")),
+        )
         trace["bundle_builder"] = bundle_builder_trace
 
     report_paths = run_output.get("report_paths", {})
@@ -454,6 +526,51 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
             report_payload["artifacts"] = artifacts
             report_json_path.write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    handoff_renderer_trace = trace.get("handoff_renderer")
+    handoff_renderer_status = handoff_renderer_trace.get("status", "") if isinstance(handoff_renderer_trace, dict) else ""
+    bundle_operation_status = _combine_operation_status(
+        str(pack_builder_trace.get("status", "")),
+        str(handoff_renderer_status),
+        str(bundle_builder_trace.get("status", "")),
+    )
+    bundle_retry = retry_metadata_for_status(
+        status=bundle_operation_status,
+        non_blocking=True,
+        error_message="; ".join(
+            message
+            for message in (
+                str(pack_builder_trace.get("error_message", "")),
+                str(handoff_renderer_trace.get("error_message", "")) if isinstance(handoff_renderer_trace, dict) else "",
+                str(bundle_builder_trace.get("error_message", "")),
+            )
+            if message
+        ),
+    )
+    bundle_id = ""
+    delivery_bundle_path = artifact_paths.get("delivery_bundle", "")
+    if delivery_bundle_path:
+        bundle_payload = _load_json_object(Path(delivery_bundle_path))
+        bundle_id = str(bundle_payload.get("bundle_id", "") or "")
+
+    _append_audit_event_safe(
+        run_dir,
+        operation="bundle_generation",
+        status=bundle_operation_status,
+        run_id=str(run_output.get("run_id", "") or ""),
+        bundle_id=bundle_id,
+        audit_context=resolved_audit_context,
+        details={
+            "artifact_count": len(artifact_paths),
+            "delivery_bundle_path": delivery_bundle_path,
+            "component_statuses": {
+                "pack_builder": pack_builder_trace.get("status", ""),
+                "handoff_renderer": handoff_renderer_status,
+                "bundle_builder": bundle_builder_trace.get("status", ""),
+            },
+        },
+        retry=bundle_retry,
+    )
+
     return artifact_paths
 
 
@@ -467,6 +584,7 @@ async def review_prd_text_async(
 ) -> ReviewResultSummary:
     overrides = config_overrides or {}
     outputs_root = Path(str(overrides.get("outputs_root", "outputs")))
+    audit_context = _resolve_audit_context(overrides)
     progress_hook = overrides.get("progress_hook")
     if progress_hook is not None and not callable(progress_hook):
         raise TypeError("config_overrides['progress_hook'] must be callable")
@@ -487,7 +605,28 @@ async def review_prd_text_async(
         result = run_output.get("result")
         if isinstance(result, dict):
             result.update(source_context)
-    build_delivery_handoff_outputs(run_output)
+
+    review_result = run_output.get("result")
+    if isinstance(review_result, dict):
+        review_metrics = review_result.get("metrics") if isinstance(review_result.get("metrics"), dict) else {}
+        review_status = _derive_status(review_result)
+        _append_audit_event_safe(
+            run_output.get("run_dir", outputs_root / str(run_output.get("run_id", "") or "")),
+            operation="review",
+            status=review_status,
+            run_id=str(run_output.get("run_id", "") or ""),
+            audit_context=audit_context,
+            details={
+                "coverage_ratio": _to_float(review_metrics.get("coverage_ratio")),
+                "high_risk_ratio": _to_float(review_result.get("high_risk_ratio")),
+                "revision_round": int(review_result.get("revision_round", 0) or 0),
+                "requirement_source": "source" if source else "prd_path" if prd_path else "inline_text",
+                "has_source_metadata": bool(source_context),
+            },
+            retry=retry_metadata_for_status(status=review_status, non_blocking=False),
+        )
+
+    build_delivery_handoff_outputs(run_output, audit_context=audit_context)
     return _build_summary(run_output)
 
 
@@ -578,6 +717,7 @@ def generate_delivery_bundle_for_mcp(
     resolved_options = options or {}
     if not isinstance(resolved_options, dict):
         raise TypeError("options must be an object")
+    audit_context = _resolve_audit_context(resolved_options)
 
     outputs_root = resolved_options.get("outputs_root", "outputs")
     run_dir = _resolve_run_dir(run_id, outputs_root)
@@ -607,6 +747,22 @@ def generate_delivery_bundle_for_mcp(
     if isinstance(report_payload, dict):
         report_payload["artifacts"] = artifacts
         (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    _append_audit_event_safe(
+        run_dir,
+        operation="bundle_generation",
+        status="ok",
+        run_id=run_id,
+        bundle_id=bundle.bundle_id,
+        audit_context=audit_context,
+        details={
+            "artifact_count": len(artifact_paths),
+            "delivery_bundle_path": artifact_paths.get("delivery_bundle", ""),
+            "mode": "regenerate",
+            "component_statuses": {"bundle_builder": "ok"},
+        },
+        retry=retry_metadata_for_status(status="ok", non_blocking=False),
+    )
 
     return {
         "run_id": run_id,
@@ -657,9 +813,11 @@ def approve_handoff_for_mcp(
     resolved_options = options or {}
     if not isinstance(resolved_options, dict):
         raise TypeError("options must be an object")
+    audit_context = _resolve_audit_context(resolved_options)
 
     bundle_path = _locate_bundle_path(bundle_id, resolved_options.get("outputs_root", "outputs"))
     bundle = DeliveryBundle.model_validate(_load_json_object(bundle_path))
+    previous_status = str(bundle.status)
 
     actions = {
         "approve": approve_bundle,
@@ -676,6 +834,22 @@ def approve_handoff_for_mcp(
         bundle_path=bundle_path,
         updated_bundle=updated_bundle,
         action=action,
+    )
+    _append_audit_event_safe(
+        bundle_path.parent,
+        operation="approval",
+        status=str(updated_bundle.status),
+        run_id=str(updated_bundle.source_run_id),
+        bundle_id=str(updated_bundle.bundle_id),
+        actor=reviewer,
+        audit_context=audit_context,
+        details={
+            "action": action,
+            "comment": comment,
+            "from_status": previous_status,
+            "to_status": str(updated_bundle.status),
+        },
+        retry=retry_metadata_for_status(status=str(updated_bundle.status), non_blocking=False),
     )
     return {
         "bundle_id": updated_bundle.bundle_id,
@@ -763,7 +937,10 @@ async def review_prd_for_mcp_async(
         prd_path=prd_path,
         source=source,
         run_id=run_id or None,
-        config_overrides={"outputs_root": outputs_root},
+        config_overrides={
+            "outputs_root": outputs_root,
+            "audit_context": resolved_options.get("audit_context"),
+        },
     )
 
     trace_meta = {"invoked_via": "mcp"}

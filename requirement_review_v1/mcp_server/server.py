@@ -44,12 +44,13 @@ async def review_prd(
 ) -> dict[str, Any]:
     """Run one PRD review and return run status, metrics and artifact paths."""
     try:
-        client_meta = _extract_client_metadata(ctx=ctx, options=options)
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="review_prd")
+        client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
         return await review_prd_for_mcp_async(
             prd_text=prd_text,
             prd_path=prd_path,
             source=source,
-            options=options,
+            options=audited_options,
             invocation_meta={"client_metadata": client_meta} if client_meta else {},
         )
     except FileNotFoundError as exc:
@@ -111,10 +112,12 @@ def get_report(
 async def generate_delivery_bundle(
     run_id: str,
     options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Generate or regenerate the standardized delivery bundle for a completed run."""
     try:
-        return generate_delivery_bundle_for_mcp(run_id=run_id, options=options)
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="generate_delivery_bundle")
+        return generate_delivery_bundle_for_mcp(run_id=run_id, options=audited_options)
     except FileNotFoundError as exc:
         return {"run_id": str(run_id or ""), "error": {"code": "not_found", "message": str(exc)}}
     except (TypeError, ValueError) as exc:
@@ -130,15 +133,17 @@ def approve_handoff(
     reviewer: str = "",
     comment: str = "",
     options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Apply one approval operation to a persisted delivery bundle and return updated record paths."""
     try:
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="approve_handoff", actor=reviewer)
         return approve_handoff_for_mcp(
             bundle_id=bundle_id,
             action=action,
             reviewer=reviewer,
             comment=comment,
-            options=options,
+            options=audited_options,
         )
     except FileNotFoundError as exc:
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "not_found", "message": str(exc)}}
@@ -153,10 +158,12 @@ async def handoff_to_executor(
     bundle_id: str,
     execution_mode: str = "agent_assisted",
     options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Turn one approved delivery bundle into persisted execution tasks."""
     try:
-        return handoff_to_executor_for_mcp(bundle_id=bundle_id, execution_mode=execution_mode, options=options)
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="handoff_to_executor")
+        return handoff_to_executor_for_mcp(bundle_id=bundle_id, execution_mode=execution_mode, options=audited_options)
     except FileNotFoundError as exc:
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "not_found", "message": str(exc)}}
     except (TypeError, ValueError) as exc:
@@ -175,9 +182,11 @@ def update_execution_task(
     result_summary: str = "",
     artifact_paths: dict[str, Any] | None = None,
     options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Persist one execution task status update from an external executor callback or polling loop."""
     try:
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="update_execution_task", actor=actor)
         return update_execution_task_for_mcp(
             task_id=task_id,
             status=status,
@@ -186,7 +195,7 @@ def update_execution_task(
             detail=detail,
             result_summary=result_summary,
             artifact_paths=artifact_paths,
-            options=options,
+            options=audited_options,
         )
     except FileNotFoundError as exc:
         return {"task_id": str(task_id or ""), "error": {"code": "not_found", "message": str(exc)}}
@@ -268,6 +277,42 @@ def get_traceability(
         return {"error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
         return {"error": {"code": "internal_error", "message": f"get_traceability failed: {exc}"}}
+
+
+def _with_audit_context(
+    *,
+    options: dict[str, Any] | None,
+    ctx: Context | None,
+    tool_name: str,
+    actor: str = "",
+) -> dict[str, Any]:
+    resolved_options = options or {}
+    if not isinstance(resolved_options, dict):
+        raise TypeError("options must be an object")
+
+    updated_options = dict(resolved_options)
+    existing_context = updated_options.get("audit_context")
+    audit_context = dict(existing_context) if isinstance(existing_context, dict) else {}
+
+    existing_client_metadata = audit_context.get("client_metadata")
+    merged_client_metadata = dict(existing_client_metadata) if isinstance(existing_client_metadata, dict) else {}
+    merged_client_metadata.update(_extract_client_metadata(ctx=ctx, options=updated_options))
+    if merged_client_metadata:
+        audit_context["client_metadata"] = merged_client_metadata
+
+    normalized_actor = str(actor or "").strip()
+    if normalized_actor:
+        audit_context["actor"] = normalized_actor
+    elif str(audit_context.get("actor") or "").strip() == "":
+        client_id = str(merged_client_metadata.get("client_id") or "").strip()
+        if client_id:
+            audit_context["actor"] = client_id
+
+    if str(audit_context.get("source") or "").strip() == "":
+        audit_context["source"] = "mcp"
+    audit_context["tool_name"] = tool_name
+    updated_options["audit_context"] = audit_context
+    return updated_options
 
 
 def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None) -> dict[str, Any]:

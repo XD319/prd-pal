@@ -22,6 +22,7 @@ from requirement_review_v1.execution import (
     request_review,
     start_task,
 )
+from requirement_review_v1.monitoring import append_audit_event, normalize_audit_context, retry_metadata_for_status
 from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
 from requirement_review_v1.service.review_service import _load_json_object, _locate_bundle_path, _resolve_outputs_root
 from requirement_review_v1.workspace import ReviewWorkspaceRepository
@@ -56,6 +57,7 @@ def _resolve_task_status(status: str) -> ExecutionTaskStatus:
         raise ValueError(f"status must be one of: {allowed}")
     return resolved
 
+
 def _resolve_task_status_filter(status: str) -> ExecutionTaskStatus:
     normalized = str(status or "").strip()
     try:
@@ -70,6 +72,32 @@ def _validate_options(options: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(resolved, dict):
         raise TypeError("options must be an object")
     return resolved
+
+
+def _resolve_audit_context(options: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(options, dict):
+        return {}
+    return normalize_audit_context(options.get("audit_context"))
+
+
+def _append_audit_event_safe(
+    run_dir: Path,
+    *,
+    operation: str,
+    status: str,
+    audit_context: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> None:
+    try:
+        append_audit_event(
+            run_dir,
+            operation=operation,
+            status=status,
+            audit_context=audit_context,
+            **kwargs,
+        )
+    except Exception:
+        pass
 
 
 def _load_bundle_context(bundle_id: str, outputs_root: str | Path) -> tuple[Path, Path, DeliveryBundle]:
@@ -431,6 +459,7 @@ def handoff_to_executor_for_mcp(
     options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved_options = _validate_options(options)
+    audit_context = _resolve_audit_context(resolved_options)
     _, run_dir, bundle = _load_bundle_context(bundle_id, resolved_options.get("outputs_root", "outputs"))
     router = ExecutorRouter(default_mode=_resolve_mode(execution_mode))
     tasks = router.route(bundle)
@@ -440,6 +469,22 @@ def handoff_to_executor_for_mcp(
     traceability = TraceabilityMap().build_from_bundle(bundle, tasks)
     traceability_path = _traceability_path(run_dir)
     traceability.save(traceability_path)
+
+    _append_audit_event_safe(
+        run_dir,
+        operation="handoff",
+        status="routed",
+        run_id=str(bundle.source_run_id),
+        bundle_id=str(bundle.bundle_id),
+        audit_context=audit_context,
+        details={
+            "execution_mode": execution_mode,
+            "task_count": len(tasks),
+            "tasks_path": str(tasks_path),
+            "traceability_path": str(traceability_path),
+        },
+        retry=retry_metadata_for_status(status="routed", non_blocking=False),
+    )
 
     return {
         "bundle_id": bundle.bundle_id,
@@ -539,6 +584,7 @@ def update_execution_task_for_mcp(
     options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved_options = _validate_options(options)
+    audit_context = _resolve_audit_context(resolved_options)
     outputs_root = resolved_options.get("outputs_root", "outputs")
     target_status = _resolve_task_status(status)
     normalized_actor = str(actor or "").strip() or "external_executor"
@@ -596,6 +642,27 @@ def update_execution_task_for_mcp(
         detail=normalized_detail,
         result_summary=normalized_result_summary,
         artifact_paths=normalized_artifact_paths,
+    )
+
+    _append_audit_event_safe(
+        run_dir,
+        operation="execution_update",
+        status=str(updated_task.status),
+        run_id=str(bundle.source_run_id),
+        bundle_id=str(updated_task.bundle_id),
+        task_id=str(updated_task.task_id),
+        actor=normalized_actor,
+        audit_context=audit_context,
+        details={
+            "from_status": previous_status,
+            "to_status": str(updated_task.status),
+            "detail": normalized_detail,
+            "result_summary": normalized_result_summary,
+            "assigned_to": str(updated_task.assigned_to or ""),
+            "artifact_paths": normalized_artifact_paths,
+            "transitioned": transitioned,
+        },
+        retry=retry_metadata_for_status(status=str(updated_task.status), non_blocking=False),
     )
 
     return {
