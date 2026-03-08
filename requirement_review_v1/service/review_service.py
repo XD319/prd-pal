@@ -14,7 +14,7 @@ from requirement_review_v1.connectors import ConnectorRegistry
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
 from requirement_review_v1.templates import get_adapter_prompt_template
 from requirement_review_v1.monitoring import append_audit_event, retry_metadata_for_status
-from requirement_review_v1.notifications import NotificationType, record_dry_run_notification
+from requirement_review_v1.notifications import NotificationType, dispatch_notification
 from requirement_review_v1.packs import (
     ArtifactSplitter,
     DeliveryBundle,
@@ -151,7 +151,7 @@ def _append_audit_event_safe(
         pass
 
 
-def _record_notification_safe(
+def _dispatch_notification(
     run_dir: str | Path,
     *,
     notification_type: NotificationType | str,
@@ -160,17 +160,14 @@ def _record_notification_safe(
     audit_context: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> None:
-    try:
-        record_dry_run_notification(
-            run_dir,
-            notification_type=notification_type,
-            title=title,
-            summary=summary,
-            audit_context=audit_context,
-            **kwargs,
-        )
-    except Exception:
-        pass
+    dispatch_notification(
+        run_dir,
+        notification_type=notification_type,
+        title=title,
+        summary=summary,
+        audit_context=audit_context,
+        **kwargs,
+    )
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
@@ -928,7 +925,7 @@ def approve_handoff_for_mcp(
     )
     if notification_spec is not None:
         notification_type, title, summary, metadata = notification_spec
-        _record_notification_safe(
+        _dispatch_notification(
             bundle_path.parent,
             notification_type=notification_type,
             title=title,

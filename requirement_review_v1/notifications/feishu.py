@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from requirement_review_v1.notifications.base import BaseNotifier, NotificationRecord
+from requirement_review_v1.notifications.base import BaseNotifier
+from requirement_review_v1.notifications.models import NotificationEvent
 
 
 class FeishuNotifier(BaseNotifier):
     channel = "feishu"
     description = "Render a Feishu interactive-card dry-run payload."
 
-    def build_payload(self, record: NotificationRecord) -> dict[str, object]:
-        metadata = record.metadata or {}
+    def build_payload(self, event: NotificationEvent) -> dict[str, object]:
+        metadata = event.metadata or {}
         lines = [
-            f"Notification Type: {record.notification_type}",
-            f"Run ID: {record.run_id or '-'}",
-            f"Bundle ID: {record.bundle_id or '-'}",
-            f"Task ID: {record.task_id or '-'}",
+            f"Event Type: {event.event_type}",
+            f"Run ID: {event.run_id or '-'}",
+            f"Bundle ID: {event.bundle_id or '-'}",
+            f"Task ID: {event.task_id or '-'}",
         ]
         actor = str(metadata.get("actor") or "").strip()
         if actor:
@@ -30,11 +31,11 @@ class FeishuNotifier(BaseNotifier):
             "msg_type": "interactive",
             "card": {
                 "header": {
-                    "title": {"tag": "plain_text", "content": record.title},
+                    "title": {"tag": "plain_text", "content": event.title},
                     "template": "orange",
                 },
                 "elements": [
-                    {"tag": "div", "text": {"tag": "lark_md", "content": record.summary or record.title}},
+                    {"tag": "div", "text": {"tag": "lark_md", "content": event.summary or event.title}},
                     {"tag": "note", "elements": [{"tag": "plain_text", "content": " | ".join(lines)}]},
                 ],
             },

@@ -249,9 +249,12 @@ async def test_workflow_tools_write_approval_handoff_and_execution_update_audit_
     assert "error" not in update
 
     events = read_audit_events(run_dir)
-    assert [event["operation"] for event in events] == ["approval", "handoff", "execution_update"]
+    assert [event["operation"] for event in events] == ["approval", "handoff", "notification_dispatch", "notification_dispatch", "execution_update"]
 
-    approval_event, handoff_event, update_event = events
+    approval_event = events[0]
+    handoff_event = events[1]
+    handoff_notification_events = events[2:4]
+    update_event = events[4]
     assert approval_event["status"] == "approved"
     assert approval_event["actor"] == "alice"
     assert approval_event["client_metadata"]["request_id"] == "req-1"
@@ -260,9 +263,37 @@ async def test_workflow_tools_write_approval_handoff_and_execution_update_audit_
     assert handoff_event["status"] == "routed"
     assert handoff_event["details"]["tool_name"] == "handoff_to_executor"
     assert handoff_event["details"]["task_count"] == 2
+    assert {event["status"] for event in handoff_notification_events} == {"dispatched"}
+    assert {event["details"]["channel"] for event in handoff_notification_events} == {"feishu", "wecom"}
+    assert {event["details"]["event_type"] for event in handoff_notification_events} == {"executor_handoff_created"}
 
     assert update_event["status"] == "assigned"
     assert update_event["actor"] == "executor-gateway"
     assert update_event["details"]["to_status"] == "assigned"
     assert update_event["details"]["assigned_to"] == "codex-worker-1"
     assert update_event["retry"]["state"] == "not_needed"
+
+
+def test_block_by_risk_writes_notification_dispatch_audit_events(tmp_path: Path) -> None:
+    bundle_id, run_dir = _write_draft_bundle_fixture(tmp_path, run_id="20260308T040506Z")
+
+    result = mcp_server.approve_handoff(
+        bundle_id=bundle_id,
+        action="block_by_risk",
+        reviewer="alice",
+        comment="Critical auth regression risk",
+        options={"outputs_root": str(tmp_path), "client_metadata": {"request_id": "req-risk-1"}},
+    )
+
+    assert "error" not in result
+    events = read_audit_events(run_dir)
+    assert [event["operation"] for event in events] == ["approval", "notification_dispatch", "notification_dispatch"]
+    approval_event = events[0]
+    notification_events = events[1:]
+
+    assert approval_event["status"] == "blocked_by_risk"
+    assert approval_event["details"]["action"] == "block_by_risk"
+    assert {event["status"] for event in notification_events} == {"dispatched"}
+    assert {event["details"]["event_type"] for event in notification_events} == {"blocked_by_risk"}
+    assert {event["details"]["channel"] for event in notification_events} == {"feishu", "wecom"}
+    assert all(event["client_metadata"]["request_id"] == "req-risk-1" for event in notification_events)

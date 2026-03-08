@@ -23,7 +23,7 @@ from requirement_review_v1.execution import (
     start_task,
 )
 from requirement_review_v1.monitoring import append_audit_event, normalize_audit_context, retry_metadata_for_status
-from requirement_review_v1.notifications import NotificationType, record_dry_run_notification
+from requirement_review_v1.notifications import NotificationType, dispatch_notification
 from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
 from requirement_review_v1.service.review_service import _load_json_object, _locate_bundle_path, _resolve_outputs_root
 from requirement_review_v1.workspace import ReviewWorkspaceRepository
@@ -101,7 +101,7 @@ def _append_audit_event_safe(
         pass
 
 
-def _record_notification_safe(
+def _dispatch_notification(
     run_dir: Path,
     *,
     notification_type: NotificationType | str,
@@ -110,17 +110,14 @@ def _record_notification_safe(
     audit_context: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> None:
-    try:
-        record_dry_run_notification(
-            run_dir,
-            notification_type=notification_type,
-            title=title,
-            summary=summary,
-            audit_context=audit_context,
-            **kwargs,
-        )
-    except Exception:
-        pass
+    dispatch_notification(
+        run_dir,
+        notification_type=notification_type,
+        title=title,
+        summary=summary,
+        audit_context=audit_context,
+        **kwargs,
+    )
 
 
 def _load_bundle_context(bundle_id: str, outputs_root: str | Path) -> tuple[Path, Path, DeliveryBundle]:
@@ -508,7 +505,7 @@ def handoff_to_executor_for_mcp(
         },
         retry=retry_metadata_for_status(status="routed", non_blocking=False),
     )
-    _record_notification_safe(
+    _dispatch_notification(
         run_dir,
         notification_type=NotificationType.executor_handoff_created,
         title=f"Executor handoff created: {bundle.bundle_id}",
@@ -714,7 +711,7 @@ def update_execution_task_for_mcp(
             else f"Execution failed: {updated_task.task_id}"
         )
         summary = normalized_result_summary or normalized_detail or str(updated_task.result_summary or updated_task.status)
-        _record_notification_safe(
+        _dispatch_notification(
             run_dir,
             notification_type=notification_type,
             title=title,

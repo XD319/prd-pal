@@ -552,8 +552,11 @@ async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_
     assert task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["request_type"] == "claude_code.run_pack"
     assert Path(task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
     assert Path(task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
-    assert notifications[-1]["notification_type"] == "executor_handoff_created"
-    assert notifications[-1]["payloads"]["feishu"]["dry_run"] is True
+    assert len(notifications) == 2
+    assert {item["event_type"] for item in notifications} == {"executor_handoff_created"}
+    assert {item["channel"] for item in notifications} == {"feishu", "wecom"}
+    assert all(item["dispatch_status"] == "dispatched" for item in notifications)
+    assert all(item["payload"]["dry_run"] is True for item in notifications)
 
 
 @pytest.mark.asyncio
@@ -724,10 +727,16 @@ def test_approve_handoff_writes_notifications_for_review_follow_up_states(tmp_pa
 
     assert "error" not in need_more_info
     assert "error" not in blocked
-    assert [item["notification_type"] for item in notifications] == ["approval_requested", "blocked_by_risk"]
-    assert notifications[0]["metadata"]["tool_name"] == "approve_handoff"
-    assert notifications[0]["summary"] == "Missing owner for OAuth onboarding"
-    assert notifications[1]["summary"] == "Critical auth regression risk"
+    assert len(notifications) == 4
+    approval_notifications = [item for item in notifications if item["event_type"] == "approval_requested"]
+    blocked_notifications = [item for item in notifications if item["event_type"] == "blocked_by_risk"]
+    assert len(approval_notifications) == 2
+    assert len(blocked_notifications) == 2
+    assert {item["channel"] for item in approval_notifications} == {"feishu", "wecom"}
+    assert {item["channel"] for item in blocked_notifications} == {"feishu", "wecom"}
+    assert approval_notifications[0]["metadata"]["tool_name"] == "approve_handoff"
+    assert {item["summary"] for item in approval_notifications} == {"Missing owner for OAuth onboarding"}
+    assert {item["summary"] for item in blocked_notifications} == {"Critical auth regression risk"}
 
 
 @pytest.mark.asyncio
@@ -762,10 +771,12 @@ async def test_update_execution_task_completed_writes_notification_record(tmp_pa
     notifications = read_notification_records(run_dir)
 
     assert "error" not in completed
-    assert notifications[-1]["notification_type"] == "execution_completed"
-    assert notifications[-1]["task_id"] == f"{bundle_id}:implementation_pack"
-    assert notifications[-1]["summary"] == "implemented and validated"
-    assert notifications[-1]["payloads"]["wecom"]["dry_run"] is True
+    completion_notifications = [item for item in notifications if item["event_type"] == "execution_completed"]
+    assert len(completion_notifications) == 2
+    assert {item["channel"] for item in completion_notifications} == {"feishu", "wecom"}
+    assert {item["task_id"] for item in completion_notifications} == {f"{bundle_id}:implementation_pack"}
+    assert {item["summary"] for item in completion_notifications} == {"implemented and validated"}
+    assert all(item["payload"]["dry_run"] is True for item in completion_notifications)
 
 
 def test_get_template_registry_lists_registered_templates() -> None:
