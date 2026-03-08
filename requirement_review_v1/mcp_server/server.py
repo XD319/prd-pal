@@ -128,7 +128,7 @@ def approve_handoff(
     comment: str = "",
     options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Apply one approval operation to a persisted delivery bundle."""
+    """Apply one approval operation to a persisted delivery bundle and return updated record paths."""
     try:
         return approve_handoff_for_mcp(
             bundle_id=bundle_id,

@@ -276,9 +276,24 @@ def test_approve_handoff_success(tmp_path):
         options={"outputs_root": str(tmp_path)},
     )
 
+    approval_records_payload = json.loads((run_dir / "approval_records.json").read_text(encoding="utf-8"))
+    snapshot_payload = json.loads((run_dir / "status_snapshot.json").read_text(encoding="utf-8"))
+
     assert "error" not in result
     assert result["status"] == "approved"
     assert len(result["approval_history"]) == 1
+    assert result["approval_records_path"] == str(run_dir / "approval_records.json")
+    assert result["status_snapshot_path"] == str(run_dir / "status_snapshot.json")
+    assert result["status_snapshot"]["bundle_status"] == "approved"
+    assert approval_records_payload["approval_records"][0]["action"] == "approve"
+    assert approval_records_payload["approval_records"][0]["from_bundle_status"] == "draft"
+    assert approval_records_payload["approval_records"][0]["to_bundle_status"] == "approved"
+    assert approval_records_payload["approval_records"][0]["workspace_status"] == "confirmed"
+    assert approval_records_payload["approval_records"][0]["reviewer"] == "alice"
+    assert snapshot_payload["run_id"] == run_id
+    assert snapshot_payload["bundle_id"] == f"bundle-{run_id}"
+    assert snapshot_payload["bundle_status"] == "approved"
+    assert snapshot_payload["workspace_status"] == "confirmed"
 
 
 def test_approve_handoff_invalid_transition_returns_error(tmp_path):
@@ -304,7 +319,32 @@ def test_approve_handoff_invalid_transition_returns_error(tmp_path):
         "approval_history": [],
         "metadata": {},
     }
+    original_approval_records = {
+        "approval_records": [
+            {
+                "record_id": "approval-existing",
+                "run_id": run_id,
+                "bundle_id": f"bundle-{run_id}",
+                "timestamp": "2026-03-07T12:00:00+00:00",
+                "action": "approve",
+                "from_bundle_status": "draft",
+                "to_bundle_status": "approved",
+                "workspace_status": "confirmed",
+                "reviewer": "alice",
+                "comment": "Approved",
+            }
+        ]
+    }
+    original_snapshot = {
+        "run_id": run_id,
+        "bundle_id": f"bundle-{run_id}",
+        "bundle_status": "approved",
+        "workspace_status": "confirmed",
+        "updated_at": "2026-03-07T12:00:00+00:00",
+    }
     (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "approval_records.json").write_text(json.dumps(original_approval_records, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "status_snapshot.json").write_text(json.dumps(original_snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
 
     result = mcp_server.approve_handoff(
         bundle_id=f"bundle-{run_id}",
@@ -314,7 +354,14 @@ def test_approve_handoff_invalid_transition_returns_error(tmp_path):
         options={"outputs_root": str(tmp_path)},
     )
 
+    reloaded_bundle = json.loads((run_dir / "delivery_bundle.json").read_text(encoding="utf-8"))
+    approval_records_payload = json.loads((run_dir / "approval_records.json").read_text(encoding="utf-8"))
+    snapshot_payload = json.loads((run_dir / "status_snapshot.json").read_text(encoding="utf-8"))
+
     assert result["error"]["code"] == "invalid_input"
+    assert reloaded_bundle["status"] == "approved"
+    assert approval_records_payload == original_approval_records
+    assert snapshot_payload == original_snapshot
 
 
 def _write_approved_bundle_fixture(tmp_path, run_id: str = "20260307T010206Z") -> str:

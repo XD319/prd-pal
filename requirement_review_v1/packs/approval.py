@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from requirement_review_v1.packs.delivery_bundle import ApprovalEvent, BundleStatus, DeliveryBundle
+from requirement_review_v1.workspace import ApprovalRecord, workspace_status_from_bundle_status
 
 
 class InvalidTransitionError(ValueError):
@@ -50,6 +51,23 @@ def _transition(bundle: DeliveryBundle, to_status: BundleStatus, reviewer: str, 
         )
     )
     return bundle.model_copy(update={"status": to_status, "approval_history": history}, deep=True)
+
+
+def build_approval_record(bundle: DeliveryBundle, event: ApprovalEvent, action: str = "") -> ApprovalRecord:
+    """Convert one bundle approval event into a persisted workspace approval record."""
+
+    return ApprovalRecord(
+        record_id=event.event_id,
+        run_id=bundle.source_run_id,
+        bundle_id=bundle.bundle_id,
+        timestamp=event.timestamp,
+        action=str(action or ""),
+        from_bundle_status=BundleStatus(event.from_status),
+        to_bundle_status=BundleStatus(event.to_status),
+        workspace_status=workspace_status_from_bundle_status(event.to_status),
+        reviewer=event.reviewer,
+        comment=event.comment,
+    )
 
 
 def approve_bundle(bundle: DeliveryBundle, reviewer: str, comment: str) -> DeliveryBundle:

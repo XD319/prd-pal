@@ -6,6 +6,7 @@ from requirement_review_v1.packs.approval import (
     InvalidTransitionError,
     approve_bundle,
     block_by_risk,
+    build_approval_record,
     request_more_info,
     reset_to_draft,
 )
@@ -62,6 +63,20 @@ def test_approval_event_records_expected_fields():
     assert event.reviewer == "alice"
     assert event.comment == "ship it"
     assert event.timestamp
+
+
+def test_build_approval_record_maps_workspace_status_and_action():
+    bundle = request_more_info(_bundle(), "alice", "Need clarification")
+
+    record = build_approval_record(bundle, bundle.approval_history[-1], action="need_more_info")
+
+    assert record.record_id == bundle.approval_history[-1].event_id
+    assert record.run_id == bundle.source_run_id
+    assert record.bundle_id == bundle.bundle_id
+    assert record.action == "need_more_info"
+    assert record.from_bundle_status == "draft"
+    assert record.to_bundle_status == "need_more_info"
+    assert record.workspace_status == "need_more_info"
 
 
 def test_approved_is_terminal():

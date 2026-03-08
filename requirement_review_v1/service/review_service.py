@@ -24,8 +24,10 @@ from requirement_review_v1.packs import (
     request_more_info,
     reset_to_draft,
 )
+from requirement_review_v1.packs.approval import build_approval_record
 from requirement_review_v1.run_review import run_review
 from requirement_review_v1.service.report_service import RUN_ID_PATTERN
+from requirement_review_v1.workspace import ReviewWorkspaceRepository
 
 
 @dataclass(slots=True)
@@ -602,6 +604,36 @@ def generate_delivery_bundle_for_mcp(
     }
 
 
+def _persist_review_workspace_state(
+    *,
+    bundle_path: Path,
+    updated_bundle: DeliveryBundle,
+    action: str,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    if not updated_bundle.approval_history:
+        raise ValueError("updated bundle is missing approval history")
+
+    latest_event = updated_bundle.approval_history[-1]
+    approval_record = build_approval_record(updated_bundle, latest_event, action=action)
+    repository = ReviewWorkspaceRepository(bundle_path.parent)
+    status_snapshot = repository.build_status_snapshot(
+        run_id=updated_bundle.source_run_id,
+        bundle_id=updated_bundle.bundle_id,
+        bundle_status=updated_bundle.status,
+        updated_at=approval_record.timestamp,
+    )
+    approval_records_path = repository.append_approval_record(approval_record)
+    status_snapshot_path = repository.save_status_snapshot(status_snapshot)
+    return (
+        {
+            "bundle_path": str(bundle_path),
+            "approval_records_path": str(approval_records_path),
+            "status_snapshot_path": str(status_snapshot_path),
+        },
+        status_snapshot.model_dump(mode="python"),
+    )
+
+
 def approve_handoff_for_mcp(
     *,
     bundle_id: str,
@@ -628,11 +660,19 @@ def approve_handoff_for_mcp(
 
     updated_bundle = actions[action](bundle, reviewer, comment)
     bundle_path.write_text(json.dumps(updated_bundle.model_dump(mode="python"), ensure_ascii=False, indent=2), encoding="utf-8")
+    persisted_paths, status_snapshot = _persist_review_workspace_state(
+        bundle_path=bundle_path,
+        updated_bundle=updated_bundle,
+        action=action,
+    )
     return {
         "bundle_id": updated_bundle.bundle_id,
         "status": updated_bundle.status,
         "approval_history": [event.model_dump(mode="python") for event in updated_bundle.approval_history],
-        "bundle_path": str(bundle_path),
+        "bundle_path": persisted_paths["bundle_path"],
+        "approval_records_path": persisted_paths["approval_records_path"],
+        "status_snapshot_path": persisted_paths["status_snapshot_path"],
+        "status_snapshot": status_snapshot,
     }
 
 
