@@ -163,6 +163,12 @@ class ReviewState(TypedDict, total=False):
     high_risk_ratio: float
     routing_reason: str
     parser_prompt_version: str
+    review_mode_override: str
+    review_mode: str
+    review_open_questions: list[dict[str, Any]]
+    review_risk_items: list[dict[str, Any]]
+    parallel_review: dict[str, Any]
+    parallel_review_meta: dict[str, Any]
 
 
 def create_initial_state(requirement_doc: str) -> ReviewState:
@@ -191,4 +197,10 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         high_risk_ratio=0.0,
         routing_reason="",
         parser_prompt_version=PARSER_REVIEW_PROMPT.version,
+        review_mode_override="",
+        review_mode="single_review",
+        review_open_questions=[],
+        review_risk_items=[],
+        parallel_review={},
+        parallel_review_meta={},
     )

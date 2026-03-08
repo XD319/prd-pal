@@ -1,4 +1,4 @@
-"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
+﻿"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
 
 from __future__ import annotations
 
@@ -238,6 +238,9 @@ def _generate_delivery_bundle(
     source_metadata = _extract_source_metadata(run_output)
     if source_metadata:
         bundle.metadata["source_metadata"] = source_metadata
+    parallel_review_meta = _extract_parallel_review_meta(run_output)
+    if parallel_review_meta:
+        bundle.metadata["parallel-review_meta"] = parallel_review_meta
     bundle_path = DeliveryBundleBuilder().save(bundle, run_dir)
 
     artifact_paths = {artifact_type: ref.path for artifact_type, ref in artifact_refs.items()}
@@ -256,6 +259,23 @@ def _extract_source_metadata(run_output: dict[str, Any]) -> dict[str, Any]:
         if isinstance(result_metadata, dict):
             return dict(result_metadata)
 
+    return {}
+
+
+def _extract_parallel_review_meta(run_output: dict[str, Any]) -> dict[str, Any]:
+    result = run_output.get("result")
+    if isinstance(result, dict):
+        direct_meta = result.get("parallel-review_meta")
+        if isinstance(direct_meta, dict):
+            return dict(direct_meta)
+        direct_state_meta = result.get("parallel_review_meta")
+        if isinstance(direct_state_meta, dict):
+            return dict(direct_state_meta)
+        trace = result.get("trace")
+        if isinstance(trace, dict):
+            trace_meta = trace.get("parallel-review_meta")
+            if isinstance(trace_meta, dict):
+                return dict(trace_meta)
     return {}
 
 
@@ -513,6 +533,10 @@ def build_delivery_handoff_outputs(
     if isinstance(report_paths, dict):
         report_paths.update(artifact_paths)
 
+    parallel_review_meta = _extract_parallel_review_meta(run_output)
+    if parallel_review_meta:
+        trace["parallel-review_meta"] = parallel_review_meta
+
     trace_path_raw = str(report_paths.get("run_trace", "") or "")
     if trace_path_raw:
         trace_path = Path(trace_path_raw)
@@ -520,6 +544,8 @@ def build_delivery_handoff_outputs(
         trace_payload.update(trace)
         if source_metadata:
             trace_payload["source_metadata"] = source_metadata
+        if parallel_review_meta:
+            trace_payload["parallel-review_meta"] = parallel_review_meta
         trace_path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     report_json_raw = str(report_paths.get("report_json", "") or "")
@@ -540,6 +566,8 @@ def build_delivery_handoff_outputs(
             report_payload["trace"] = report_trace
             if source_metadata:
                 report_payload["source_metadata"] = source_metadata
+            if parallel_review_meta:
+                report_payload["parallel-review_meta"] = parallel_review_meta
 
             artifacts = report_payload.get("artifacts")
             if not isinstance(artifacts, dict):
@@ -616,12 +644,16 @@ async def review_prd_text_async(
         prd_path=prd_path,
         source=source,
     )
-    run_output = await run_review(
-        requirement_doc=requirement_doc,
-        run_id=run_id,
-        outputs_root=outputs_root,
-        progress_hook=progress_hook,
-    )
+    run_review_kwargs: dict[str, Any] = {
+        "requirement_doc": requirement_doc,
+        "run_id": run_id,
+        "outputs_root": outputs_root,
+        "progress_hook": progress_hook,
+    }
+    review_mode_override = overrides.get("review_mode_override")
+    if isinstance(review_mode_override, str) and review_mode_override.strip():
+        run_review_kwargs["review_mode_override"] = review_mode_override.strip()
+    run_output = await run_review(**run_review_kwargs)
     if source_context:
         run_output.update(source_context)
         result = run_output.get("result")
@@ -644,6 +676,8 @@ async def review_prd_text_async(
                 "revision_round": int(review_result.get("revision_round", 0) or 0),
                 "requirement_source": "source" if source else "prd_path" if prd_path else "inline_text",
                 "has_source_metadata": bool(source_context),
+                "review_mode": str(review_result.get("review_mode", "single_review") or "single_review"),
+                "parallel_review_enabled": bool(review_result.get("parallel_review_meta") or review_result.get("parallel-review_meta")),
             },
             retry=retry_metadata_for_status(status=review_status, non_blocking=False),
         )
@@ -1073,6 +1107,7 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
+
 
 
 

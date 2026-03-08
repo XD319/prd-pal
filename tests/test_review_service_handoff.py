@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -307,3 +307,47 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(tm
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
 
 
+def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
+    parallel_review_meta = {
+        "default_mode": "parallel_review",
+        "selected_mode": "parallel_review",
+        "parallel_triggered": True,
+        "reviewer_count": 4,
+        "open_questions_count": 2,
+        "risk_items_count": 1,
+    }
+    report_json_path = tmp_path / "report.json"
+    trace_path = tmp_path / "run_trace.json"
+    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    run_output = {
+        "run_dir": str(tmp_path),
+        "run_id": "20260307T010207Z",
+        "report_paths": {
+            "report_json": str(report_json_path),
+            "run_trace": str(trace_path),
+        },
+        "result": {
+            "final_report": "# Requirement Review Report\n\nSummary.",
+            "parsed_items": [{"id": "REQ-001", "description": "Use parallel review", "acceptance_criteria": ["Done"]}],
+            "review_results": [{"id": "REQ-001", "is_clear": True, "is_testable": True, "is_ambiguous": False, "issues": [], "suggestions": ""}],
+            "tasks": [{"id": "TASK-001", "title": "Implement review", "owner": "BE", "requirement_ids": ["REQ-001"]}],
+            "risks": [],
+            "implementation_plan": {"implementation_steps": ["Implement"], "target_modules": ["workflow"], "constraints": []},
+            "test_plan": {"test_scope": ["workflow"], "edge_cases": [], "regression_focus": []},
+            "codex_prompt_handoff": {"agent_prompt": "Implement", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+            "claude_code_prompt_handoff": {"agent_prompt": "Verify", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+            "parallel-review_meta": parallel_review_meta,
+            "trace": {},
+        },
+    }
+
+    artifact_paths = build_delivery_handoff_outputs(run_output)
+
+    bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
+    trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
+    assert bundle_payload["metadata"]["parallel-review_meta"] == parallel_review_meta
+    assert trace_payload["parallel-review_meta"] == parallel_review_meta
+    assert report_payload["parallel-review_meta"] == parallel_review_meta

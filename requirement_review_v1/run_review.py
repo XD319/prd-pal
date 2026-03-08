@@ -1,4 +1,4 @@
-"""Shared runner for requirement_review_v1 CLI and API."""
+﻿"""Shared runner for requirement_review_v1 CLI and API."""
 
 from __future__ import annotations
 
@@ -48,6 +48,9 @@ def build_report_data(result: dict[str, Any], run_id: str) -> dict[str, Any]:
         "project": "requirement_review_v1",
     }
     report_data.update(result)
+    parallel_review_meta = result.get("parallel_review_meta") if isinstance(result.get("parallel_review_meta"), dict) else {}
+    if parallel_review_meta:
+        report_data["parallel-review_meta"] = parallel_review_meta
     return report_data
 
 
@@ -81,14 +84,25 @@ async def run_review(
     run_id: str | None = None,
     outputs_root: str | Path = "outputs",
     progress_hook: ProgressHook | None = None,
+    review_mode_override: str | None = None,
 ) -> dict[str, Any]:
     resolved_run_id = run_id or make_run_id()
     run_dir = os.path.join(str(outputs_root), resolved_run_id)
 
     graph = build_review_graph(progress_hook=progress_hook)
-    result = await graph.ainvoke({"requirement_doc": requirement_doc, "run_dir": run_dir})
+    initial_state: dict[str, Any] = {
+        "requirement_doc": requirement_doc,
+        "run_dir": run_dir,
+    }
+    if isinstance(review_mode_override, str) and review_mode_override.strip():
+        initial_state["review_mode_override"] = review_mode_override.strip()
+
+    result = await graph.ainvoke(initial_state)
     if not isinstance(result, dict):
         raise ValueError("workflow result must be an object")
+    parallel_review_meta = result.get("parallel_review_meta") if isinstance(result.get("parallel_review_meta"), dict) else {}
+    if parallel_review_meta:
+        result["parallel-review_meta"] = parallel_review_meta
 
     report_paths = write_outputs(run_dir=run_dir, run_id=resolved_run_id, result=result)
     return {
@@ -97,4 +111,3 @@ async def run_review(
         "result": result,
         "report_paths": report_paths,
     }
-

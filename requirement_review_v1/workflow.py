@@ -1,21 +1,28 @@
-"""Requirement-review workflow with parser-driven parallel planner/risk fan-out."""
+﻿"""Requirement-review workflow with parser-driven parallel planner/risk fan-out."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any
 
 from langgraph.graph import END, StateGraph
 
 from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent
+from .review import decide_review_mode, run_parallel_review_async
 from .state import ReviewState, plan_from_state
 from .subflows.risk_analysis import run_risk_analysis_from_review_state
 from .templates.registry import CLARIFY_PARSER_REVIEW_PROMPT, PARSER_REVIEW_PROMPT
+from .utils.trace import trace_start
 
 _MAX_REVISION_ROUNDS = 2
 _HIGH_RISK_THRESHOLD = 0.4
 _PARALLEL_TRACE_KEY = "planner_risk_parallel"
+_PARALLEL_REVIEW_META_KEY = "parallel-review_meta"
+_ALLOWED_REVIEW_MODES = {"single_review", "parallel_review"}
 ProgressHook = Callable[[str, str, ReviewState], None]
 
 
@@ -201,6 +208,220 @@ def _build_sync_node(
     return _runner
 
 
+async def _reviewer_node(state: ReviewState) -> ReviewState:
+    override = str(state.get("review_mode_override", "") or "").strip().lower()
+    normalized_override = override if override in _ALLOWED_REVIEW_MODES else ""
+    decision = decide_review_mode(str(state.get("requirement_doc", "") or ""))
+    selected_mode = normalized_override or decision.mode
+
+    if selected_mode == "parallel_review":
+        return await _run_parallel_reviewer(state, decision=decision, override=normalized_override)
+    return await _run_single_reviewer(state, decision=decision, override=normalized_override)
+
+
+async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: str) -> ReviewState:
+    update = await reviewer_agent.run(state)
+    trace: dict[str, Any] = dict(update.get("trace", state.get("trace", {})) or {})
+    review_results = list(update.get("review_results", []) or [])
+    review_open_questions = _derive_single_review_open_questions(review_results)
+    review_risk_items = _derive_single_review_risk_items(review_results)
+
+    reviewer_trace = trace.get("reviewer") if isinstance(trace.get("reviewer"), dict) else {}
+    meta = {
+        "default_mode": decision.mode,
+        "selected_mode": "single_review",
+        "review_mode_override": override,
+        "parallel_triggered": False,
+        "reviewer_strategy": "single_reviewer",
+        "gating_decision": asdict(decision),
+        "reviewer_count": 1,
+        "finding_count": len(review_results),
+        "open_questions_count": len(review_open_questions),
+        "risk_items_count": len(review_risk_items),
+        "input_token_estimate": _estimate_tokens(int(reviewer_trace.get("input_chars", 0) or 0)),
+        "output_token_estimate": _estimate_tokens(int(reviewer_trace.get("output_chars", 0) or 0)),
+        "duration_ms": int(reviewer_trace.get("duration_ms", 0) or 0),
+    }
+    trace[_PARALLEL_REVIEW_META_KEY] = meta
+    update["trace"] = trace
+    update["review_mode"] = "single_review"
+    update["review_open_questions"] = review_open_questions
+    update["review_risk_items"] = review_risk_items
+    update["parallel_review_meta"] = meta
+    return update
+
+
+async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override: str) -> ReviewState:
+    requirement_doc = str(state.get("requirement_doc", "") or "")
+    run_dir = str(state.get("run_dir", "") or "")
+    trace: dict[str, Any] = dict(state.get("trace", {}))
+    span = trace_start("reviewer", model="none", input_chars=len(requirement_doc))
+    span.set_attr("review_mode", "parallel_review")
+    span.set_attr("reviewer_strategy", "asyncio.gather")
+    started = perf_counter()
+
+    parallel_result = await run_parallel_review_async(requirement_doc, run_dir)
+    aggregated = parallel_result.aggregated
+    review_results = _build_parallel_review_results(state, aggregated)
+    plan_review = _build_parallel_plan_review(aggregated)
+    review_open_questions = list(aggregated.get("open_questions", []) or [])
+    review_risk_items = list(aggregated.get("risk_items", []) or [])
+    findings = list(aggregated.get("findings", []) or [])
+
+    output_chars = len(json.dumps(aggregated, ensure_ascii=False))
+    trace["reviewer"] = span.end(status="ok", output_chars=output_chars)
+    meta = {
+        "default_mode": decision.mode,
+        "selected_mode": "parallel_review",
+        "review_mode_override": override,
+        "parallel_triggered": True,
+        "reviewer_strategy": "asyncio.gather",
+        "gating_decision": asdict(decision),
+        "reviewer_count": int(aggregated.get("reviewer_count", 0) or 0),
+        "finding_count": len(findings),
+        "open_questions_count": len(review_open_questions),
+        "risk_items_count": len(review_risk_items),
+        "input_token_estimate": _estimate_tokens(len(requirement_doc)),
+        "output_token_estimate": _estimate_tokens(output_chars),
+        "duration_ms": round((perf_counter() - started) * 1000),
+        "artifact_paths": dict((aggregated.get("artifacts") or {})),
+    }
+    trace[_PARALLEL_REVIEW_META_KEY] = meta
+
+    return {
+        "review_results": review_results,
+        "plan_review": plan_review,
+        "high_risk_ratio": _compute_parallel_high_risk_ratio(review_results),
+        "trace": trace,
+        "review_mode": "parallel_review",
+        "parallel_review": aggregated,
+        "review_open_questions": review_open_questions,
+        "review_risk_items": review_risk_items,
+        "parallel_review_meta": meta,
+    }
+
+
+def _build_parallel_review_results(state: ReviewState, aggregated: dict[str, Any]) -> list[dict[str, Any]]:
+    parsed_items = list(state.get("parsed_items", []) or [])
+    findings = list(aggregated.get("findings", []) or [])
+    open_questions = list(aggregated.get("open_questions", []) or [])
+    risk_items = list(aggregated.get("risk_items", []) or [])
+
+    has_scope_gap = any(
+        str(item.get("category", "")).lower() in {"scope", "acceptance"} and str(item.get("severity", "")).lower() == "high"
+        for item in findings
+    )
+    has_testability_gap = any(
+        str(item.get("category", "")).lower() == "testability" and str(item.get("severity", "")).lower() == "high"
+        for item in findings
+    )
+    issue_lines = [
+        f"{item.get('title', 'Finding')}: {item.get('detail', '')}".strip()
+        for item in findings[:2]
+        if str(item.get("title", "") or "").strip()
+    ]
+    question_lines = [str(item.get("question", "") or "").strip() for item in open_questions[:2] if str(item.get("question", "") or "").strip()]
+    suggestions = "; ".join(
+        str(item.get("mitigation", "") or item.get("detail", "")).strip()
+        for item in risk_items[:2]
+        if str(item.get("mitigation", "") or item.get("detail", "")).strip()
+    )
+
+    review_results: list[dict[str, Any]] = []
+    for item in parsed_items:
+        acceptance_criteria = list(item.get("acceptance_criteria", []) or [])
+        is_testable = bool(acceptance_criteria) and not has_testability_gap
+        is_clear = not has_scope_gap
+        is_ambiguous = has_scope_gap and not acceptance_criteria
+        issues = issue_lines + (question_lines if is_ambiguous else [])
+        review_results.append(
+            {
+                "id": item.get("id", "unknown"),
+                "is_clear": is_clear,
+                "is_testable": is_testable,
+                "is_ambiguous": is_ambiguous,
+                "issues": issues,
+                "suggestions": suggestions,
+            }
+        )
+    return review_results
+
+
+def _build_parallel_plan_review(aggregated: dict[str, Any]) -> dict[str, str]:
+    summaries = {
+        str(item.get("reviewer", "") or "").strip().lower(): str(item.get("summary", "") or "").strip()
+        for item in list(aggregated.get("reviewer_summaries", []) or [])
+        if isinstance(item, dict)
+    }
+    return {
+        "coverage": " ".join(part for part in (summaries.get("product", ""), summaries.get("security", "")) if part),
+        "milestones": summaries.get("engineering", ""),
+        "estimation": summaries.get("qa", ""),
+    }
+
+
+def _compute_parallel_high_risk_ratio(review_results: list[dict[str, Any]]) -> float:
+    total = len(review_results)
+    if total == 0:
+        return 0.0
+    high_count = 0
+    for item in review_results:
+        flags = sum(
+            [
+                not item.get("is_clear", True),
+                not item.get("is_testable", True),
+                item.get("is_ambiguous", False),
+            ]
+        )
+        if flags >= 2:
+            high_count += 1
+    return high_count / total
+
+
+def _derive_single_review_open_questions(review_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    questions: list[dict[str, Any]] = []
+    for item in review_results:
+        issues = [str(issue).strip() for issue in list(item.get("issues", []) or []) if str(issue).strip()]
+        if item.get("is_ambiguous") or issues:
+            question = str(item.get("description") or item.get("id") or "Clarify requirement intent").strip()
+            if not question:
+                question = "Clarify requirement intent"
+            questions.append({"question": question, "reviewers": ["single_reviewer"], "issues": issues})
+    return questions
+
+
+def _derive_single_review_risk_items(review_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for item in review_results:
+        flags = sum(
+            [
+                not item.get("is_clear", True),
+                not item.get("is_testable", True),
+                item.get("is_ambiguous", False),
+            ]
+        )
+        if flags == 0:
+            continue
+        severity = "high" if flags >= 2 else "medium"
+        issues = [str(issue).strip() for issue in list(item.get("issues", []) or []) if str(issue).strip()]
+        items.append(
+            {
+                "title": str(item.get("id", "Requirement review risk")),
+                "detail": "; ".join(issues) or str(item.get("suggestions", "") or "Clarify the requirement before implementation."),
+                "severity": severity,
+                "category": "review_quality",
+                "reviewers": ["single_reviewer"],
+            }
+        )
+    return items
+
+
+def _estimate_tokens(char_count: int) -> int:
+    if char_count <= 0:
+        return 0
+    return max(1, round(char_count / 4))
+
+
 def build_review_graph(progress_hook: ProgressHook | None = None):
     """Build and compile the review graph with fan-out / fan-in parallelism."""
 
@@ -216,7 +437,7 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
         "delivery_planning",
         _build_async_node("delivery_planning", delivery_planning_agent.run, progress_hook),
     )
-    workflow.add_node("reviewer", _build_async_node("reviewer", reviewer_agent.run, progress_hook))
+    workflow.add_node("reviewer", _build_async_node("reviewer", _reviewer_node, progress_hook))
     workflow.add_node("route_decider", _build_sync_node("route_decider", _route_decider_node, progress_hook))
     workflow.add_node("reporter", _build_async_node("reporter", reporter_agent.run, progress_hook))
 
