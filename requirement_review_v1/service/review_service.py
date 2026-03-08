@@ -676,6 +676,60 @@ def approve_handoff_for_mcp(
     }
 
 
+def get_review_workspace_for_mcp(
+    *,
+    run_id: str | None = None,
+    bundle_id: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolved_options = options or {}
+    if not isinstance(resolved_options, dict):
+        raise TypeError("options must be an object")
+
+    run_key = str(run_id or "").strip()
+    bundle_key = str(bundle_id or "").strip()
+    if bool(run_key) == bool(bundle_key):
+        raise ValueError("provide exactly one of run_id or bundle_id")
+
+    outputs_root = resolved_options.get("outputs_root", "outputs")
+    if run_key:
+        run_dir = _resolve_run_dir(run_key, outputs_root)
+    else:
+        run_dir = _locate_bundle_path(bundle_key, outputs_root).parent
+
+    repository = ReviewWorkspaceRepository(run_dir)
+    if not repository.delivery_bundle_path.exists():
+        raise FileNotFoundError(f"delivery_bundle.json not found for run_id={run_dir.name}")
+    if not repository.approval_records_path.exists():
+        raise FileNotFoundError(f"approval_records.json not found for run_id={run_dir.name}")
+    if not repository.status_snapshot_path.exists():
+        raise FileNotFoundError(f"status_snapshot.json not found for run_id={run_dir.name}")
+
+    bundle = repository.load_bundle()
+    if bundle is None:
+        raise FileNotFoundError(f"delivery_bundle.json not found for run_id={run_dir.name}")
+
+    workspace = repository.load_workspace()
+    return {
+        "run_id": workspace.run_id,
+        "bundle": {
+            "bundle_id": bundle.bundle_id,
+            "bundle_version": bundle.bundle_version,
+            "created_at": bundle.created_at,
+            "status": bundle.status,
+            "source_run_id": bundle.source_run_id,
+        },
+        "approval_history": [event.model_dump(mode="python") for event in workspace.approval_history],
+        "approval_records": [record.model_dump(mode="python") for record in workspace.approval_records],
+        "status_snapshot": workspace.status_snapshot.model_dump(mode="python") if workspace.status_snapshot is not None else None,
+        "paths": {
+            "bundle_path": str(repository.delivery_bundle_path),
+            "approval_records_path": str(repository.approval_records_path),
+            "status_snapshot_path": str(repository.status_snapshot_path),
+        },
+    }
+
+
 async def review_prd_for_mcp_async(
     *,
     prd_text: str | None,

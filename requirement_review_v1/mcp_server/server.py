@@ -19,6 +19,7 @@ from requirement_review_v1.service.report_service import get_report_for_mcp
 from requirement_review_v1.service.review_service import (
     approve_handoff_for_mcp,
     generate_delivery_bundle_for_mcp,
+    get_review_workspace_for_mcp,
     review_prd_for_mcp_async,
 )
 
@@ -160,6 +161,23 @@ async def handoff_to_executor(
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "internal_error", "message": f"handoff_to_executor failed: {exc}"}}
+
+
+@mcp.tool()
+def get_review_workspace(
+    run_id: str | None = None,
+    bundle_id: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Query persisted review workspace state by run or bundle identifier."""
+    try:
+        return get_review_workspace_for_mcp(run_id=run_id, bundle_id=bundle_id, options=options)
+    except FileNotFoundError as exc:
+        return {"error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"error": {"code": "internal_error", "message": f"get_review_workspace failed: {exc}"}}
 
 
 @mcp.tool()

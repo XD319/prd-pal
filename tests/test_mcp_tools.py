@@ -364,6 +364,85 @@ def test_approve_handoff_invalid_transition_returns_error(tmp_path):
     assert snapshot_payload == original_snapshot
 
 
+def _write_review_workspace_fixture(tmp_path, run_id: str = "20260307T010205Z") -> str:
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    bundle_payload = {
+        "bundle_id": f"bundle-{run_id}",
+        "bundle_version": "1.0",
+        "created_at": "2026-03-07T12:00:00+00:00",
+        "status": "draft",
+        "source_run_id": run_id,
+        "artifacts": {
+            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
+            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
+            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
+            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
+            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
+            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
+            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
+            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+        },
+        "approval_history": [],
+        "metadata": {},
+    }
+    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = mcp_server.approve_handoff(
+        bundle_id=f"bundle-{run_id}",
+        action="approve",
+        reviewer="alice",
+        comment="Ready",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    assert "error" not in result
+    return f"bundle-{run_id}"
+
+
+def test_get_review_workspace_by_run_id_returns_workspace_state(tmp_path):
+    run_id = "20260304T010206Z"
+    bundle_id = _write_review_workspace_fixture(tmp_path, run_id=run_id)
+
+    result = mcp_server.get_review_workspace(run_id=run_id, options={"outputs_root": str(tmp_path)})
+
+    assert "error" not in result
+    assert result["run_id"] == run_id
+    assert result["bundle"]["bundle_id"] == bundle_id
+    assert result["bundle"]["status"] == "approved"
+    assert len(result["approval_history"]) == 1
+    assert len(result["approval_records"]) == 1
+    assert result["approval_records"][0]["action"] == "approve"
+    assert result["status_snapshot"]["bundle_status"] == "approved"
+    assert result["status_snapshot"]["workspace_status"] == "confirmed"
+    assert result["paths"]["approval_records_path"].endswith("approval_records.json")
+
+
+def test_get_review_workspace_by_bundle_id_returns_workspace_state(tmp_path):
+    run_id = "20260304T010207Z"
+    bundle_id = _write_review_workspace_fixture(tmp_path, run_id=run_id)
+
+    result = mcp_server.get_review_workspace(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    assert "error" not in result
+    assert result["run_id"] == run_id
+    assert result["bundle"]["bundle_id"] == bundle_id
+    assert result["approval_history"][0]["to_status"] == "approved"
+    assert result["approval_records"][0]["bundle_id"] == bundle_id
+    assert result["status_snapshot"]["run_id"] == run_id
+
+
+def test_get_review_workspace_missing_files_returns_error(tmp_path):
+    run_id = "20260304T010208Z"
+    bundle_id = _write_review_workspace_fixture(tmp_path, run_id=run_id)
+    (tmp_path / run_id / "status_snapshot.json").unlink()
+
+    result = mcp_server.get_review_workspace(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    assert result["error"]["code"] == "not_found"
+    assert "status_snapshot.json" in result["error"]["message"]
+
+
 def _write_approved_bundle_fixture(tmp_path, run_id: str = "20260307T010206Z") -> str:
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
