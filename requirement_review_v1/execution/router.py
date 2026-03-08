@@ -10,6 +10,11 @@ from typing import Any
 from requirement_review_v1.execution.models import ExecutionEvent, ExecutionMode, ExecutionTask
 from requirement_review_v1.packs.delivery_bundle import BundleStatus, DeliveryBundle
 
+DEFAULT_PACK_SPECS: tuple[tuple[str, str], ...] = (
+    ("implementation_pack", "codex"),
+    ("test_pack", "claude_code"),
+)
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -22,8 +27,13 @@ class BundleNotApprovedError(ValueError):
 class ExecutorRouter:
     """Route approved bundles into executor-specific execution tasks."""
 
-    def __init__(self, default_mode: ExecutionMode = ExecutionMode.agent_assisted):
+    def __init__(
+        self,
+        default_mode: ExecutionMode = ExecutionMode.agent_assisted,
+        pack_specs: tuple[tuple[str, str], ...] | None = None,
+    ):
         self.default_mode = default_mode
+        self.pack_specs = tuple(pack_specs or DEFAULT_PACK_SPECS)
 
     def route(self, bundle: DeliveryBundle) -> list[ExecutionTask]:
         if bundle.status != BundleStatus.approved:
@@ -32,11 +42,7 @@ class ExecutorRouter:
         effective_mode = self._resolve_mode(bundle)
         tasks: list[ExecutionTask] = []
         now = _utc_now_iso()
-        pack_specs = (
-            ("implementation_pack", "codex"),
-            ("test_pack", "claude_code"),
-        )
-        for source_pack_type, executor_type in pack_specs:
+        for source_pack_type, executor_type in self.pack_specs:
             artifact_ref = getattr(bundle.artifacts, source_pack_type, None)
             if artifact_ref is None or not str(artifact_ref.path or "").strip():
                 continue

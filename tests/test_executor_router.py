@@ -11,8 +11,14 @@ from requirement_review_v1.packs.delivery_bundle import ArtifactRef, BundleStatu
 def _make_bundle(tmp_path, *, status: BundleStatus = BundleStatus.approved, high_risk: bool = False) -> DeliveryBundle:
     run_dir = tmp_path / "20260307T120000Z"
     run_dir.mkdir()
-    (run_dir / "implementation_pack.json").write_text("{}", encoding="utf-8")
-    (run_dir / "test_pack.json").write_text("{}", encoding="utf-8")
+    (run_dir / "implementation_pack.json").write_text(
+        json.dumps({"task_id": "PLAN-TASK-001", "title": "Implement login"}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / "test_pack.json").write_text(
+        json.dumps({"task_id": "PLAN-TASK-002", "title": "Test login"}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (run_dir / "execution_pack.json").write_text(
         json.dumps({"risk_pack": [{"id": "RISK-1", "level": "high" if high_risk else "low"}]}, ensure_ascii=False),
         encoding="utf-8",
@@ -39,12 +45,16 @@ def _make_bundle(tmp_path, *, status: BundleStatus = BundleStatus.approved, high
 def test_executor_router_builds_tasks_for_approved_bundle(tmp_path) -> None:
     bundle = _make_bundle(tmp_path)
     tasks = ExecutorRouter(default_mode=ExecutionMode.agent_auto).route(bundle)
+    task_by_source = {task.source_pack_type: task for task in tasks}
 
     assert len(tasks) == 2
     assert isinstance(tasks[0], ExecutionTask)
-    assert {task.source_pack_type for task in tasks} == {"implementation_pack", "test_pack"}
+    assert set(task_by_source) == {"implementation_pack", "test_pack"}
     assert {task.executor_type for task in tasks} == {"codex", "claude_code"}
     assert {task.execution_mode for task in tasks} == {"agent_auto"}
+    assert task_by_source["implementation_pack"].metadata["artifact_path"].endswith("implementation_pack.json")
+    assert task_by_source["implementation_pack"].metadata["plan_task_id"] == "PLAN-TASK-001"
+    assert task_by_source["test_pack"].metadata["plan_task_id"] == "PLAN-TASK-002"
 
 
 def test_executor_router_rejects_non_approved_bundle(tmp_path) -> None:
@@ -59,6 +69,15 @@ def test_executor_router_downgrades_high_risk_bundle_mode(tmp_path) -> None:
     tasks = ExecutorRouter(default_mode=ExecutionMode.agent_auto).route(bundle)
 
     assert {task.execution_mode for task in tasks} == {"agent_assisted"}
+
+
+def test_executor_router_supports_custom_pack_specs(tmp_path) -> None:
+    bundle = _make_bundle(tmp_path)
+    tasks = ExecutorRouter(pack_specs=(("implementation_pack", "custom_executor"),)).route(bundle)
+
+    assert len(tasks) == 1
+    assert tasks[0].source_pack_type == "implementation_pack"
+    assert tasks[0].executor_type == "custom_executor"
 
 
 def test_executor_router_reassign_updates_executor_and_mode(tmp_path) -> None:

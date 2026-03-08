@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from requirement_review_v1.mcp_server import server as mcp_server
-from requirement_review_v1.service import review_service
+from requirement_review_v1.service import execution_service, review_service
 from requirement_review_v1.service.review_service import ReviewResultSummary
 
 
@@ -446,18 +447,52 @@ def test_get_review_workspace_missing_files_returns_error(tmp_path):
 def _write_approved_bundle_fixture(tmp_path, run_id: str = "20260307T010206Z") -> str:
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
-    (run_dir / "implementation_pack.json").write_text(
-        json.dumps({"pack_type": "implementation_pack", "task_id": "TASK-001", "title": "Implement login"}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    (run_dir / "test_pack.json").write_text(
-        json.dumps({"pack_type": "test_pack", "task_id": "TASK-001", "title": "Test login"}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    (run_dir / "execution_pack.json").write_text(
-        json.dumps({"risk_pack": [{"id": "RISK-001", "level": "low"}]}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+
+    implementation_pack = {
+        "pack_type": "implementation_pack",
+        "task_id": "TASK-001",
+        "title": "Implement login",
+        "summary": "Support recruiter login safely.",
+        "context": "Repository auth flow context.",
+        "target_modules": ["backend.auth"],
+        "implementation_steps": ["Inspect auth flow", "Implement login change"],
+        "constraints": ["Do not break existing auth flow"],
+        "acceptance_criteria": ["Login succeeds"],
+        "recommended_skills": ["pytest"],
+        "agent_handoff": {
+            "primary_agent": "codex",
+            "supporting_agents": ["claude_code"],
+            "goals": ["Implement login"],
+            "expected_output": "Small safe auth patch",
+        },
+    }
+    test_pack = {
+        "pack_type": "test_pack",
+        "task_id": "TASK-001",
+        "title": "Test login",
+        "summary": "Validate recruiter login flow.",
+        "test_scope": ["Login API"],
+        "edge_cases": ["Invalid credentials"],
+        "acceptance_criteria": ["Regression covered"],
+        "agent_handoff": {
+            "primary_agent": "claude_code",
+            "supporting_agents": ["codex"],
+            "goals": ["Run auth checks"],
+            "expected_output": "Validation summary",
+        },
+    }
+    execution_pack = {
+        "pack_type": "execution_pack",
+        "pack_version": "1.0",
+        "implementation_pack": implementation_pack,
+        "test_pack": test_pack,
+        "risk_pack": [{"id": "RISK-001", "summary": "Auth regression", "level": "low"}],
+        "handoff_strategy": "sequential",
+    }
+
+    (run_dir / "implementation_pack.json").write_text(json.dumps(implementation_pack, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "test_pack.json").write_text(json.dumps(test_pack, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "execution_pack.json").write_text(json.dumps(execution_pack, ensure_ascii=False, indent=2), encoding="utf-8")
     (run_dir / "report.json").write_text(
         json.dumps(
             {
@@ -496,14 +531,46 @@ def _write_approved_bundle_fixture(tmp_path, run_id: str = "20260307T010206Z") -
 @pytest.mark.asyncio
 async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_path):
     bundle_id = _write_approved_bundle_fixture(tmp_path)
+    run_dir = tmp_path / "20260307T010206Z"
 
     result = await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    tasks_payload = json.loads((run_dir / "execution_tasks.json").read_text(encoding="utf-8"))["tasks"]
+    task_by_source = {item["source_pack_type"]: item for item in tasks_payload}
 
     assert "error" not in result
     assert result["status"] == "routed"
     assert result["task_count"] == 2
-    assert (tmp_path / "20260307T010206Z" / "execution_tasks.json").exists()
-    assert (tmp_path / "20260307T010206Z" / "traceability_map.json").exists()
+    assert (run_dir / "execution_tasks.json").exists()
+    assert (run_dir / "traceability_map.json").exists()
+    assert (run_dir / "codex_request.json").exists()
+    assert (run_dir / "claude_code_request.json").exists()
+    assert task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["request_path"].endswith("codex_request.json")
+    assert task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["request_path"].endswith("claude_code_request.json")
+    assert task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["request_type"] == "codex.run_pack"
+    assert task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["request_type"] == "claude_code.run_pack"
+    assert Path(task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
+    assert Path(task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
+
+
+@pytest.mark.asyncio
+async def test_handoff_to_executor_returns_invalid_input_when_adapter_is_missing(tmp_path, monkeypatch):
+    bundle_id = _write_approved_bundle_fixture(tmp_path, run_id="20260307T010207Z")
+    original_router = execution_service.ExecutorRouter
+
+    monkeypatch.setattr(
+        execution_service,
+        "ExecutorRouter",
+        lambda default_mode=execution_service.ExecutionMode.agent_assisted: original_router(
+            default_mode=default_mode,
+            pack_specs=(("implementation_pack", "unknown_adapter"),),
+        ),
+    )
+
+    result = await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    assert result["error"]["code"] == "invalid_input"
+    assert "unknown_adapter" in result["error"]["message"]
+    assert not (tmp_path / "20260307T010207Z" / "execution_tasks.json").exists()
 
 
 @pytest.mark.asyncio
@@ -520,7 +587,9 @@ async def test_get_execution_status_returns_bundle_tasks_and_task_lookup(tmp_pat
 
     assert by_bundle["task_count"] == 2
     assert by_bundle["tasks"][0]["bundle_id"] == bundle_id
+    assert by_bundle["tasks"][0]["metadata"]["adapter_artifacts"]["request_path"]
     assert by_task["task"]["task_id"] == "bundle-20260307T010206Z:implementation_pack"
+    assert by_task["task"]["metadata"]["adapter_artifacts"]["request_type"] == "codex.run_pack"
     assert by_task["traceability"]["counts"]["total"] == 1
     assert (run_dir / "execution_tasks.json").exists()
 

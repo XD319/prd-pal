@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from requirement_review_v1.adapters import get_adapter
 from requirement_review_v1.execution import ExecutionMode, ExecutionTask, ExecutorRouter, TraceabilityMap
 from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
 from requirement_review_v1.service.review_service import _load_json_object, _locate_bundle_path, _resolve_outputs_root
@@ -70,6 +71,97 @@ def _find_all_run_dirs(outputs_root: str | Path) -> list[Path]:
     return [path for path in root.iterdir() if path.is_dir()]
 
 
+def _resolve_adapter(executor_type: str):
+    normalized = str(executor_type or "").strip()
+    try:
+        return get_adapter(normalized)
+    except ValueError as exc:
+        raise ValueError(f"no adapter available for executor_type '{normalized}'") from exc
+
+
+def _sanitize_filename_fragment(value: str) -> str:
+    raw = str(value or "").strip()
+    normalized = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in raw)
+    normalized = normalized.strip("_")
+    return normalized or "task"
+
+
+def _task_context_path(run_dir: Path, task: ExecutionTask) -> Path:
+    return run_dir / f"{_sanitize_filename_fragment(task.task_id)}_execution_context.md"
+
+
+def _rewrite_request_context_paths(request_payload: dict[str, Any], context_path: Path) -> dict[str, Any]:
+    payload = dict(request_payload)
+    payload["context_path"] = str(context_path)
+
+    current_input = payload.get("input")
+    if isinstance(current_input, dict):
+        updated_input = dict(current_input)
+        updated_input["context_file"] = str(context_path)
+        payload["input"] = updated_input
+
+    current_callback = payload.get("callback")
+    if isinstance(current_callback, dict):
+        updated_callback = dict(current_callback)
+        updated_callback["context_file"] = str(context_path)
+        payload["callback"] = updated_callback
+
+    return payload
+
+
+def _attach_adapter_artifacts(
+    task: ExecutionTask,
+    *,
+    request_path: Path,
+    context_path: Path,
+    request_payload: dict[str, Any],
+) -> ExecutionTask:
+    payload = task.model_dump(mode="python")
+    metadata = dict(task.metadata or {})
+    metadata["adapter_artifacts"] = {
+        "adapter": task.executor_type,
+        "request_path": str(request_path),
+        "context_path": str(context_path),
+        "request_type": str(request_payload.get("request_type", "") or ""),
+    }
+    payload["metadata"] = metadata
+    return ExecutionTask.model_validate(payload)
+
+
+def _materialize_adapter_requests(tasks: list[ExecutionTask], bundle: DeliveryBundle, run_dir: Path) -> list[ExecutionTask]:
+    materialized_tasks: list[ExecutionTask] = []
+    for task in tasks:
+        adapter = _resolve_adapter(task.executor_type)
+        result = adapter.build_pack({"task": task, "bundle": bundle})
+
+        request_path = Path(str(result.get("request_path", "")).strip())
+        request_payload = result.get("request") if isinstance(result.get("request"), dict) else {}
+        if not request_path.name:
+            raise ValueError(f"adapter did not return a request path for task '{task.task_id}'")
+        if not request_payload:
+            request_payload = _load_json_object(request_path)
+
+        temporary_context_path = Path(str(result.get("context_path", "")).strip())
+        final_context_path = _task_context_path(run_dir, task)
+        if temporary_context_path.exists():
+            final_context_path.write_text(temporary_context_path.read_text(encoding="utf-8"), encoding="utf-8")
+            if temporary_context_path != final_context_path:
+                temporary_context_path.unlink()
+
+        updated_request_payload = _rewrite_request_context_paths(request_payload, final_context_path)
+        request_path.write_text(json.dumps(updated_request_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        materialized_tasks.append(
+            _attach_adapter_artifacts(
+                task,
+                request_path=request_path,
+                context_path=final_context_path,
+                request_payload=updated_request_payload,
+            )
+        )
+    return materialized_tasks
+
+
 def handoff_to_executor_for_mcp(
     *,
     bundle_id: str,
@@ -80,6 +172,7 @@ def handoff_to_executor_for_mcp(
     _, run_dir, bundle = _load_bundle_context(bundle_id, resolved_options.get("outputs_root", "outputs"))
     router = ExecutorRouter(default_mode=_resolve_mode(execution_mode))
     tasks = router.route(bundle)
+    tasks = _materialize_adapter_requests(tasks, bundle, run_dir)
     tasks_path = _save_tasks(tasks, run_dir)
 
     traceability = TraceabilityMap().build_from_bundle(bundle, tasks)
