@@ -10,6 +10,12 @@ from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from requirement_review_v1.monitoring import (
+    RetryOperationError,
+    RetryTargetNotFoundError,
+    query_audit_events,
+    retry_operation as retry_governance_operation,
+)
 from requirement_review_v1.service.execution_service import (
     get_execution_status_for_mcp,
     get_traceability_for_mcp,
@@ -265,6 +271,96 @@ def get_template_registry(
         return {"count": 0, "templates": [], "error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
         return {"count": 0, "templates": [], "error": {"code": "internal_error", "message": f"get_template_registry failed: {exc}"}}
+
+
+@mcp.tool()
+def get_audit_events(
+    run_id: str | None = None,
+    bundle_id: str | None = None,
+    task_id: str | None = None,
+    event_type: str | None = None,
+    status: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Query persisted audit events with optional workflow filters."""
+    try:
+        resolved_options = options or {}
+        if not isinstance(resolved_options, dict):
+            raise TypeError("options must be an object")
+        outputs_root = resolved_options.get("outputs_root", "outputs")
+        events = query_audit_events(
+            outputs_root,
+            run_id=run_id,
+            bundle_id=bundle_id,
+            task_id=task_id,
+            event_type=event_type,
+            status=status,
+        )
+        return {
+            "count": len(events),
+            "events": events,
+            "filters": {
+                "run_id": run_id,
+                "bundle_id": bundle_id,
+                "task_id": task_id,
+                "event_type": event_type,
+                "status": status,
+            },
+        }
+    except (TypeError, ValueError) as exc:
+        return {"count": 0, "events": [], "error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"count": 0, "events": [], "error": {"code": "internal_error", "message": f"get_audit_events failed: {exc}"}}
+
+
+@mcp.tool()
+def retry_operation(
+    run_id: str,
+    operation: str,
+    options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Retry one non-blocking governance operation for a persisted run."""
+    try:
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="retry_operation")
+        outputs_root = audited_options.get("outputs_root", "outputs")
+        result = retry_governance_operation(
+            run_id=run_id,
+            operation=operation,
+            outputs_root=outputs_root,
+            audit_context=audited_options.get("audit_context"),
+        )
+        return result
+    except RetryTargetNotFoundError as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "operation": str(operation or ""),
+            "error": {"code": "not_found", "message": str(exc)},
+        }
+    except RetryOperationError as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "operation": str(operation or ""),
+            "error": {"code": "invalid_operation", "message": str(exc)},
+        }
+    except FileNotFoundError as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "operation": str(operation or ""),
+            "error": {"code": "not_found", "message": str(exc)},
+        }
+    except (TypeError, ValueError) as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "operation": str(operation or ""),
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
+    except Exception as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "operation": str(operation or ""),
+            "error": {"code": "internal_error", "message": f"retry_operation failed: {exc}"},
+        }
 
 
 @mcp.tool()

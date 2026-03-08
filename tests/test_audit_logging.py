@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from requirement_review_v1.mcp_server import server as mcp_server
+from requirement_review_v1.server import app as app_module
 from requirement_review_v1.monitoring import read_audit_events
 from requirement_review_v1.service import review_service
 
@@ -297,3 +299,34 @@ def test_block_by_risk_writes_notification_dispatch_audit_events(tmp_path: Path)
     assert {event["details"]["event_type"] for event in notification_events} == {"blocked_by_risk"}
     assert {event["details"]["channel"] for event in notification_events} == {"feishu", "wecom"}
     assert all(event["client_metadata"]["request_id"] == "req-risk-1" for event in notification_events)
+
+
+def test_query_audit_events_endpoint_filters_by_run_and_event_type(tmp_path: Path) -> None:
+    bundle_id, run_dir = _write_draft_bundle_fixture(tmp_path, run_id="20260308T040510Z")
+    options = {"outputs_root": str(tmp_path), "client_metadata": {"request_id": "req-audit-1"}}
+
+    mcp_server.approve_handoff(
+        bundle_id=bundle_id,
+        action="block_by_risk",
+        reviewer="alice",
+        comment="Critical auth regression risk",
+        options=options,
+    )
+
+    original_root = app_module.OUTPUTS_ROOT
+    app_module.OUTPUTS_ROOT = tmp_path
+    try:
+        client = TestClient(app_module.app)
+        response = client.get(
+            "/api/audit",
+            params={"run_id": "20260308T040510Z", "event_type": "blocked_by_risk", "status": "dispatched"},
+        )
+    finally:
+        app_module.OUTPUTS_ROOT = original_root
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 2
+    assert payload["filters"]["run_id"] == "20260308T040510Z"
+    assert {event["details"]["event_type"] for event in payload["events"]} == {"blocked_by_risk"}
+    assert {event["status"] for event in payload["events"]} == {"dispatched"}

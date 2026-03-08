@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, model_validator
 
+from requirement_review_v1.monitoring import query_audit_events
 from requirement_review_v1.run_review import make_run_id
 from requirement_review_v1.service.review_service import review_prd_text_async
 from requirement_review_v1.templates import TemplateRegistryError, list_template_records
@@ -197,6 +198,35 @@ def list_templates_by_type_endpoint(template_type: str, version: str | None = Qu
     except TemplateRegistryError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"template_type": template_type, "count": len(templates), "templates": templates}
+
+
+@app.get("/api/audit")
+def list_audit_events_endpoint(
+    run_id: str | None = Query(default=None),
+    bundle_id: str | None = Query(default=None),
+    task_id: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+) -> dict[str, Any]:
+    events = query_audit_events(
+        OUTPUTS_ROOT,
+        run_id=run_id,
+        bundle_id=bundle_id,
+        task_id=task_id,
+        event_type=event_type,
+        status=status,
+    )
+    return {
+        "count": len(events),
+        "events": events,
+        "filters": {
+            "run_id": run_id,
+            "bundle_id": bundle_id,
+            "task_id": task_id,
+            "event_type": event_type,
+            "status": status,
+        },
+    }
 
 
 @app.post("/api/review")

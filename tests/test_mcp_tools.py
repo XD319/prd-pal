@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from requirement_review_v1.mcp_server import server as mcp_server
-from requirement_review_v1.notifications import read_notification_records
+from requirement_review_v1.notifications import BaseNotifier, dispatch_notification, read_notification_records
 from requirement_review_v1.service import execution_service, review_service
 from requirement_review_v1.service.review_service import ReviewResultSummary
 
@@ -815,3 +815,80 @@ def test_get_template_registry_returns_not_found_for_unknown_type() -> None:
     assert result["count"] == 0
     assert result["error"]["code"] == "not_found"
     assert "unknown template_type" in result["error"]["message"]
+
+
+class _BrokenNotifier(BaseNotifier):
+    channel = "broken"
+    description = "Always fail during payload generation."
+
+    def build_payload(self, event):
+        raise RuntimeError(f"cannot render {event.event_type}")
+
+
+def test_get_audit_events_filters_by_event_type_and_status(tmp_path):
+    bundle_id, run_dir = _write_draft_notification_bundle_fixture(tmp_path, run_id="20260307T010212Z")
+
+    mcp_server.approve_handoff(
+        bundle_id=bundle_id,
+        action="block_by_risk",
+        reviewer="alice",
+        comment="Critical auth regression risk",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    result = mcp_server.get_audit_events(
+        run_id="20260307T010212Z",
+        event_type="blocked_by_risk",
+        status="dispatched",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    assert "error" not in result
+    assert result["count"] == 2
+    assert {event["details"]["event_type"] for event in result["events"]} == {"blocked_by_risk"}
+    assert {event["status"] for event in result["events"]} == {"dispatched"}
+
+
+def test_retry_operation_tool_retries_failed_notification_dispatch(tmp_path):
+    run_id = "20260307T010213Z"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    dispatch_notification(
+        run_dir,
+        notification_type="blocked_by_risk",
+        title="Bundle blocked by risk",
+        summary="Critical dependency risk remains unresolved.",
+        run_id=run_id,
+        bundle_id=f"bundle-{run_id}",
+        notifiers=[_BrokenNotifier()],
+        audit_context={"tool_name": "approve_handoff", "source": "mcp"},
+    )
+
+    result = mcp_server.retry_operation(
+        run_id=run_id,
+        operation="notification_dispatch",
+        options={"outputs_root": str(tmp_path)},
+    )
+    notifications = read_notification_records(run_dir)
+
+    assert "error" not in result
+    assert result["before_status"] == "failed"
+    assert result["after_status"] == "dispatched"
+    assert result["notifications_retried"] == 1
+    retried = [item for item in notifications if item["dispatch_status"] == "dispatched"]
+    assert len(retried) == 2
+    assert {item["channel"] for item in retried} == {"feishu", "wecom"}
+
+
+def test_retry_operation_tool_rejects_invalid_operation(tmp_path):
+    run_id = "20260307T010214Z"
+    (tmp_path / run_id).mkdir(parents=True)
+
+    result = mcp_server.retry_operation(
+        run_id=run_id,
+        operation="approval",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    assert result["error"]["code"] == "invalid_operation"
+    assert "operation must be one of" in result["error"]["message"]

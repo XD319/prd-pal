@@ -1,4 +1,4 @@
-"""Audit log persistence for workflow governance."""
+"""Audit log persistence and query helpers for workflow governance."""
 
 from __future__ import annotations
 
@@ -116,3 +116,58 @@ def read_audit_events(run_dir: str | Path) -> list[dict[str, Any]]:
         if isinstance(loaded, dict):
             events.append(loaded)
     return events
+
+
+def _iter_run_dirs(outputs_root: str | Path) -> list[Path]:
+    root = Path(outputs_root)
+    if not root.exists():
+        return []
+    return sorted([path for path in root.iterdir() if path.is_dir()], key=lambda path: path.name)
+
+
+def _matches_event_type(event: dict[str, Any], event_type: str) -> bool:
+    normalized_event_type = str(event_type or "").strip()
+    if not normalized_event_type:
+        return True
+    operation = str(event.get("operation") or "").strip()
+    if operation == normalized_event_type:
+        return True
+    details = event.get("details")
+    if isinstance(details, dict) and str(details.get("event_type") or "").strip() == normalized_event_type:
+        return True
+    return False
+
+
+def query_audit_events(
+    outputs_root: str | Path = "outputs",
+    *,
+    run_id: str | None = None,
+    bundle_id: str | None = None,
+    task_id: str | None = None,
+    event_type: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    run_key = str(run_id or "").strip()
+    bundle_key = str(bundle_id or "").strip()
+    task_key = str(task_id or "").strip()
+    event_type_key = str(event_type or "").strip()
+    status_key = str(status or "").strip()
+
+    run_dirs = [Path(outputs_root) / run_key] if run_key else _iter_run_dirs(outputs_root)
+    events: list[dict[str, Any]] = []
+    for run_dir in run_dirs:
+        if not run_dir.exists() or not run_dir.is_dir():
+            continue
+        for event in read_audit_events(run_dir):
+            if run_key and str(event.get("run_id") or run_dir.name) != run_key:
+                continue
+            if bundle_key and str(event.get("bundle_id") or "").strip() != bundle_key:
+                continue
+            if task_key and str(event.get("task_id") or "").strip() != task_key:
+                continue
+            if status_key and str(event.get("status") or "").strip() != status_key:
+                continue
+            if event_type_key and not _matches_event_type(event, event_type_key):
+                continue
+            events.append(event)
+    return sorted(events, key=lambda item: (str(item.get("timestamp") or ""), str(item.get("event_id") or "")))
