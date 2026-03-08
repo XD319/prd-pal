@@ -24,6 +24,7 @@ from requirement_review_v1.service.review_service import (
     get_review_workspace_for_mcp,
     review_prd_for_mcp_async,
 )
+from requirement_review_v1.templates import TemplateRegistryError, get_template_record, list_template_records
 
 mcp = FastMCP("requirement-review-v1")
 
@@ -237,6 +238,33 @@ def get_review_workspace(
         return {"error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
         return {"error": {"code": "internal_error", "message": f"get_review_workspace failed: {exc}"}}
+
+
+@mcp.tool()
+def get_template_registry(
+    template_type: str | None = None,
+    template_id: str | None = None,
+    version: str | None = None,
+) -> dict[str, Any]:
+    """Query registered templates and resolved versions for prompts and artifacts."""
+    try:
+        if template_id and str(template_id).strip():
+            template = get_template_record(str(template_id).strip(), version=version)
+            return {"count": 1, "templates": [template]}
+
+        templates = list(list_template_records(template_type=template_type, version=version))
+        payload: dict[str, Any] = {"count": len(templates), "templates": templates}
+        if template_type is not None:
+            payload["template_type"] = template_type
+        if version is not None:
+            payload["version"] = version
+        return payload
+    except TemplateRegistryError as exc:
+        return {"count": 0, "templates": [], "error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"count": 0, "templates": [], "error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"count": 0, "templates": [], "error": {"code": "internal_error", "message": f"get_template_registry failed: {exc}"}}
 
 
 @mcp.tool()

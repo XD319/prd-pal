@@ -14,6 +14,7 @@ from pydantic import BaseModel, model_validator
 
 from requirement_review_v1.run_review import make_run_id
 from requirement_review_v1.service.review_service import review_prd_text_async
+from requirement_review_v1.templates import TemplateRegistryError, list_template_records
 
 OUTPUTS_ROOT = Path("outputs")
 PRIMARY_NODES = ("parser", "planner", "risk", "reviewer", "reporter")
@@ -178,6 +179,24 @@ async def _run_job(
 @app.on_event("startup")
 async def _load_env() -> None:
     load_dotenv()
+
+
+@app.get("/api/templates")
+def list_templates_endpoint(version: str | None = Query(default=None)) -> dict[str, Any]:
+    try:
+        templates = list(list_template_records(version=version))
+    except TemplateRegistryError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"count": len(templates), "templates": templates}
+
+
+@app.get("/api/templates/{template_type}")
+def list_templates_by_type_endpoint(template_type: str, version: str | None = Query(default=None)) -> dict[str, Any]:
+    try:
+        templates = list(list_template_records(template_type=template_type, version=version))
+    except TemplateRegistryError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"template_type": template_type, "count": len(templates), "templates": templates}
 
 
 @app.post("/api/review")

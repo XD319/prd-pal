@@ -12,7 +12,7 @@ from typing import Any
 
 from requirement_review_v1.connectors import ConnectorRegistry
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
-from requirement_review_v1.handoff.templates import CLAUDE_CODE_PROMPT_TEMPLATE, CODEX_PROMPT_TEMPLATE
+from requirement_review_v1.templates import get_adapter_prompt_template
 from requirement_review_v1.monitoring import append_audit_event, retry_metadata_for_status
 from requirement_review_v1.notifications import NotificationType, record_dry_run_notification
 from requirement_review_v1.packs import (
@@ -282,15 +282,17 @@ def build_handoff_prompts(
     *,
     trace: dict[str, Any] | None = None,
 ) -> dict[str, str]:
+    codex_prompt_template = get_adapter_prompt_template("adapter.codex.handoff_markdown")
+    claude_code_prompt_template = get_adapter_prompt_template("adapter.claude_code.handoff_markdown")
     renderer_trace: dict[str, Any] = {
         "start": _utc_now_iso(),
         "end": "",
         "duration_ms": 0,
         "status": "running",
-        "template_version": CODEX_PROMPT_TEMPLATE.version,
+        "template_version": codex_prompt_template.version,
         "templates": {
-            "codex_prompt": CODEX_PROMPT_TEMPLATE.trace_metadata(),
-            "claude_code_prompt": CLAUDE_CODE_PROMPT_TEMPLATE.trace_metadata(),
+            "codex_prompt": codex_prompt_template.trace_metadata(),
+            "claude_code_prompt": claude_code_prompt_template.trace_metadata(),
         },
         "output_paths": {},
         "error_message": "",

@@ -41,6 +41,17 @@ class TemplateDefinition:
         metadata["prompt_version"] = self.version
         return metadata
 
+    def registry_metadata(self, *, is_default: bool, status: str) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            "template_id": self.template_id,
+            "template_type": self.template_type,
+            "version": self.version,
+            "description": self.description,
+            "is_default": bool(is_default),
+            "status": str(status or "registered").strip() or "registered",
+        }
+        return metadata
+
 
 @dataclass(frozen=True, slots=True)
 class ReviewPromptTemplate(TemplateDefinition):

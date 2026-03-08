@@ -766,3 +766,41 @@ async def test_update_execution_task_completed_writes_notification_record(tmp_pa
     assert notifications[-1]["task_id"] == f"{bundle_id}:implementation_pack"
     assert notifications[-1]["summary"] == "implemented and validated"
     assert notifications[-1]["payloads"]["wecom"]["dry_run"] is True
+
+
+def test_get_template_registry_lists_registered_templates() -> None:
+    result = mcp_server.get_template_registry()
+
+    assert "error" not in result
+    assert result["count"] >= 1
+    assert result["templates"]
+    assert {
+        "template_id",
+        "template_type",
+        "version",
+        "description",
+        "is_default",
+        "status",
+    } <= set(result["templates"][0])
+
+
+def test_get_template_registry_supports_type_and_id_filters() -> None:
+    by_type = mcp_server.get_template_registry(template_type="adapter_prompt")
+    by_id = mcp_server.get_template_registry(template_id="review.parser")
+
+    assert "error" not in by_type
+    assert by_type["template_type"] == "adapter_prompt"
+    assert by_type["count"] == 2
+    assert {item["template_type"] for item in by_type["templates"]} == {"adapter_prompt"}
+    assert "error" not in by_id
+    assert by_id["count"] == 1
+    assert by_id["templates"][0]["template_id"] == "review.parser"
+    assert by_id["templates"][0]["version"] == "v1.1"
+
+
+def test_get_template_registry_returns_not_found_for_unknown_type() -> None:
+    result = mcp_server.get_template_registry(template_type="unknown_type")
+
+    assert result["count"] == 0
+    assert result["error"]["code"] == "not_found"
+    assert "unknown template_type" in result["error"]["message"]

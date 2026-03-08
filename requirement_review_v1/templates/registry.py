@@ -693,37 +693,155 @@ TEST_CHECKLIST_TEMPLATE = DeliveryArtifactTemplate(
 
 
 _REGISTERED_TEMPLATES: dict[str, dict[str, TemplateDefinition]] = {}
-_LATEST_TEMPLATE_VERSION: dict[str, str] = {}
+_DEFAULT_TEMPLATE_VERSION: dict[str, str] = {}
+_TEMPLATE_IDS_BY_TYPE: dict[str, set[str]] = {}
 
 
-def register_template(template: TemplateDefinition) -> TemplateDefinition:
+class TemplateRegistryError(LookupError):
+    """Base class for controlled template-registry lookup failures."""
+
+
+class TemplateNotFoundError(TemplateRegistryError):
+    """Raised when a template_id is not registered."""
+
+
+class TemplateTypeNotFoundError(TemplateRegistryError):
+    """Raised when a template_type has no registered templates."""
+
+
+class TemplateVersionNotFoundError(TemplateRegistryError):
+    """Raised when a requested template version cannot be resolved."""
+
+
+def _sorted_templates(templates: list[TemplateDefinition]) -> tuple[TemplateDefinition, ...]:
+    return tuple(sorted(templates, key=lambda template: (template.template_type, template.template_id, template.version)))
+
+
+def _template_status(template: TemplateDefinition) -> str:
+    return "active" if is_default_template(template.template_id, template.version) else "registered"
+
+
+def _lookup_versions(template_id: str) -> dict[str, TemplateDefinition]:
+    versions = _REGISTERED_TEMPLATES.get(template_id)
+    if not versions:
+        raise TemplateNotFoundError(f"unknown template_id: {template_id}")
+    return versions
+
+
+def _lookup_template_ids_by_type(template_type: str) -> tuple[str, ...]:
+    ids = _TEMPLATE_IDS_BY_TYPE.get(template_type)
+    if not ids:
+        raise TemplateTypeNotFoundError(f"unknown template_type: {template_type}")
+    return tuple(sorted(ids))
+
+
+def register_template(template: TemplateDefinition, *, is_default: bool | None = None) -> TemplateDefinition:
     versions = _REGISTERED_TEMPLATES.setdefault(template.template_id, {})
     if template.version in versions:
         raise ValueError(f"template already registered: {template.template_id}@{template.version}")
     versions[template.version] = template
-    _LATEST_TEMPLATE_VERSION[template.template_id] = template.version
+    _TEMPLATE_IDS_BY_TYPE.setdefault(template.template_type, set()).add(template.template_id)
+    if is_default is not False:
+        _DEFAULT_TEMPLATE_VERSION[template.template_id] = template.version
+    elif template.template_id not in _DEFAULT_TEMPLATE_VERSION:
+        _DEFAULT_TEMPLATE_VERSION[template.template_id] = template.version
     return template
 
 
-def get_template(template_id: str, version: str | None = None) -> TemplateDefinition:
-    versions = _REGISTERED_TEMPLATES.get(template_id)
-    if not versions:
-        raise KeyError(f"unknown template_id: {template_id}")
-    resolved_version = version or _LATEST_TEMPLATE_VERSION[template_id]
+def resolve_default_template_version(template_id: str) -> str:
+    _lookup_versions(template_id)
     try:
-        return versions[resolved_version]
+        return _DEFAULT_TEMPLATE_VERSION[template_id]
     except KeyError as exc:
-        raise KeyError(f"unknown template version: {template_id}@{resolved_version}") from exc
+        raise TemplateVersionNotFoundError(f"no default version registered for template_id: {template_id}") from exc
 
 
-def list_templates(*, template_type: str | None = None) -> tuple[TemplateDefinition, ...]:
+def resolve_template_version(template_id: str, version: str | None = None) -> str:
+    if version is None:
+        return resolve_default_template_version(template_id)
+    versions = _lookup_versions(template_id)
+    normalized_version = str(version or "").strip()
+    if normalized_version in versions:
+        return normalized_version
+    raise TemplateVersionNotFoundError(f"unknown template version: {template_id}@{normalized_version}")
+
+
+def get_default_template(template_id: str) -> TemplateDefinition:
+    return get_template(template_id, resolve_default_template_version(template_id))
+
+
+def get_template_by_version(template_id: str, version: str) -> TemplateDefinition:
+    return get_template(template_id, version)
+
+
+def get_template(template_id: str, version: str | None = None) -> TemplateDefinition:
+    versions = _lookup_versions(template_id)
+    resolved_version = resolve_template_version(template_id, version)
+    return versions[resolved_version]
+
+
+def is_default_template(template_id: str, version: str) -> bool:
+    try:
+        return resolve_default_template_version(template_id) == str(version or "").strip()
+    except TemplateRegistryError:
+        return False
+
+
+def list_templates(
+    *,
+    template_type: str | None = None,
+    version: str | None = None,
+) -> tuple[TemplateDefinition, ...]:
+    if template_type is not None:
+        return get_templates_by_type(template_type, version=version)
+
+    templates = [template for versions in _REGISTERED_TEMPLATES.values() for template in versions.values()]
+    if version is not None:
+        normalized_version = str(version or "").strip()
+        templates = [template for template in templates if template.version == normalized_version]
+        if not templates:
+            raise TemplateVersionNotFoundError(f"unknown template version: {normalized_version}")
+    return _sorted_templates(templates)
+
+
+def get_templates_by_type(template_type: str, *, version: str | None = None) -> tuple[TemplateDefinition, ...]:
+    template_ids = _lookup_template_ids_by_type(str(template_type or "").strip())
+    if version is None:
+        templates = [template for template_id in template_ids for template in _lookup_versions(template_id).values()]
+        return _sorted_templates(templates)
+
+    normalized_version = str(version or "").strip()
     templates = [
-        template
-        for versions in _REGISTERED_TEMPLATES.values()
-        for template in versions.values()
-        if template_type is None or template.template_type == template_type
+        versions[normalized_version]
+        for template_id in template_ids
+        for versions in [_lookup_versions(template_id)]
+        if normalized_version in versions
     ]
-    return tuple(sorted(templates, key=lambda template: (template.template_type, template.template_id, template.version)))
+    if not templates:
+        raise TemplateVersionNotFoundError(
+            f"unknown template version for template_type {template_type}: {normalized_version}"
+        )
+    return _sorted_templates(templates)
+
+
+def find_templates_by_version(version: str, *, template_type: str | None = None) -> tuple[TemplateDefinition, ...]:
+    return list_templates(template_type=template_type, version=version)
+
+
+def get_template_record(template_id: str, version: str | None = None) -> dict[str, Any]:
+    template = get_template(template_id, version)
+    return template.registry_metadata(
+        is_default=is_default_template(template.template_id, template.version),
+        status=_template_status(template),
+    )
+
+
+def list_template_records(
+    *,
+    template_type: str | None = None,
+    version: str | None = None,
+) -> tuple[dict[str, Any], ...]:
+    return tuple(get_template_record(template.template_id, template.version) for template in list_templates(template_type=template_type, version=version))
 
 
 def get_review_prompt_template(template_id: str, version: str | None = None) -> ReviewPromptTemplate:
