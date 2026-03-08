@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from requirement_review_v1.mcp_server import server as mcp_server
+from requirement_review_v1.notifications import read_notification_records
 from requirement_review_v1.service import execution_service, review_service
 from requirement_review_v1.service.review_service import ReviewResultSummary
 
@@ -535,6 +536,7 @@ async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_
 
     result = await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
     tasks_payload = json.loads((run_dir / "execution_tasks.json").read_text(encoding="utf-8"))["tasks"]
+    notifications = read_notification_records(run_dir)
     task_by_source = {item["source_pack_type"]: item for item in tasks_payload}
 
     assert "error" not in result
@@ -550,6 +552,8 @@ async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_
     assert task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["request_type"] == "claude_code.run_pack"
     assert Path(task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
     assert Path(task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
+    assert notifications[-1]["notification_type"] == "executor_handoff_created"
+    assert notifications[-1]["payloads"]["feishu"]["dry_run"] is True
 
 
 @pytest.mark.asyncio
@@ -668,3 +672,97 @@ async def test_list_execution_tasks_tool_supports_status_filter(tmp_path):
     assert assigned_only["tasks"][0]["task_id"] == f"{bundle_id}:implementation_pack"
     assert pending_only["count"] == 1
     assert pending_only["tasks"][0]["task_id"] == f"{bundle_id}:test_pack"
+
+
+
+def _write_draft_notification_bundle_fixture(tmp_path, run_id: str = "20260307T010210Z") -> tuple[str, Path]:
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    bundle_id = f"bundle-{run_id}"
+    bundle_payload = {
+        "bundle_id": bundle_id,
+        "bundle_version": "1.0",
+        "created_at": "2026-03-07T12:00:00+00:00",
+        "status": "draft",
+        "source_run_id": run_id,
+        "artifacts": {
+            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
+            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
+            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
+            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
+            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
+            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
+            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
+            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+        },
+        "approval_history": [],
+        "metadata": {},
+    }
+    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return bundle_id, run_dir
+
+
+def test_approve_handoff_writes_notifications_for_review_follow_up_states(tmp_path):
+    bundle_id, run_dir = _write_draft_notification_bundle_fixture(tmp_path)
+
+    need_more_info = mcp_server.approve_handoff(
+        bundle_id=bundle_id,
+        action="need_more_info",
+        reviewer="alice",
+        comment="Missing owner for OAuth onboarding",
+        options={"outputs_root": str(tmp_path)},
+    )
+    blocked = mcp_server.approve_handoff(
+        bundle_id=bundle_id,
+        action="block_by_risk",
+        reviewer="alice",
+        comment="Critical auth regression risk",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    notifications = read_notification_records(run_dir)
+
+    assert "error" not in need_more_info
+    assert "error" not in blocked
+    assert [item["notification_type"] for item in notifications] == ["approval_requested", "blocked_by_risk"]
+    assert notifications[0]["metadata"]["tool_name"] == "approve_handoff"
+    assert notifications[0]["summary"] == "Missing owner for OAuth onboarding"
+    assert notifications[1]["summary"] == "Critical auth regression risk"
+
+
+@pytest.mark.asyncio
+async def test_update_execution_task_completed_writes_notification_record(tmp_path):
+    run_id = "20260307T010211Z"
+    bundle_id = _write_approved_bundle_fixture(tmp_path, run_id=run_id)
+    run_dir = tmp_path / run_id
+    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    mcp_server.update_execution_task(
+        task_id=f"{bundle_id}:implementation_pack",
+        status="assigned",
+        actor="executor-gateway",
+        assigned_to="codex-worker-1",
+        options={"outputs_root": str(tmp_path)},
+    )
+    mcp_server.update_execution_task(
+        task_id=f"{bundle_id}:implementation_pack",
+        status="in_progress",
+        actor="codex-worker-1",
+        detail="working through auth changes",
+        options={"outputs_root": str(tmp_path)},
+    )
+    completed = mcp_server.update_execution_task(
+        task_id=f"{bundle_id}:implementation_pack",
+        status="completed",
+        actor="codex-worker-1",
+        result_summary="implemented and validated",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    notifications = read_notification_records(run_dir)
+
+    assert "error" not in completed
+    assert notifications[-1]["notification_type"] == "execution_completed"
+    assert notifications[-1]["task_id"] == f"{bundle_id}:implementation_pack"
+    assert notifications[-1]["summary"] == "implemented and validated"
+    assert notifications[-1]["payloads"]["wecom"]["dry_run"] is True

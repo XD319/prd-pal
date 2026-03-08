@@ -23,6 +23,7 @@ from requirement_review_v1.execution import (
     start_task,
 )
 from requirement_review_v1.monitoring import append_audit_event, normalize_audit_context, retry_metadata_for_status
+from requirement_review_v1.notifications import NotificationType, record_dry_run_notification
 from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
 from requirement_review_v1.service.review_service import _load_json_object, _locate_bundle_path, _resolve_outputs_root
 from requirement_review_v1.workspace import ReviewWorkspaceRepository
@@ -93,6 +94,28 @@ def _append_audit_event_safe(
             run_dir,
             operation=operation,
             status=status,
+            audit_context=audit_context,
+            **kwargs,
+        )
+    except Exception:
+        pass
+
+
+def _record_notification_safe(
+    run_dir: Path,
+    *,
+    notification_type: NotificationType | str,
+    title: str,
+    summary: str = "",
+    audit_context: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> None:
+    try:
+        record_dry_run_notification(
+            run_dir,
+            notification_type=notification_type,
+            title=title,
+            summary=summary,
             audit_context=audit_context,
             **kwargs,
         )
@@ -485,6 +508,21 @@ def handoff_to_executor_for_mcp(
         },
         retry=retry_metadata_for_status(status="routed", non_blocking=False),
     )
+    _record_notification_safe(
+        run_dir,
+        notification_type=NotificationType.executor_handoff_created,
+        title=f"Executor handoff created: {bundle.bundle_id}",
+        summary=f"{len(tasks)} execution tasks were routed in {execution_mode} mode.",
+        run_id=str(bundle.source_run_id),
+        bundle_id=str(bundle.bundle_id),
+        metadata={
+            "execution_mode": execution_mode,
+            "task_count": len(tasks),
+            "tasks_path": str(tasks_path),
+            "traceability_path": str(traceability_path),
+        },
+        audit_context=audit_context,
+    )
 
     return {
         "bundle_id": bundle.bundle_id,
@@ -664,6 +702,36 @@ def update_execution_task_for_mcp(
         },
         retry=retry_metadata_for_status(status=str(updated_task.status), non_blocking=False),
     )
+    if transitioned and str(updated_task.status) in {ExecutionTaskStatus.completed.value, ExecutionTaskStatus.failed.value}:
+        notification_type = (
+            NotificationType.execution_completed
+            if str(updated_task.status) == ExecutionTaskStatus.completed.value
+            else NotificationType.execution_failed
+        )
+        title = (
+            f"Execution completed: {updated_task.task_id}"
+            if notification_type == NotificationType.execution_completed
+            else f"Execution failed: {updated_task.task_id}"
+        )
+        summary = normalized_result_summary or normalized_detail or str(updated_task.result_summary or updated_task.status)
+        _record_notification_safe(
+            run_dir,
+            notification_type=notification_type,
+            title=title,
+            summary=summary,
+            run_id=str(bundle.source_run_id),
+            bundle_id=str(updated_task.bundle_id),
+            task_id=str(updated_task.task_id),
+            metadata={
+                "from_status": previous_status,
+                "to_status": str(updated_task.status),
+                "assigned_to": str(updated_task.assigned_to or ""),
+                "detail": normalized_detail,
+                "result_summary": normalized_result_summary,
+                "artifact_paths": normalized_artifact_paths,
+            },
+            audit_context=audit_context,
+        )
 
     return {
         "bundle_id": updated_task.bundle_id,

@@ -14,6 +14,7 @@ from requirement_review_v1.connectors import ConnectorRegistry
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
 from requirement_review_v1.handoff.templates import CLAUDE_CODE_PROMPT_TEMPLATE, CODEX_PROMPT_TEMPLATE
 from requirement_review_v1.monitoring import append_audit_event, retry_metadata_for_status
+from requirement_review_v1.notifications import NotificationType, record_dry_run_notification
 from requirement_review_v1.packs import (
     ArtifactSplitter,
     DeliveryBundle,
@@ -143,6 +144,28 @@ def _append_audit_event_safe(
             run_dir,
             operation=operation,
             status=status,
+            audit_context=audit_context,
+            **kwargs,
+        )
+    except Exception:
+        pass
+
+
+def _record_notification_safe(
+    run_dir: str | Path,
+    *,
+    notification_type: NotificationType | str,
+    title: str,
+    summary: str = "",
+    audit_context: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> None:
+    try:
+        record_dry_run_notification(
+            run_dir,
+            notification_type=notification_type,
+            title=title,
+            summary=summary,
             audit_context=audit_context,
             **kwargs,
         )
@@ -802,6 +825,49 @@ def _persist_review_workspace_state(
     )
 
 
+def _resolve_approval_notification(
+    *,
+    action: str,
+    updated_bundle: DeliveryBundle,
+    previous_status: str,
+    comment: str,
+    reviewer: str,
+) -> tuple[NotificationType, str, str, dict[str, Any]] | None:
+    normalized_action = str(action or "").strip()
+    normalized_comment = str(comment or "").strip()
+    normalized_status = str(updated_bundle.status)
+    metadata = {
+        "action": normalized_action,
+        "comment": normalized_comment,
+        "reviewer": str(reviewer or "").strip(),
+        "from_status": previous_status,
+        "to_status": normalized_status,
+    }
+
+    if normalized_status == "blocked_by_risk":
+        return (
+            NotificationType.blocked_by_risk,
+            f"Bundle blocked by risk: {updated_bundle.bundle_id}",
+            normalized_comment or "Delivery bundle is blocked until identified risks are mitigated.",
+            metadata,
+        )
+
+    if normalized_action in {"need_more_info", "reset_to_draft"}:
+        summary = normalized_comment
+        if not summary and normalized_action == "need_more_info":
+            summary = "Delivery bundle needs more context before approval can proceed."
+        if not summary:
+            summary = "Delivery bundle re-entered the review queue and needs approval follow-up."
+        return (
+            NotificationType.approval_requested,
+            f"Approval requested: {updated_bundle.bundle_id}",
+            summary,
+            metadata,
+        )
+
+    return None
+
+
 def approve_handoff_for_mcp(
     *,
     bundle_id: str,
@@ -851,6 +917,25 @@ def approve_handoff_for_mcp(
         },
         retry=retry_metadata_for_status(status=str(updated_bundle.status), non_blocking=False),
     )
+    notification_spec = _resolve_approval_notification(
+        action=action,
+        updated_bundle=updated_bundle,
+        previous_status=previous_status,
+        comment=comment,
+        reviewer=reviewer,
+    )
+    if notification_spec is not None:
+        notification_type, title, summary, metadata = notification_spec
+        _record_notification_safe(
+            bundle_path.parent,
+            notification_type=notification_type,
+            title=title,
+            summary=summary,
+            run_id=str(updated_bundle.source_run_id),
+            bundle_id=str(updated_bundle.bundle_id),
+            metadata=metadata,
+            audit_context=audit_context,
+        )
     return {
         "bundle_id": updated_bundle.bundle_id,
         "status": updated_bundle.status,
