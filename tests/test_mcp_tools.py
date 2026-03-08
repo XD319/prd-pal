@@ -606,3 +606,65 @@ async def test_get_traceability_supports_bundle_and_requirement_queries(tmp_path
     assert by_bundle["counts"]["full"] >= 1
     assert by_requirement["count"] >= 1
     assert by_requirement["links"][0]["requirement_id"] == "REQ-001"
+
+@pytest.mark.asyncio
+async def test_update_execution_task_tool_persists_callback_writeback(tmp_path):
+    run_id = "20260307T010208Z"
+    bundle_id = _write_approved_bundle_fixture(tmp_path, run_id=run_id)
+    run_dir = tmp_path / run_id
+    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+
+    assigned = mcp_server.update_execution_task(
+        task_id=f"{bundle_id}:implementation_pack",
+        status="assigned",
+        actor="executor-gateway",
+        assigned_to="codex-worker-1",
+        detail="claim accepted",
+        artifact_paths={"claim_receipt": str(run_dir / "claim.json")},
+        options={"outputs_root": str(tmp_path)},
+    )
+    in_progress = mcp_server.update_execution_task(
+        task_id=f"{bundle_id}:implementation_pack",
+        status="in_progress",
+        actor="codex-worker-1",
+        detail="patch in progress",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    snapshot_payload = json.loads((run_dir / "status_snapshot.json").read_text(encoding="utf-8"))
+    trace_payload = json.loads((run_dir / "run_trace.json").read_text(encoding="utf-8"))
+
+    assert "error" not in assigned
+    assert "error" not in in_progress
+    assert assigned["task"]["status"] == "assigned"
+    assert assigned["task"]["assigned_to"] == "codex-worker-1"
+    assert assigned["task"]["metadata"]["artifact_paths"]["claim_receipt"].endswith("claim.json")
+    assert in_progress["task"]["status"] == "in_progress"
+    assert snapshot_payload["execution"]["counts"]["in_progress"] == 1
+    assert snapshot_payload["execution"]["last_task_id"] == f"{bundle_id}:implementation_pack"
+    assert trace_payload["execution_updates"][-1]["to_status"] == "in_progress"
+    assert trace_payload["execution_updates"][-1]["actor"] == "codex-worker-1"
+
+
+@pytest.mark.asyncio
+async def test_list_execution_tasks_tool_supports_status_filter(tmp_path):
+    run_id = "20260307T010209Z"
+    bundle_id = _write_approved_bundle_fixture(tmp_path, run_id=run_id)
+    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    mcp_server.update_execution_task(
+        task_id=f"{bundle_id}:implementation_pack",
+        status="assigned",
+        actor="executor-gateway",
+        assigned_to="codex-worker-1",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    by_bundle = mcp_server.list_execution_tasks(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    assigned_only = mcp_server.list_execution_tasks(status="assigned", options={"outputs_root": str(tmp_path)})
+    pending_only = mcp_server.list_execution_tasks(status="pending", options={"outputs_root": str(tmp_path)})
+
+    assert by_bundle["count"] == 2
+    assert assigned_only["count"] == 1
+    assert assigned_only["tasks"][0]["task_id"] == f"{bundle_id}:implementation_pack"
+    assert pending_only["count"] == 1
+    assert pending_only["tasks"][0]["task_id"] == f"{bundle_id}:test_pack"

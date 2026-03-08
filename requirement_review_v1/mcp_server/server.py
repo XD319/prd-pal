@@ -14,6 +14,8 @@ from requirement_review_v1.service.execution_service import (
     get_execution_status_for_mcp,
     get_traceability_for_mcp,
     handoff_to_executor_for_mcp,
+    list_execution_tasks_for_mcp,
+    update_execution_task_for_mcp,
 )
 from requirement_review_v1.service.report_service import get_report_for_mcp
 from requirement_review_v1.service.review_service import (
@@ -161,6 +163,54 @@ async def handoff_to_executor(
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
         return {"bundle_id": str(bundle_id or ""), "error": {"code": "internal_error", "message": f"handoff_to_executor failed: {exc}"}}
+
+
+@mcp.tool()
+def update_execution_task(
+    task_id: str,
+    status: Literal["assigned", "in_progress", "waiting_review", "completed", "failed", "cancelled"],
+    actor: str = "",
+    assigned_to: str = "",
+    detail: str = "",
+    result_summary: str = "",
+    artifact_paths: dict[str, Any] | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist one execution task status update from an external executor callback or polling loop."""
+    try:
+        return update_execution_task_for_mcp(
+            task_id=task_id,
+            status=status,
+            actor=actor,
+            assigned_to=assigned_to,
+            detail=detail,
+            result_summary=result_summary,
+            artifact_paths=artifact_paths,
+            options=options,
+        )
+    except FileNotFoundError as exc:
+        return {"task_id": str(task_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"task_id": str(task_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"task_id": str(task_id or ""), "error": {"code": "internal_error", "message": f"update_execution_task failed: {exc}"}}
+
+
+@mcp.tool()
+def list_execution_tasks(
+    bundle_id: str | None = None,
+    status: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """List persisted execution tasks, optionally filtered by bundle or status."""
+    try:
+        return list_execution_tasks_for_mcp(bundle_id=bundle_id, status=status, options=options)
+    except FileNotFoundError as exc:
+        return {"error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {"error": {"code": "internal_error", "message": f"list_execution_tasks failed: {exc}"}}
 
 
 @mcp.tool()

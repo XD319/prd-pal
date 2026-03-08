@@ -61,3 +61,11 @@ def test_request_review_requires_agent_assisted_mode() -> None:
 
     with pytest.raises(InvalidExecutionTaskTransitionError):
         request_review(task, actor="codex", detail="manual gate")
+
+
+def test_assign_task_records_executor_in_event_detail() -> None:
+    task = assign_task(_task(), executor="codex-worker-1", actor="router")
+
+    assert task.execution_log[-1].event_type == "assigned"
+    assert task.execution_log[-1].detail == "executor=codex-worker-1"
+    assert task.execution_log[-1].actor == "router"
