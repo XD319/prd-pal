@@ -1,0 +1,50 @@
+"""Connector for local Markdown and plain-text requirement files."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from requirement_review_v1.connectors.base import BaseConnector
+from requirement_review_v1.connectors.schemas import SourceDocument, SourceMetadata, SourceType
+
+
+class LocalFileConnector(BaseConnector):
+    """Read supported local files and normalize them into ``SourceDocument``."""
+
+    SUPPORTED_SUFFIXES = {".md", ".txt"}
+    MIME_TYPES = {
+        ".md": "text/markdown",
+        ".txt": "text/plain",
+    }
+
+    def can_handle(self, source: str) -> bool:
+        path = Path(source)
+        return path.suffix.lower() in self.SUPPORTED_SUFFIXES
+
+    def get_content(self, source: str) -> SourceDocument:
+        path = Path(source)
+        suffix = path.suffix.lower()
+        if suffix not in self.SUPPORTED_SUFFIXES:
+            raise ValueError(f"Unsupported local file source suffix: {suffix or '<none>'}")
+
+        if not path.exists():
+            raise FileNotFoundError(f"Source file does not exist: {source}")
+
+        if not path.is_file():
+            raise ValueError(f"Source path is not a file: {source}")
+
+        resolved = path.resolve()
+        content = resolved.read_text(encoding="utf-8")
+        metadata = SourceMetadata(
+            mime_type=self.MIME_TYPES[suffix],
+            encoding="utf-8",
+            size_bytes=resolved.stat().st_size,
+            extra={"extension": suffix},
+        )
+        return SourceDocument(
+            source_type=SourceType.local_file,
+            source=str(resolved),
+            title=resolved.stem,
+            content_markdown=content,
+            metadata=metadata,
+        )
