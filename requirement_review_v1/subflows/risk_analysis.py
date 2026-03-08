@@ -14,6 +14,7 @@ from ..prompts import RISK_SYSTEM_PROMPT, RISK_USER_PROMPT
 from ..schemas import RiskItem, RiskOutput, validate_risk_output
 from ..skills import get_skill_executor, get_skill_spec
 from ..state import PlanState, ReviewState, plan_from_state
+from ..templates.registry import RISK_REVIEW_PROMPT
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
@@ -293,6 +294,7 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
     )
     span = trace_start(_GENERATION_NODE, input_chars=len(payload_json))
     span.set_attrs({"subflow_id": context.subflow_id, "node_path": _GENERATION_NODE})
+    span.set_template(RISK_REVIEW_PROMPT)
     trace_meta = dict(state.get("trace_meta", {}))
     trace_meta["input_chars"] = len(payload_json)
 
@@ -507,6 +509,7 @@ async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState
 
     span = trace_start("risk", input_chars=len(input_json), model="none" if not structured_requirements else "unknown")
     span.set_attrs({"subflow_id": _SUBFLOW_ID, "node_path": "risk"})
+    span.set_template(RISK_REVIEW_PROMPT)
 
     result = await run_risk_analysis_subflow(
         RiskAnalysisInput(
@@ -544,4 +547,8 @@ async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState
         },
         "trace": next_trace,
     }
+
+
+
+
 

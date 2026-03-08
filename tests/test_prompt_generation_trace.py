@@ -164,5 +164,9 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monk
 
     assert trace["codex.prompt.generate"]["status"] == "ok"
     assert trace["claude_code.prompt.generate"]["status"] == "ok"
+    assert trace["codex.prompt.generate"]["template_id"] == "review.delivery_planning.codex_prompt"
+    assert trace["codex.prompt.generate"]["template_version"] == "v1"
+    assert trace["claude_code.prompt.generate"]["template_id"] == "review.delivery_planning.claude_code_prompt"
+    assert trace["claude_code.prompt.generate"]["template_version"] == "v1"
     assert result["result"]["codex_prompt_handoff"]["agent_prompt"]
     assert result["result"]["claude_code_prompt_handoff"]["validation_checklist"] == ["Immediate deactivation verified", "Confirmation email timing covered"]

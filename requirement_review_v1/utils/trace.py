@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-_PROMPT_VERSION = "v1.1"
+from requirement_review_v1.templates import TemplateDefinition
 
 
 class Span:
@@ -31,6 +31,10 @@ class Span:
         """Attach multiple extra attributes to this span."""
         self._attrs.update(attrs)
 
+    def set_template(self, template: TemplateDefinition) -> None:
+        """Attach template metadata to the span."""
+        self._attrs.update(template.prompt_trace_metadata())
+
     def end(
         self,
         *,
@@ -50,10 +54,11 @@ class Span:
             "status": status,
             "input_chars": self.input_chars,
             "output_chars": output_chars,
-            "prompt_version": _PROMPT_VERSION,
             "raw_output_path": raw_output_path,
             "error_message": error_message,
         }
+        if "template_version" in self._attrs and "prompt_version" not in self._attrs:
+            data["prompt_version"] = self._attrs["template_version"]
         if self._attrs:
             data.update(self._attrs)
         return data

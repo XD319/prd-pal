@@ -1,4 +1,7 @@
-"""Parser agent LangGraph node that decomposes a requirement document into structured items.\n\nrequirement_doc -> parsed_items\n"""
+"""Parser agent LangGraph node that decomposes a requirement document into structured items.
+
+requirement_doc -> parsed_items
+"""
 
 from __future__ import annotations
 
@@ -15,13 +18,14 @@ from ..prompts import (
 )
 from ..schemas import ParserOutput, validate_parser_output
 from ..state import ReviewState
+from ..templates.registry import CLARIFY_PARSER_REVIEW_PROMPT, PARSER_REVIEW_PROMPT
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
 
 _AGENT = "parser"
-_DEFAULT_PROMPT_VERSION = "v1.1"
-_CLARIFY_PROMPT_VERSION = "v1.1-clarify"
+_DEFAULT_PROMPT_VERSION = PARSER_REVIEW_PROMPT.version
+_CLARIFY_PROMPT_VERSION = CLARIFY_PARSER_REVIEW_PROMPT.version
 
 
 async def run(state: ReviewState) -> ReviewState:
@@ -37,14 +41,16 @@ async def run(state: ReviewState) -> ReviewState:
     prompt_version = str(state.get("parser_prompt_version", _DEFAULT_PROMPT_VERSION) or _DEFAULT_PROMPT_VERSION)
 
     span = trace_start(_AGENT, input_chars=len(requirement_doc))
-    span.set_attr("prompt_version", prompt_version)
 
     if prompt_version == _CLARIFY_PROMPT_VERSION:
+        prompt_template = CLARIFY_PARSER_REVIEW_PROMPT
         system_prompt = CLARIFY_PARSER_SYSTEM_PROMPT
         user_prompt = CLARIFY_PARSER_USER_PROMPT
     else:
+        prompt_template = PARSER_REVIEW_PROMPT
         system_prompt = PARSER_SYSTEM_PROMPT
         user_prompt = PARSER_USER_PROMPT
+    span.set_template(prompt_template)
 
     prompt = (
         f"{system_prompt}\n\n"
@@ -103,5 +109,3 @@ async def run(state: ReviewState) -> ReviewState:
             error_message=str(exc),
         )
         return {"parsed_items": [], "trace": trace}
-
-

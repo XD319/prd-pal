@@ -11,6 +11,7 @@ from review_runtime.config.config import Config
 from ..prompts import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 from ..schemas import ReviewerOutput, validate_reviewer_output
 from ..state import ReviewState, plan_from_state
+from ..templates.registry import REVIEWER_REVIEW_PROMPT
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
@@ -105,6 +106,7 @@ async def run(state: ReviewState) -> ReviewState:
 
     input_chars = len(items_json) + len(plan_json)
     span = trace_start(_AGENT, input_chars=input_chars)
+    span.set_template(REVIEWER_REVIEW_PROMPT)
     prompt = f"{REVIEWER_SYSTEM_PROMPT}\n\n{REVIEWER_USER_PROMPT.format(items_json=items_json, plan_json=plan_json)}"
 
     try:
@@ -181,4 +183,3 @@ async def run(state: ReviewState) -> ReviewState:
             "high_risk_ratio": 0.0,
             "trace": trace,
         }
-

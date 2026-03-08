@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable
 
 from pydantic import BaseModel, ValidationError
 
+from ..templates import get_template
 from ..utils.trace import trace_start
 
 _DEFAULT_CACHE_TTL_SEC = 300
@@ -37,6 +38,7 @@ class SkillSpec:
     handler: SkillHandler
     config_version: str = "v1"
     cache_ttl_sec: int | None = None
+    template_id: str = ""
 
     @property
     def ttl_sec(self) -> int:
@@ -64,6 +66,8 @@ class SkillExecutor:
         ttl_sec = max(0, spec.ttl_sec)
         cache_enabled = self._cache_enabled()
         span = trace_start(spec.name, model="none", input_chars=len(_canonical_input_json(validated_input)))
+        if spec.template_id:
+            span.set_template(get_template(spec.template_id))
 
         cache_hit = False
         if cache_enabled and ttl_sec > 0:

@@ -1,40 +1,7 @@
-﻿"""Markdown prompt templates for coding-agent handoff."""
+"""Markdown prompt templates for coding-agent handoff."""
 
-from __future__ import annotations
+from requirement_review_v1.templates import BASE_SECTION_ORDER, AdapterPromptTemplate, get_adapter_prompt_template
 
-from dataclasses import dataclass
-
-
-BASE_SECTION_ORDER = (
-    "Goal",
-    "Project Context",
-    "Required Changes",
-    "Constraints",
-    "Acceptance Criteria",
-    "Testing Requirements",
-    "Output Expectations",
-)
-
-
-@dataclass(frozen=True, slots=True)
-class PromptTemplate:
-    """Static metadata that shapes a rendered handoff prompt."""
-
-    agent_name: str
-    role_summary: str
-    output_hint: str
-    section_order: tuple[str, ...] = BASE_SECTION_ORDER
-
-
-CODEX_PROMPT_TEMPLATE = PromptTemplate(
-    agent_name="Codex",
-    role_summary="Use the execution pack as the source of truth and implement the smallest complete change set.",
-    output_hint="Return a concise implementation summary, the files changed, and the tests or checks you ran.",
-)
-
-
-CLAUDE_CODE_PROMPT_TEMPLATE = PromptTemplate(
-    agent_name="Claude Code",
-    role_summary="Start with a repository analysis instruction, then use the execution pack as the source of truth to focus on delivery validation, safety checks, and test completeness.",
-    output_hint="Return a concise implementation summary, the changed files, and the test results or checks you ran.",
-)
+PromptTemplate = AdapterPromptTemplate
+CODEX_PROMPT_TEMPLATE = get_adapter_prompt_template("adapter.codex.handoff_markdown")
+CLAUDE_CODE_PROMPT_TEMPLATE = get_adapter_prompt_template("adapter.claude_code.handoff_markdown")

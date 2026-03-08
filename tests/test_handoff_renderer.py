@@ -133,7 +133,8 @@ def test_build_handoff_prompts_writes_expected_markdown_files(tmp_path: Path) ->
         encoding="utf-8",
     )
 
-    prompt_paths = build_handoff_prompts(execution_pack_path)
+    trace: dict[str, object] = {}
+    prompt_paths = build_handoff_prompts(execution_pack_path, trace=trace)
 
     assert prompt_paths == {
         "codex_prompt": str(tmp_path / "codex_prompt.md"),
@@ -144,3 +145,8 @@ def test_build_handoff_prompts_writes_expected_markdown_files(tmp_path: Path) ->
         assert path.exists()
         assert path.suffix == ".md"
         assert path.read_text(encoding="utf-8").startswith("# ")
+
+    renderer_trace = trace["handoff_renderer"]
+    assert renderer_trace["template_version"] == "handoff_markdown_v1"
+    assert renderer_trace["templates"]["codex_prompt"]["template_id"] == "adapter.codex.handoff_markdown"
+    assert renderer_trace["templates"]["claude_code_prompt"]["template_id"] == "adapter.claude_code.handoff_markdown"

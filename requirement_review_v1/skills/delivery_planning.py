@@ -107,6 +107,7 @@ IMPLEMENTATION_PLAN_SKILL = SkillSpec(
     handler=_implementation_plan,
     config_version="implementation.plan@v1",
     cache_ttl_sec=300,
+    template_id="review.delivery_planning.implementation",
 )
 
 
@@ -117,6 +118,7 @@ TEST_PLAN_GENERATE_SKILL = SkillSpec(
     handler=_generate_test_plan,
     config_version="test.plan.generate@v1",
     cache_ttl_sec=300,
+    template_id="review.delivery_planning.test_plan",
 )
 
 
@@ -127,6 +129,7 @@ CODEX_PROMPT_GENERATE_SKILL = SkillSpec(
     handler=_generate_codex_prompt,
     config_version="codex.prompt.generate@v1",
     cache_ttl_sec=300,
+    template_id="review.delivery_planning.codex_prompt",
 )
 
 
@@ -137,4 +140,5 @@ CLAUDE_CODE_PROMPT_GENERATE_SKILL = SkillSpec(
     handler=_generate_claude_code_prompt,
     config_version="claude_code.prompt.generate@v1",
     cache_ttl_sec=300,
+    template_id="review.delivery_planning.claude_code_prompt",
 )

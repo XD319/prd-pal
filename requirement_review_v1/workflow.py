@@ -11,6 +11,7 @@ from langgraph.graph import END, StateGraph
 from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent
 from .state import ReviewState, plan_from_state
 from .subflows.risk_analysis import run_risk_analysis_from_review_state
+from .templates.registry import CLARIFY_PARSER_REVIEW_PROMPT, PARSER_REVIEW_PROMPT
 
 _MAX_REVISION_ROUNDS = 2
 _HIGH_RISK_THRESHOLD = 0.4
@@ -33,7 +34,7 @@ def _parse_iso(value: Any) -> datetime | None:
 
 async def _clarify_node(state: ReviewState) -> ReviewState:
     clarify_state: ReviewState = dict(state)
-    clarify_state["parser_prompt_version"] = "v1.1-clarify"
+    clarify_state["parser_prompt_version"] = CLARIFY_PARSER_REVIEW_PROMPT.version
     return await parser_agent.run(clarify_state)
 
 
@@ -150,7 +151,7 @@ def _route_decider_node(state: ReviewState) -> ReviewState:
     return {
         "revision_round": next_round if should_loop else revision_round,
         "routing_reason": reason,
-        "parser_prompt_version": "v1.1",
+        "parser_prompt_version": PARSER_REVIEW_PROMPT.version,
         "trace": trace,
     }
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any, TypedDict
 
+from .templates.registry import PARSER_REVIEW_PROMPT
+
 
 class ParsedItemState(TypedDict):
     """State shape aligned with ``schemas.ParsedItem``."""
@@ -188,5 +190,5 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         revision_round=0,
         high_risk_ratio=0.0,
         routing_reason="",
-        parser_prompt_version="v1.1",
+        parser_prompt_version=PARSER_REVIEW_PROMPT.version,
     )

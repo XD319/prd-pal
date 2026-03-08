@@ -11,6 +11,7 @@ from review_runtime.config.config import Config
 from ..prompts import PLANNER_SYSTEM_PROMPT, PLANNER_USER_PROMPT
 from ..schemas import PlannerOutput, validate_planner_output
 from ..state import ReviewState
+from ..templates.registry import PLANNER_REVIEW_PROMPT
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
@@ -33,6 +34,7 @@ async def run(state: ReviewState) -> ReviewState:
 
     items_json = json.dumps(parsed_items, ensure_ascii=False, indent=2)
     span = trace_start(_AGENT, input_chars=len(items_json))
+    span.set_template(PLANNER_REVIEW_PROMPT)
     prompt = f"{PLANNER_SYSTEM_PROMPT}\n\n{PLANNER_USER_PROMPT.format(items_json=items_json)}"
 
     try:
@@ -102,4 +104,3 @@ def _empty_result(trace: dict[str, Any]) -> ReviewState:
         "plan": {"tasks": [], "milestones": [], "dependencies": [], "estimation": {}},
         "trace": trace,
     }
-

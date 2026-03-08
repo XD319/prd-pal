@@ -12,6 +12,7 @@ from typing import Any
 
 from requirement_review_v1.connectors import ConnectorRegistry
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
+from requirement_review_v1.handoff.templates import CLAUDE_CODE_PROMPT_TEMPLATE, CODEX_PROMPT_TEMPLATE
 from requirement_review_v1.packs import (
     ArtifactSplitter,
     DeliveryBundle,
@@ -145,7 +146,11 @@ def _locate_bundle_path(bundle_id: str, outputs_root: str | Path = "outputs") ->
     raise FileNotFoundError(f"delivery bundle not found: {normalized_bundle_id}")
 
 
-def _generate_delivery_bundle(run_output: dict[str, Any]) -> tuple[dict[str, str], DeliveryBundle]:
+def _generate_delivery_bundle(
+    run_output: dict[str, Any],
+    *,
+    splitter: ArtifactSplitter | None = None,
+) -> tuple[dict[str, str], DeliveryBundle]:
     result = run_output.get("result", {})
     if not isinstance(result, dict):
         raise TypeError("run_output.result must be an object")
@@ -165,7 +170,7 @@ def _generate_delivery_bundle(run_output: dict[str, Any]) -> tuple[dict[str, str
     if missing:
         raise ValueError(f"missing pack paths: {', '.join(missing)}")
 
-    artifact_refs = ArtifactSplitter().split(result, run_dir)
+    artifact_refs = (splitter or ArtifactSplitter()).split(result, run_dir)
     bundle = DeliveryBundleBuilder().build(run_output=run_output, artifact_refs=artifact_refs, pack_paths=pack_paths)
     source_metadata = _extract_source_metadata(run_output)
     if source_metadata:
@@ -216,7 +221,11 @@ def build_handoff_prompts(
         "end": "",
         "duration_ms": 0,
         "status": "running",
-        "template_version": "handoff_markdown_v1",
+        "template_version": CODEX_PROMPT_TEMPLATE.version,
+        "templates": {
+            "codex_prompt": CODEX_PROMPT_TEMPLATE.trace_metadata(),
+            "claude_code_prompt": CLAUDE_CODE_PROMPT_TEMPLATE.trace_metadata(),
+        },
         "output_paths": {},
         "error_message": "",
         "non_blocking": True,
@@ -383,13 +392,16 @@ def build_delivery_handoff_outputs(run_output: dict[str, Any]) -> dict[str, str]
         "error_message": "",
         "non_blocking": True,
         "output_paths": {},
+        "artifact_templates": {},
     }
     bundle_started = perf_counter()
     try:
         report_paths = run_output.get("report_paths", {})
         if isinstance(report_paths, dict):
             report_paths.update(artifact_paths)
-        bundle_artifact_paths, _bundle = _generate_delivery_bundle(run_output)
+        splitter = ArtifactSplitter()
+        bundle_builder_trace["artifact_templates"] = splitter.template_trace()
+        bundle_artifact_paths, _bundle = _generate_delivery_bundle(run_output, splitter=splitter)
         artifact_paths.update(bundle_artifact_paths)
         if isinstance(report_paths, dict):
             report_paths.update(bundle_artifact_paths)
@@ -800,3 +812,9 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
+
+
+
+
+
+

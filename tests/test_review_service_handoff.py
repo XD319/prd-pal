@@ -305,3 +305,5 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(tm
     assert report_payload["trace"]["handoff_renderer"]["status"] == "partial_success"
     assert report_payload["trace"]["handoff_render_error"] == "renderer boom"
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
+
+
