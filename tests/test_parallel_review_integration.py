@@ -80,6 +80,9 @@ async def test_run_review_defaults_to_single_mode_for_simple_prd(monkeypatch, tm
     result = run_output["result"]
     assert result["review_mode"] == "single_review"
     assert result["parallel-review_meta"]["selected_mode"] == "single_review"
+    assert result["parallel-review_meta"]["review_mode"] == "single_review"
+    assert result["parallel-review_meta"]["reviewers_completed"] == ["single_reviewer"]
+    assert result["parallel-review_meta"]["reviewers_failed"] == []
     report_payload = json.loads((tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8"))
     trace_payload = json.loads((tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8"))
     assert report_payload["parallel-review_meta"]["selected_mode"] == "single_review"
@@ -122,19 +125,26 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
             normalized_requirement={"summary": "Parallel export review"},
             reviewer_inputs={"product": "p", "engineering": "e", "qa": "q", "security": "s"},
             reviewer_results=(
-                {"reviewer": "product", "findings": [], "open_questions": [], "risk_items": [], "summary": "product"},
-                {"reviewer": "engineering", "findings": [], "open_questions": [], "risk_items": [], "summary": "engineering"},
-                {"reviewer": "qa", "findings": [], "open_questions": [], "risk_items": [], "summary": "qa"},
-                {"reviewer": "security", "findings": [], "open_questions": [], "risk_items": [], "summary": "security"},
+                {"reviewer": "product", "findings": [], "open_questions": [], "risk_items": [], "summary": "product", "status": "completed", "error_message": ""},
+                {"reviewer": "engineering", "findings": [], "open_questions": [], "risk_items": [], "summary": "engineering", "status": "completed", "error_message": ""},
+                {"reviewer": "qa", "findings": [], "open_questions": [], "risk_items": [], "summary": "qa", "status": "completed", "error_message": ""},
+                {"reviewer": "security", "findings": [], "open_questions": [], "risk_items": [], "summary": "security", "status": "completed", "error_message": ""},
             ),
             aggregated={
-                "findings": [{"title": "Security review gate required", "detail": "Sensitive export", "severity": "high", "category": "security", "reviewers": ["security"]}],
+                "findings": [{"finding_id": "finding-123456789abc", "title": "Security review gate required", "detail": "Sensitive export", "description": "Sensitive export", "severity": "high", "category": "security", "source_reviewer": "security", "suggested_action": "Approve release", "assignee": "security", "reviewers": ["security"]}],
                 "risk_items": [{"title": "Security review gate required", "detail": "Sensitive export", "severity": "high", "category": "security", "mitigation": "Approve release", "reviewers": ["security"]}],
                 "open_questions": [{"question": "Who approves the export?", "reviewers": ["product"]}],
                 "conflicts": [],
                 "reviewer_summaries": [{"reviewer": "product", "summary": "product"}],
                 "reviewer_count": 4,
+                "meta": {
+                    "review_mode": "parallel_review",
+                    "reviewers_completed": ["product", "engineering", "qa", "security"],
+                    "reviewers_failed": [],
+                },
                 "artifacts": {
+                    "review_result_json": str(output_dir) + "\\review_result.json",
+                    "review_report_md": str(output_dir) + "\\review_report.md",
                     "review_report_json": str(output_dir) + "\\review_report.json",
                     "risk_items_json": str(output_dir) + "\\risk_items.json",
                     "open_questions_json": str(output_dir) + "\\open_questions.json",
@@ -168,7 +178,11 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
     result = run_output["result"]
     assert result["review_mode"] == "parallel_review"
     assert result["parallel-review_meta"]["selected_mode"] == "parallel_review"
+    assert result["parallel-review_meta"]["review_mode"] == "parallel_review"
     assert result["parallel-review_meta"]["reviewer_count"] == 4
+    assert result["parallel-review_meta"]["reviewers_completed"] == ["product", "engineering", "qa", "security"]
+    assert result["parallel-review_meta"]["reviewers_failed"] == []
+    assert result["parallel-review_meta"]["artifact_paths"]["review_result_json"].endswith("review_result.json")
     assert len(result["review_open_questions"]) == 1
     assert len(result["review_risk_items"]) == 1
     report_payload = json.loads((tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8"))

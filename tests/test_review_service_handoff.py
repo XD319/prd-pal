@@ -312,9 +312,17 @@ def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
         "default_mode": "parallel_review",
         "selected_mode": "parallel_review",
         "parallel_triggered": True,
+        "review_mode": "parallel_review",
         "reviewer_count": 4,
+        "reviewers_completed": ["product", "engineering", "qa", "security"],
+        "reviewers_failed": [],
         "open_questions_count": 2,
         "risk_items_count": 1,
+        "artifact_paths": {
+            "review_result_json": str(tmp_path / "review_result.json"),
+            "review_report_md": str(tmp_path / "review_report.md"),
+            "review_report_json": str(tmp_path / "review_report.json"),
+        },
     }
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
@@ -351,3 +359,4 @@ def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
     assert bundle_payload["metadata"]["parallel-review_meta"] == parallel_review_meta
     assert trace_payload["parallel-review_meta"] == parallel_review_meta
     assert report_payload["parallel-review_meta"] == parallel_review_meta
+    assert report_payload["parallel-review_meta"]["artifact_paths"]["review_result_json"].endswith("review_result.json")

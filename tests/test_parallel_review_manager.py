@@ -38,13 +38,28 @@ Allow admin users to export recruiter profiles to a CSV file. This touches FE, B
 
     aggregated = result.aggregated
     artifacts = aggregated["artifacts"]
+    assert (tmp_path / "review_result.json").exists()
+    assert (tmp_path / "review_report.md").exists()
     assert (tmp_path / "review_report.json").exists()
     assert (tmp_path / "risk_items.json").exists()
     assert (tmp_path / "open_questions.json").exists()
     assert (tmp_path / "review_summary.md").exists()
+    assert artifacts["review_result_json"].endswith("review_result.json")
+    assert artifacts["review_report_md"].endswith("review_report.md")
     assert artifacts["review_report_json"].endswith("review_report.json")
 
-    review_report = json.loads((tmp_path / "review_report.json").read_text(encoding="utf-8"))
-    assert review_report["reviewer_count"] == 4
-    assert len(review_report["risk_items"]) >= 1
-    assert "Security review gate required" in json.dumps(review_report, ensure_ascii=False)
+    review_result = json.loads((tmp_path / "review_result.json").read_text(encoding="utf-8"))
+    legacy_report = json.loads((tmp_path / "review_report.json").read_text(encoding="utf-8"))
+    assert review_result == legacy_report
+    assert review_result["reviewer_count"] == 4
+    assert review_result["meta"] == {
+        "review_mode": "parallel_review",
+        "reviewers_completed": ["product", "engineering", "qa", "security"],
+        "reviewers_failed": [],
+    }
+    assert len(review_result["risk_items"]) >= 1
+    assert all("finding_id" in item for item in review_result["findings"])
+    assert all("source_reviewer" in item for item in review_result["findings"])
+    assert all("suggested_action" in item for item in review_result["findings"])
+    assert all("assignee" in item for item in review_result["findings"])
+    assert "Security review gate required" in json.dumps(review_result, ensure_ascii=False)
