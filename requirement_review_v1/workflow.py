@@ -234,6 +234,9 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
         "parallel_triggered": False,
         "reviewer_strategy": "single_reviewer",
         "review_mode": "single_review",
+        "partial_review": False,
+        "manual_review_required": False,
+        "manual_review_message": "",
         "gating_decision": asdict(decision),
         "reviewer_count": 1,
         "reviewers_completed": ["single_reviewer"],
@@ -266,9 +269,12 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     parallel_result = await run_parallel_review_async(requirement_doc, run_dir)
     aggregated = parallel_result.aggregated
     aggregated_meta = dict(aggregated.get("meta", {}) or {})
-    selected_mode = str(aggregated_meta.get("review_mode", "parallel_review") or "parallel_review")
-    reviewers_completed = list(aggregated_meta.get("reviewers_completed", []) or [])
-    reviewers_failed = list(aggregated_meta.get("reviewers_failed", []) or [])
+    selected_mode = str(aggregated.get("review_mode", aggregated_meta.get("review_mode", "parallel_review")) or "parallel_review")
+    partial_review = bool(aggregated.get("partial_review", aggregated_meta.get("partial_review", False)))
+    reviewers_completed = list(aggregated.get("reviewers_completed", aggregated_meta.get("reviewers_completed", [])) or [])
+    reviewers_failed = list(aggregated.get("reviewers_failed", aggregated_meta.get("reviewers_failed", [])) or [])
+    manual_review_required = bool(aggregated.get("manual_review_required", aggregated_meta.get("manual_review_required", False)))
+    manual_review_message = str(aggregated.get("manual_review_message", aggregated_meta.get("manual_review_message", "")) or "").strip()
     review_results = _build_parallel_review_results(state, aggregated)
     plan_review = _build_parallel_plan_review(aggregated)
     review_open_questions = list(aggregated.get("open_questions", []) or [])
@@ -276,6 +282,9 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     findings = list(aggregated.get("findings", []) or [])
 
     output_chars = len(json.dumps(aggregated, ensure_ascii=False))
+    span.set_attr("partial_review", partial_review)
+    if manual_review_required:
+        span.set_attr("manual_review_required", True)
     trace["reviewer"] = span.end(status="ok", output_chars=output_chars)
     meta = {
         "default_mode": decision.mode,
@@ -284,6 +293,9 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "parallel_triggered": True,
         "reviewer_strategy": "asyncio.gather",
         "review_mode": selected_mode,
+        "partial_review": partial_review,
+        "manual_review_required": manual_review_required,
+        "manual_review_message": manual_review_message,
         "gating_decision": asdict(decision),
         "reviewer_count": int(aggregated.get("reviewer_count", len(reviewers_completed)) or len(reviewers_completed)),
         "reviewers_completed": reviewers_completed,
@@ -307,6 +319,7 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "parallel_review": aggregated,
         "review_open_questions": review_open_questions,
         "review_risk_items": review_risk_items,
+        "partial_review": partial_review,
         "parallel_review_meta": meta,
     }
 

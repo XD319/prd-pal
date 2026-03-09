@@ -132,6 +132,22 @@ def _build_plan_review_section(plan_review: dict) -> str:
     return "\n".join(lines) if lines else "_No plan review comments available._"
 
 
+def _format_failed_reviewers(items: list[dict[str, Any]]) -> str:
+    if not items:
+        return "none"
+
+    parts: list[str] = []
+    for item in items:
+        reviewer = str(item.get("reviewer", "") or "unknown")
+        status = str(item.get("status", "failed") or "failed")
+        reason = str(item.get("reason", "") or "").strip()
+        if reason:
+            parts.append(f"{reviewer} ({status}: {reason})")
+        else:
+            parts.append(f"{reviewer} ({status})")
+    return ", ".join(parts)
+
+
 def _md_cell(value: Any) -> str:
     text = str(value if value is not None else "")
     return text.replace("|", "\\|").replace("\n", "<br>")
@@ -204,6 +220,7 @@ async def run(state: ReviewState) -> ReviewState:
     risks: list[dict] = state.get("risks", [])
     plan_review: dict = state.get("plan_review", {})
     trace: dict[str, Any] = dict(state.get("trace", {}))
+    parallel_review_meta: dict[str, Any] = dict(state.get("parallel_review_meta", {}) or {})
 
     input_chars = sum(len(str(v)) for v in (
         parsed_items,
@@ -217,6 +234,7 @@ async def run(state: ReviewState) -> ReviewState:
         claude_code_prompt_handoff,
         risks,
         plan_review,
+        parallel_review_meta,
     ))
     span = trace_start(_AGENT, model="none", input_chars=input_chars)
 
@@ -230,9 +248,17 @@ async def run(state: ReviewState) -> ReviewState:
     uncovered = metrics.get("uncovered_requirements", [])
     covered_count = sum(1 for task_ids in req_to_tasks.values() if task_ids)
     total_count = len(req_to_tasks)
+    partial_review = bool(parallel_review_meta.get("partial_review", False))
+    manual_review_message = str(parallel_review_meta.get("manual_review_message", "") or "").strip()
+    reviewers_failed = list(parallel_review_meta.get("reviewers_failed", []) or [])
     parts.append(f"**Coverage:** {ratio:.2%} ({covered_count}/{total_count} requirements covered)")
     if uncovered:
         parts.append(f"**Uncovered:** {', '.join(uncovered)}")
+    if partial_review:
+        parts.append("**Partial Review:** Yes")
+        parts.append(f"**Reviewers Failed:** {_format_failed_reviewers(reviewers_failed)}")
+    if manual_review_message:
+        parts.append(f"**Attention:** {manual_review_message}")
     parts.append("")
 
     parts.append("## 1. Requirement List\n")

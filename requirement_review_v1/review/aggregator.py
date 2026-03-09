@@ -29,6 +29,9 @@ class AggregatedReview:
     open_questions: tuple[dict[str, Any], ...]
     conflicts: tuple[dict[str, Any], ...]
     reviewer_summaries: tuple[dict[str, str], ...]
+    partial_review: bool
+    reviewers_completed: tuple[str, ...]
+    reviewers_failed: tuple[dict[str, str], ...]
     reviewer_count: int
     meta: dict[str, Any]
     artifacts: AggregatedReviewArtifacts
@@ -58,9 +61,28 @@ def aggregate_review_results(
         for result in results
         if result.summary
     )
+    partial_review = bool(meta.get("partial_review", False))
+    reviewers_completed = list(meta.get("reviewers_completed", []) or [])
+    reviewers_failed = list(meta.get("reviewers_failed", []) or [])
+    manual_review_message = _build_manual_review_message(
+        partial_review=partial_review,
+        reviewers_failed=reviewers_failed,
+        findings=findings,
+        risk_items=risk_items,
+    )
+    meta = {
+        **meta,
+        "manual_review_required": bool(manual_review_message),
+        "manual_review_message": manual_review_message,
+    }
 
     report_payload = {
         "reviewer_count": len(results),
+        "partial_review": partial_review,
+        "reviewers_completed": reviewers_completed,
+        "reviewers_failed": reviewers_failed,
+        "manual_review_required": bool(manual_review_message),
+        "manual_review_message": manual_review_message,
         "meta": meta,
         "findings": findings,
         "risk_items": risk_items,
@@ -98,6 +120,9 @@ def aggregate_review_results(
         open_questions=tuple(open_questions),
         conflicts=tuple(conflicts),
         reviewer_summaries=reviewer_summaries,
+        partial_review=partial_review,
+        reviewers_completed=tuple(reviewers_completed),
+        reviewers_failed=tuple(reviewers_failed),
         reviewer_count=len(results),
         meta=meta,
         artifacts=artifacts,
@@ -126,6 +151,7 @@ def _build_review_meta(results: tuple[ReviewerResult, ...]) -> dict[str, Any]:
 
     return {
         "review_mode": "parallel_review",
+        "partial_review": bool(reviewers_failed),
         "reviewers_completed": reviewers_completed,
         "reviewers_failed": reviewers_failed,
     }
@@ -269,22 +295,30 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
 
     completed = ", ".join(meta.get("reviewers_completed", []) or []) or "none"
     failed = _format_failed_reviewers(meta.get("reviewers_failed", []))
+    manual_review_message = str(meta.get("manual_review_message", "") or "").strip()
     lines = [
         "# Review Report",
         "",
         "## Meta",
         "",
         f"- Review mode: {meta.get('review_mode', 'parallel_review')}",
+        f"- Partial review: {'yes' if meta.get('partial_review') else 'no'}",
         f"- Reviewers completed: {completed}",
         f"- Reviewers failed: {failed}",
         f"- Findings: {len(findings)}",
         f"- Risk Items: {len(risk_items)}",
         f"- Open Questions: {len(open_questions)}",
         f"- Conflicts: {len(conflicts)}",
+    ]
+    if manual_review_message:
+        lines.extend([
+            f"- Follow-up: {manual_review_message}",
+        ])
+    lines.extend([
         "",
         "## Findings",
         "",
-    ]
+    ])
     lines.extend(_finding_lines(findings))
     lines.extend([
         "",
@@ -335,19 +369,27 @@ def _render_summary(report_payload: dict[str, Any]) -> str:
     summaries = report_payload.get("reviewer_summaries", []) if isinstance(report_payload.get("reviewer_summaries"), list) else []
     meta = report_payload.get("meta", {}) if isinstance(report_payload.get("meta"), dict) else {}
 
+    manual_review_message = str(meta.get("manual_review_message", "") or "").strip()
     lines = [
         "# Review Summary",
         "",
         f"- Review mode: {meta.get('review_mode', 'parallel_review')}",
         f"- Reviewers: {report_payload.get('reviewer_count', 0)}",
+        f"- Partial review: {'yes' if meta.get('partial_review') else 'no'}",
         f"- Findings: {len(findings)}",
         f"- Risk Items: {len(risk_items)}",
         f"- Open Questions: {len(open_questions)}",
         f"- Conflicts: {len(conflicts)}",
+    ]
+    if manual_review_message:
+        lines.extend([
+            f"- Follow-up: {manual_review_message}",
+        ])
+    lines.extend([
         "",
         "## Findings",
         "",
-    ]
+    ])
     lines.extend(_bullet_lines([f"[{item['severity']}] {item['title']}" for item in findings], "No findings."))
     lines.extend([
         "",
@@ -427,6 +469,28 @@ def _format_failed_reviewers(items: Any) -> str:
         else:
             parts.append(str(item))
     return ", ".join(parts) or "none"
+
+
+def _build_manual_review_message(
+    *,
+    partial_review: bool,
+    reviewers_failed: list[dict[str, str]],
+    findings: list[dict[str, Any]],
+    risk_items: list[dict[str, Any]],
+) -> str:
+    if not partial_review or not reviewers_failed:
+        return ""
+
+    has_high_risk = any(
+        str(item.get("severity", "")).strip().lower() == "high"
+        for item in [*findings, *risk_items]
+        if isinstance(item, dict)
+    )
+    if not has_high_risk:
+        return ""
+
+    failed_reviewers = _format_failed_reviewers(reviewers_failed)
+    return f"需人工补审：存在高风险问题，且以下 reviewer 缺失或失败：{failed_reviewers}"
 
 
 def _build_finding_id(category: str, title: str, detail: str) -> str:
