@@ -3,6 +3,7 @@ import {
   downloadReportArtifact,
   fetchReviewResult,
   fetchReviewStatus,
+  fetchRuns,
   submitReview,
 } from './api';
 
@@ -24,6 +25,13 @@ const initialWorkspace = {
   failureMessage: '',
   resultError: '',
   downloadFormat: '',
+};
+
+const initialHistory = {
+  status: 'loading',
+  runs: [],
+  error: '',
+  refreshing: false,
 };
 
 const pollIntervalMs = 2500;
@@ -73,6 +81,11 @@ function formatPercentFromWhole(value) {
     return '0%';
   }
   return `${Math.round(numeric)}%`;
+}
+
+function formatStatusLabel(status) {
+  const normalized = String(status ?? 'idle');
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 function excerpt(value, maxLength = 200) {
@@ -320,6 +333,24 @@ function deriveNodes(progress) {
     });
 }
 
+function describeHistoryRun(run) {
+  const artifactPresence = run?.artifact_presence ?? {};
+  const status = String(run?.status ?? 'running');
+  const hasResult = Boolean(artifactPresence.report_json);
+
+  return {
+    status,
+    statusLabel: formatStatusLabel(status),
+    detail: hasResult
+      ? 'Structured review output is available to inspect.'
+      : status === 'failed'
+        ? 'The run ended without a ready result artifact.'
+        : 'The review is still producing or finalizing artifacts.',
+    actionLabel: hasResult ? 'Open result details' : 'Open run details',
+    hasResult,
+  };
+}
+
 function ReviewSubmitPanel({ form, onFieldChange, onSubmit, onReset, onLoadSample, isSubmitting, errorMessage }) {
   const helperText = 'Use source when you already have a canonical document reference. Otherwise provide exactly one of prd_text or prd_path.';
 
@@ -384,11 +415,91 @@ function ReviewSubmitPanel({ form, onFieldChange, onSubmit, onReset, onLoadSampl
     </section>
   );
 }
+function ReviewHistoryPanel({ history, activeRunId, onRefresh, onOpenRun }) {
+  const recentRuns = history.runs.slice(0, 8);
+
+  return (
+    <section className="panel review-history-panel">
+      <div className="panel-header">
+        <div>
+          <p className="section-kicker">Review History</p>
+          <h2>Recent runs</h2>
+        </div>
+        <button type="button" className="ghost-button" onClick={onRefresh} disabled={history.refreshing}>
+          {history.refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
+      {history.status === 'loading' && history.runs.length === 0 ? (
+        <div className="loading-state loading-state-history">
+          <div className="history-skeleton-card" />
+          <div className="history-skeleton-card" />
+          <div className="history-skeleton-card" />
+        </div>
+      ) : history.status === 'error' && history.runs.length === 0 ? (
+        <div className="empty-state empty-state-compact">
+          <div className="empty-grid" />
+          <h3>Run history is unavailable</h3>
+          <p>{history.error}</p>
+        </div>
+      ) : recentRuns.length === 0 ? (
+        <div className="empty-state empty-state-compact">
+          <div className="empty-grid" />
+          <h3>No review runs yet</h3>
+          <p>Completed and in-progress review runs from <code>GET /api/runs</code> will appear here for quick follow-up.</p>
+        </div>
+      ) : (
+        <div className="history-list">
+          {history.status === 'error' && <div className="feedback-banner feedback-error">{history.error}</div>}
+
+          {recentRuns.map((run) => {
+            const summary = describeHistoryRun(run);
+            const isActive = run.run_id === activeRunId;
+
+            return (
+              <article key={run.run_id} className={`history-card${isActive ? ' history-card-active' : ''}`}>
+                <div className="history-header">
+                  <div>
+                    <span className="history-kicker">{run.run_id}</span>
+                    <h3>{summary.hasResult ? 'Result ready for inspection' : 'Review run in motion'}</h3>
+                  </div>
+                  <span className={`status-badge status-${summary.status}`}>{summary.statusLabel}</span>
+                </div>
+
+                <p className="history-note">{summary.detail}</p>
+
+                <div className="history-meta">
+                  <div>
+                    <span>Created</span>
+                    <strong>{formatDateTime(run.created_at)}</strong>
+                  </div>
+                  <div>
+                    <span>Updated</span>
+                    <strong>{formatDateTime(run.updated_at)}</strong>
+                  </div>
+                </div>
+
+                <div className="history-actions">
+                  <button type="button" className="secondary-button" onClick={() => onOpenRun(run)}>
+                    {summary.actionLabel}
+                  </button>
+                  <span className="inline-meta inline-meta-soft">
+                    {run.artifact_presence?.report_json ? 'Report artifact ready' : 'Waiting on report artifact'}
+                  </span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
   const progress = statusPayload?.progress ?? {};
   const nodes = deriveNodes(progress);
-  const statusLabel = status === 'idle' ? 'Idle' : status;
+  const statusLabel = formatStatusLabel(status);
 
   return (
     <section className="panel run-progress-card">
@@ -403,8 +514,8 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
       {!runId ? (
         <div className="empty-state empty-state-compact">
           <div className="empty-orb" />
-          <h3>No run in progress</h3>
-          <p>Submit a PRD to receive a run ID, progress updates, and the final result package here.</p>
+          <h3>No run in focus</h3>
+          <p>Submit a PRD or pick a recent run to inspect progress and result details here.</p>
         </div>
       ) : (
         <div className="status-stack">
@@ -445,8 +556,8 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
                   </div>
                   <p>
                     {node.runs > 0 ? `${pluralize(node.runs, 'attempt')}` : 'Not started'}
-                    {node.lastEnd ? ` ? finished ${formatDateTime(node.lastEnd)}` : ''}
-                    {!node.lastEnd && node.lastStart ? ` ? started ${formatDateTime(node.lastStart)}` : ''}
+                    {node.lastEnd ? ` - finished ${formatDateTime(node.lastEnd)}` : ''}
+                    {!node.lastEnd && node.lastStart ? ` - started ${formatDateTime(node.lastStart)}` : ''}
                   </p>
                 </article>
               ))
@@ -566,7 +677,6 @@ function FindingsPanel({ result, status, resultState }) {
     </section>
   );
 }
-
 function RisksPanel({ result }) {
   const risks = result ? deriveRisks(result) : [];
 
@@ -625,7 +735,11 @@ function OpenQuestionsPanel({ result }) {
             <article key={question.id} className="question-card">
               <h4>{question.question}</h4>
               {question.detail && <p>{question.detail}</p>}
-              {question.reviewers.length > 0 && <div className="detail-row"><span>{joinList(question.reviewers)}</span></div>}
+              {question.reviewers.length > 0 && (
+                <div className="detail-row">
+                  <span>{joinList(question.reviewers)}</span>
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -691,6 +805,7 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
 function App() {
   const [form, setForm] = useState(initialForm);
   const [workspace, setWorkspace] = useState(initialWorkspace);
+  const [history, setHistory] = useState(initialHistory);
 
   const status = workspace.statusPayload?.status ?? workspace.status;
   const result = workspace.resultPayload?.result && typeof workspace.resultPayload.result === 'object'
@@ -717,6 +832,33 @@ function App() {
     setWorkspace(initialWorkspace);
     setForm(initialForm);
   }
+
+  const loadRunHistory = useEffectEvent(async ({ preserveRuns = true } = {}) => {
+    setHistory((current) => ({
+      ...current,
+      status: preserveRuns && current.runs.length > 0 ? current.status : 'loading',
+      refreshing: preserveRuns && current.runs.length > 0,
+      error: '',
+    }));
+
+    try {
+      const payload = await fetchRuns();
+      setHistory({
+        status: 'ready',
+        runs: asArray(payload.runs),
+        error: '',
+        refreshing: false,
+      });
+    } catch (error) {
+      const message = formatApiError(error, 'Review history could not be loaded.');
+      setHistory((current) => ({
+        ...current,
+        status: current.runs.length > 0 ? current.status : 'error',
+        refreshing: false,
+        error: message,
+      }));
+    }
+  });
 
   const pollRunStatus = useEffectEvent(async (runId) => {
     try {
@@ -797,6 +939,10 @@ function App() {
   });
 
   useEffect(() => {
+    void loadRunHistory({ preserveRuns: false });
+  }, [loadRunHistory]);
+
+  useEffect(() => {
     if (!workspace.runId || !['queued', 'running'].includes(status)) {
       return undefined;
     }
@@ -817,6 +963,14 @@ function App() {
 
     void fetchCompletedResult(workspace.runId);
   }, [workspace.runId, status, workspace.resultPayload, workspace.resultState, fetchCompletedResult]);
+
+  useEffect(() => {
+    if (!workspace.runId || !['completed', 'failed'].includes(status)) {
+      return;
+    }
+
+    void loadRunHistory({ preserveRuns: true });
+  }, [workspace.runId, status, loadRunHistory]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -860,6 +1014,7 @@ function App() {
         statusPayload: queuedStatus,
       });
 
+      void loadRunHistory({ preserveRuns: true });
       await pollRunStatus(response.run_id);
     } catch (error) {
       setWorkspace((current) => ({
@@ -868,6 +1023,33 @@ function App() {
         submitError: formatApiError(error, 'Review submission failed.'),
       }));
     }
+  }
+
+  async function handleOpenRun(run) {
+    const runId = String(run?.run_id ?? '');
+    if (!runId) {
+      return;
+    }
+
+    setWorkspace({
+      ...initialWorkspace,
+      runId,
+      status: run.status ?? 'idle',
+      statusPayload: {
+        run_id: runId,
+        status: run.status ?? 'idle',
+        progress: {
+          percent: run.status === 'completed' ? 100 : 0,
+          current_node: '',
+          nodes: {},
+          updated_at: run.updated_at ?? run.created_at ?? '',
+          error: '',
+        },
+        report_paths: {},
+      },
+    });
+
+    await pollRunStatus(runId);
   }
 
   async function handleDownload(format) {
@@ -904,16 +1086,16 @@ function App() {
       <header className="hero hero-tight">
         <div>
           <p className="eyebrow">Requirement Review Workspace</p>
-          <h1>Submit once, watch the run, inspect the result, and download the review artifacts.</h1>
+          <h1>Review intake, history, progress, and result inspection in one focused workspace.</h1>
           <p className="hero-copy">
-            This frontend is wired directly to the review API so the workspace reflects real run state instead of a mock dashboard.
+            This phase stays review-first: submit a PRD, reopen recent runs, inspect progress, and pull the result package without adding approval or orchestration controls.
           </p>
         </div>
 
         <div className="hero-panel">
           <span className="hero-label">Connected endpoints</span>
-          <strong>POST /api/review</strong>
-          <p>Polling uses the status and result endpoints, and report downloads stay anchored on the canonical Markdown and JSON artifacts.</p>
+          <strong>POST /api/review and GET /api/runs</strong>
+          <p>The detail view continues to rely on status, result, and report endpoints, while the history view keeps recent review work within easy reach.</p>
         </div>
       </header>
 
@@ -927,6 +1109,13 @@ function App() {
             onLoadSample={loadSample}
             isSubmitting={workspace.submitState === 'submitting'}
             errorMessage={workspace.submitError}
+          />
+
+          <ReviewHistoryPanel
+            history={history}
+            activeRunId={workspace.runId}
+            onRefresh={() => loadRunHistory({ preserveRuns: true })}
+            onOpenRun={handleOpenRun}
           />
 
           <RunProgressCard

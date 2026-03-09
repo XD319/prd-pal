@@ -56,6 +56,10 @@ export function fetchReviewResult(runId) {
   return requestJson(`/api/review/${encodeURIComponent(runId)}/result`);
 }
 
+export function fetchRuns() {
+  return requestJson('/api/runs');
+}
+
 export async function downloadReportArtifact(runId, format) {
   const response = await fetch(`/api/report/${encodeURIComponent(runId)}?format=${encodeURIComponent(format)}`);
   const fallbackName = format === 'json' ? 'report.json' : 'report.md';
