@@ -1,138 +1,125 @@
-﻿# Requirement Review v1 MCP 接入指南
+# Requirement Review MCP Guide
 
-本文档目标：让一个全新客户端从 0 到 1 调通本仓库 MCP Server（stdio），并成功调用 `review_prd` 与 `get_report`。
+This document explains how to run the repository's MCP server with review-first positioning.
 
-## 1. 前置条件
+## Positioning
+
+The MCP surface should be understood in two layers:
+
+- Core tools: review-only tools used to create and fetch review results
+- Extension tools: retained orchestration and governance tools built on top of those review results
+
+If you are integrating this repository for the first time, start with the core tools only.
+
+## Prerequisites
 
 - Python 3.11+
-- 已在环境中配置模型 API Key（至少 `OPENAI_API_KEY`）
-- 在仓库根目录执行以下命令
+- Required model credentials in the environment
+- Repository root as the working directory
 
-仓库根目录示例：
-
-```powershell
-cd "d:\Backup\Career\Campus Recruitment Projects\Personal AI Agent Project\Multi-Agent-Requirement-Review-and-Delivery-Planning-System"
-```
-
-## 2. 安装依赖
-
-推荐使用虚拟环境：
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-如果你更偏好 editable 安装，也可以：
-
-```powershell
-pip install -e .
-```
-
-## 3. 启动 MCP Server（stdio）
-
-本项目 MCP Server 入口：`requirement_review_v1.mcp_server.server`
+## Start The MCP Server
 
 ```powershell
 python -m requirement_review_v1.mcp_server.server
 ```
 
-说明：
-- 这是 stdio transport，通常由 MCP client 进程拉起。
-- 手工直接运行时会等待 MCP 消息输入，这属于正常现象。
+The server uses stdio transport and is normally launched by an MCP client.
 
-## 4. Claude Desktop 配置示例（本地 `python -m` 启动）
+## Core Review Tools
 
-把以下配置加入 Claude Desktop 的 `claude_desktop_config.json`（Windows 常见路径：`%APPDATA%\Claude\claude_desktop_config.json`）：
+These are the primary tools to emphasize:
+
+- `ping`
+  - Health check for MCP connectivity
+- `review_prd`
+  - Main entrypoint for review-only usage
+  - Accepts `prd_text`, `prd_path`, or `source`
+  - Returns `run_id`, review metrics, and artifact paths
+- `get_report`
+  - Fetches `report.md` or `report.json` for a completed run
+
+Recommended first integration flow:
+
+1. Call `ping`
+2. Call `review_prd`
+3. Use the returned `run_id`
+4. Call `get_report`
+
+## Core Example
+
+Use any MCP client to call:
 
 ```json
 {
-  "mcpServers": {
-    "requirement-review-v1": {
-      "command": "D:/.../Multi-Agent-Requirement-Review-and-Delivery-Planning-System/.venv/Scripts/python.exe",
-      "args": [
-        "-m",
-        "requirement_review_v1.mcp_server.server"
-      ],
-      "cwd": "D:/.../Multi-Agent-Requirement-Review-and-Delivery-Planning-System",
-      "env": {
-        "OPENAI_API_KEY": "<YOUR_API_KEY>"
-      }
-    }
+  "tool": "review_prd",
+  "arguments": {
+    "source": "docs/sample_prd.md"
   }
 }
 ```
 
-注意：
-- `command` 建议写虚拟环境里的 `python.exe` 绝对路径。
-- `cwd` 建议写仓库根目录绝对路径。
-- 配置后重启 Claude Desktop。
+Then fetch the report:
 
-## 5. Cursor 或通用 MCP Client 调用方式
-
-### 5.1 Cursor（若当前版本支持 MCP）
-
-如果你的 Cursor 版本提供 MCP 配置入口，使用与 Claude 相同的 stdio 参数即可：
-
-- `command`: 本地 Python 可执行文件
-- `args`: `-m requirement_review_v1.mcp_server.server`
-- `cwd`: 仓库根目录
-- `env`: 至少包含 `OPENAI_API_KEY`
-
-### 5.2 通用 MCP Client（Python SDK 方式）
-
-仓库提供了可执行示例脚本：`scripts/mcp_demo.py`
-
-```powershell
-python scripts/mcp_demo.py --prd-file examples/example_prd_app_feature.md
+```json
+{
+  "tool": "get_report",
+  "arguments": {
+    "run_id": "20260309T000000Z",
+    "format": "md"
+  }
+}
 ```
 
-脚本会自动：
-1. 通过 stdio 拉起 `python -m requirement_review_v1.mcp_server.server`
-2. 调用 `review_prd`
-3. 读取 `run_id` 后调用 `get_report`
+## Core Outputs
 
-## 6. 端到端演示
+Every review run centers on:
 
-### 6.1 一条命令跑通
+- `report.md`
+- `report.json`
+- `run_trace.json`
 
-```powershell
-python scripts/mcp_demo.py --prd-file examples/example_prd_app_feature.md --report-format md --report-limit 1500
-```
+When the multi-reviewer path is selected, the run may also include:
 
-成功时你会看到：
-- `review_prd` 返回的 `run_id`、`metrics`、`artifacts`
-- `get_report` 返回的报告内容片段
+- `review_report.json`
+- `risk_items.json`
+- `open_questions.json`
+- `review_summary.md`
 
-### 6.2 常用参数
+The implementation may also persist additional extension artifacts in the same run directory, but those are not required to understand the core MCP usage.
 
-```powershell
-python scripts/mcp_demo.py --help
-```
+## Extension Tools
 
-关键参数：
-- `--prd-file`: PRD 文件路径（与 `--prd-text` 二选一）
-- `--prd-text`: 直接传 PRD 文本
-- `--outputs-root`: 输出目录（默认 `outputs`）
-- `--report-format`: `md` 或 `json`
-- `--report-limit`: 读取 markdown 报告的最大字符数
-- `--timeout-seconds`: 单次工具调用超时（默认 600 秒）
+The repository retains additional MCP tools for downstream orchestration and governance:
 
-## 7. 已暴露工具
+- `generate_delivery_bundle`
+- `approve_handoff`
+- `get_review_workspace`
+- `handoff_to_executor`
+- `update_execution_task`
+- `list_execution_tasks`
+- `get_execution_status`
+- `get_traceability`
+- `get_template_registry`
+- `get_audit_events`
+- `retry_operation`
 
-- `ping`: 连通性检查
-- `review_prd`: 发起 PRD 审查，返回 `run_id`/指标/产物路径
-- `get_report`: 通过 `run_id` 获取 `md/json` 报告内容
+These tools are extension-layer tools. They remain available because the corresponding code is still in the repository.
 
-## 8. 常见问题
+## Extension Workflow Example
 
-1. `ModuleNotFoundError: mcp`
-   - 说明当前 Python 环境未安装依赖，请重新执行“安装依赖”。
+Only after a review result exists, an extension flow can continue with:
 
-2. `error.code = invalid_run_id`（调用 `get_report`）
-   - `run_id` 必须是 `YYYYMMDDTHHMMSSZ` 格式，建议直接使用 `review_prd` 返回值。
+1. `generate_delivery_bundle`
+2. `approve_handoff`
+3. `handoff_to_executor`
+4. `get_execution_status`
+5. `get_traceability`
 
-3. 模型调用失败
-   - 检查 `OPENAI_API_KEY` 是否在当前进程环境中可见（Claude/Cursor 配置里的 `env` 也要设置）。
+This is optional and should not be confused with the main review architecture.
+
+## Notes For Client Authors
+
+- Prefer `source` for new integrations when you want connector-based intake.
+- Keep `prd_text` and `prd_path` for backward compatibility.
+- Treat review completion as successful even if you do not use any orchestration tool.
+- Do not assume extension tools are deprecated; they are retained, just not first-layer.
