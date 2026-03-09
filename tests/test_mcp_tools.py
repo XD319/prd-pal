@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -199,6 +199,190 @@ async def test_review_prd_feishu_source_returns_not_implemented(tmp_path):
     assert "Feishu connector fetching is not implemented" in result["error"]["message"]
 
 
+
+@pytest.mark.asyncio
+async def test_review_requirement_routes_to_review_service_with_metadata_alias(monkeypatch):
+    captured: dict[str, object] = {}
+
+    async def fake_review_requirement_for_mcp_async(
+        *,
+        prd_text: str | None,
+        prd_path: str | None,
+        source: str | None,
+        options: dict[str, object] | None = None,
+        invocation_meta: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        captured["options"] = options or {}
+        captured["invocation_meta"] = invocation_meta or {}
+        assert prd_text == "mock prd"
+        assert prd_path is None
+        assert source is None
+        return {
+            "review_id": "20260304T120000Z",
+            "run_id": "20260304T120000Z",
+            "findings": [],
+            "open_questions": [],
+            "risk_items": [],
+            "conflicts": [],
+            "report_path": "outputs/20260304T120000Z/report.json",
+            "review_mode": "single_review",
+        }
+
+    monkeypatch.setattr(mcp_server, "review_requirement_for_mcp_async", fake_review_requirement_for_mcp_async)
+
+    result = await mcp_server.review_requirement(
+        prd_text="mock prd",
+        metadata={"outputs_root": "metadata-root", "client_metadata": {"channel": "cli"}},
+        options={"outputs_root": "options-root", "review_mode_override": "parallel_review"},
+    )
+
+    assert "error" not in result
+    assert result["review_id"] == "20260304T120000Z"
+    assert result["run_id"] == "20260304T120000Z"
+    assert "artifacts" not in result
+    assert captured["options"]["outputs_root"] == "options-root"
+    assert captured["options"]["review_mode_override"] == "parallel_review"
+    assert captured["options"]["audit_context"]["tool_name"] == "review_requirement"
+    assert captured["options"]["audit_context"]["client_metadata"]["channel"] == "cli"
+
+
+@pytest.mark.asyncio
+async def test_review_requirement_returns_review_only_payload_for_single_review(tmp_path, monkeypatch):
+    source_path = tmp_path / "sample_prd.md"
+    source_path.write_text("# Campus Recruitment PRD\n\nClarify recruiter login success metrics.", encoding="utf-8")
+    fixed_run_id = "20260308T030405Z"
+
+    async def fake_run_review(
+        requirement_doc: str,
+        *,
+        run_id: str | None = None,
+        outputs_root: str | None = None,
+        progress_hook=None,
+        review_mode_override: str | None = None,
+    ) -> dict[str, object]:
+        assert requirement_doc == source_path.read_text(encoding="utf-8")
+        assert str(outputs_root) == str(tmp_path)
+        assert progress_hook is None
+        assert review_mode_override is None
+
+        resolved_run_id = run_id or fixed_run_id
+        run_dir = tmp_path / resolved_run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        result = {
+            "final_report": "# Requirement Review Report\n\nSingle review facade.",
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Clarify recruiter login success metrics",
+                    "acceptance_criteria": ["Recruiter login succeeds"],
+                }
+            ],
+            "review_results": [
+                {
+                    "id": "REQ-001",
+                    "is_clear": False,
+                    "is_testable": True,
+                    "is_ambiguous": True,
+                    "issues": ["Success metric is missing"],
+                    "suggestions": "Define measurable login completion criteria.",
+                }
+            ],
+            "review_mode": "single_review",
+            "review_open_questions": [
+                {
+                    "question": "What measurable success metric confirms recruiter login is complete?",
+                    "reviewers": ["single_reviewer"],
+                    "issues": ["Success metric is missing"],
+                }
+            ],
+            "review_risk_items": [
+                {
+                    "title": "REQ-001",
+                    "detail": "Success metric is missing",
+                    "severity": "high",
+                    "category": "review_quality",
+                    "reviewers": ["single_reviewer"],
+                }
+            ],
+            "parallel-review_meta": {
+                "selected_mode": "single_review",
+                "review_mode": "single_review",
+            },
+            "tasks": [
+                {
+                    "id": "TASK-001",
+                    "title": "Implement recruiter login",
+                    "owner": "BE",
+                    "requirement_ids": ["REQ-001"],
+                }
+            ],
+            "risks": [
+                {
+                    "id": "RISK-001",
+                    "description": "Auth regression",
+                    "impact": "low",
+                    "mitigation": "Run auth regression tests",
+                }
+            ],
+            "implementation_plan": {
+                "implementation_steps": ["Update auth flow"],
+                "target_modules": ["backend.auth"],
+                "constraints": [],
+            },
+            "test_plan": {
+                "test_scope": ["Recruiter login API"],
+                "edge_cases": [],
+                "regression_focus": ["Auth regression"],
+            },
+            "codex_prompt_handoff": {
+                "agent_prompt": "Implement the login change.",
+                "recommended_execution_order": ["Review auth flow", "Apply patch"],
+                "non_goals": [],
+                "validation_checklist": ["Run auth tests"],
+            },
+            "claude_code_prompt_handoff": {
+                "agent_prompt": "Validate the login change.",
+                "recommended_execution_order": ["Inspect diff", "Run tests"],
+                "non_goals": [],
+                "validation_checklist": ["Regression covered"],
+            },
+            "metrics": {"coverage_ratio": 1.0},
+            "high_risk_ratio": 0.5,
+            "revision_round": 0,
+            "trace": {},
+        }
+        report_paths = {
+            "report_md": str(run_dir / "report.md"),
+            "report_json": str(run_dir / "report.json"),
+            "run_trace": str(run_dir / "run_trace.json"),
+        }
+        (run_dir / "report.md").write_text(result["final_report"], encoding="utf-8")
+        (run_dir / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "run_trace.json").write_text(json.dumps(result["trace"], ensure_ascii=False, indent=2), encoding="utf-8")
+        return {
+            "run_id": resolved_run_id,
+            "run_dir": str(run_dir),
+            "result": result,
+            "report_paths": report_paths,
+        }
+
+    monkeypatch.setattr(review_service, "run_review", fake_run_review)
+
+    result = await mcp_server.review_requirement(source=str(source_path), options={"outputs_root": str(tmp_path)})
+
+    assert "error" not in result
+    assert result["review_id"] == fixed_run_id
+    assert result["run_id"] == fixed_run_id
+    assert result["review_mode"] == "single_review"
+    assert result["report_path"] == str(tmp_path / fixed_run_id / "report.json")
+    assert len(result["findings"]) == 1
+    assert result["findings"][0]["requirement_id"] == "REQ-001"
+    assert result["open_questions"][0]["question"].startswith("What measurable success metric")
+    assert result["risk_items"][0]["severity"] == "high"
+    assert result["conflicts"] == []
+    assert "status" not in result
+    assert "metrics" not in result
+    assert "artifacts" not in result
 def test_get_report_rejects_invalid_run_id_via_tool_handler(tmp_path):
     result = mcp_server.get_report(run_id="../escape", options={"outputs_root": str(tmp_path)})
 
@@ -892,3 +1076,4 @@ def test_retry_operation_tool_rejects_invalid_operation(tmp_path):
 
     assert result["error"]["code"] == "invalid_operation"
     assert "operation must be one of" in result["error"]["message"]
+
