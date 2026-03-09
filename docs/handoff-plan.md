@@ -1,76 +1,100 @@
-# Handoff Plan
+# Handoff And Orchestration Extension
 
-## v6 orchestration model
+## Positioning
 
-The v6 handoff flow keeps `delivery_bundle.json` as the approval source of truth, then adds an execution orchestration layer on top of approved bundles.
+This document describes the repository's extension layer.
 
-Each completed and approved review can now produce five layers of output:
+It is not the definition of the main review architecture.
 
-- Standardized standalone review artifacts
-- Structured machine-readable packs
-- Agent-facing prompt views
-- Persisted execution tasks in `execution_tasks.json`
-- End-to-end traceability in `traceability_map.json`
+The primary system flow remains:
 
-## Bundle to execution flow
+`source input -> review mode gating -> normalizer -> parallel reviewers -> aggregator -> review artifacts`
 
-Recommended flow:
+The capabilities below are downstream extensions that build on a completed review result.
 
-1. Run the requirement review workflow.
-2. Review the standalone Markdown artifacts and `delivery_bundle.json`.
-3. Move the bundle through approval until it reaches `approved`.
-4. Call `handoff_to_executor` to route implementation and test work.
-5. Track the routed work with `get_execution_status`.
-6. Inspect upstream/downstream relationships with `get_traceability`.
+## Extension Scope
 
-`delivery_bundle.json` remains the decision gate. Execution only starts from an approved bundle.
+The repository retains code for:
 
-## Execution modes
+- `delivery_bundle.json` generation
+- approval actions and persisted workspace state
+- handoff pack generation for downstream coding agents
+- execution task routing and lifecycle tracking
+- traceability across requirements, review items, and tasks
+- governance support such as notifications and audit data
 
-v6 supports three execution modes:
+These modules are still present and usable. They are not removed or deprecated by this document.
 
-- `agent_auto`: lowest-friction execution, best for low-risk bounded work
-- `agent_assisted`: default mode, allows manual checkpoints during execution
-- `human_only`: no autonomous execution is assumed
+## Extension Entry Conditions
 
-When the execution pack contains high-risk items, routing automatically downgrades to `agent_assisted` unless the mode is already `human_only`.
+The extension layer starts only after a review run has produced its core artifacts.
 
-## Execution task lifecycle
+Recommended extension flow:
 
-Execution tasks move through these states:
+1. Run the review engine and inspect the review artifacts.
+2. Optionally generate or regenerate `delivery_bundle.json`.
+3. Optionally move the bundle through approval actions.
+4. Optionally create handoff packs and execution tasks.
+5. Optionally query traceability, workspace state, audit events, and execution status.
 
-- `pending`
-- `assigned`
-- `in_progress`
-- `waiting_review`
-- `completed`
-- `failed`
-- `cancelled`
+## Retained Bundle And Approval Model
 
-This gives the system a minimal but explicit orchestration model for downstream work without requiring a database or external scheduler.
+The current repository keeps `delivery_bundle.json` as the persisted package for downstream extension workflows.
 
-## Traceability
+Approval transitions remain:
 
-The traceability layer links:
+- `draft -> need_more_info`
+- `draft -> approved`
+- `draft -> blocked_by_risk`
+- `need_more_info -> draft`
+- `need_more_info -> blocked_by_risk`
+- `blocked_by_risk -> draft`
 
-- requirement ids
-- review item ids
-- planned implementation tasks
-- derived test items
-- routed execution tasks
+Related persisted extension files include:
 
-This makes it possible to answer both of these questions programmatically:
+- `delivery_bundle.json`
+- `approval_records.json`
+- `status_snapshot.json`
 
-- which execution tasks implement one requirement?
-- what upstream requirement and review context produced one execution task?
+## Retained Handoff And Execution Model
 
-## Current boundaries
+The current extension layer also retains:
 
-The v6 orchestration layer still does not:
+- `implementation_pack.json`
+- `test_pack.json`
+- `execution_pack.json`
+- `codex_prompt.md`
+- `claude_code_prompt.md`
+- `execution_tasks.json`
+- `traceability_map.json`
 
-- invoke real external coding agents through a live adapter
-- stream asynchronous execution callbacks
-- send notifications or reminders
-- persist orchestration state in a database
+Execution task transitions remain:
 
-Those remain future extensions beyond the current file-based orchestration model.
+- `pending -> assigned`
+- `assigned -> in_progress`
+- `in_progress -> waiting_review`
+- `in_progress -> completed|failed|cancelled`
+- `waiting_review -> in_progress|failed|cancelled`
+
+Execution modes still available in code:
+
+- `agent_auto`
+- `agent_assisted`
+- `human_only`
+
+## Extension Boundaries
+
+The retained extension layer still does not:
+
+- invoke real external coding agents through live provider adapters
+- provide a full async callback platform or scheduler
+- persist workflow state in a database by default
+- make notifications mandatory for review completion
+
+## Relationship To The Main Architecture
+
+This document should be read as:
+
+- an extension note for users who want review-plus-orchestration
+- not a replacement for the review-engine positioning
+- not the first document to use when defining the system at a high level
