@@ -233,8 +233,11 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
         "review_mode_override": override,
         "parallel_triggered": False,
         "reviewer_strategy": "single_reviewer",
+        "review_mode": "single_review",
         "gating_decision": asdict(decision),
         "reviewer_count": 1,
+        "reviewers_completed": ["single_reviewer"],
+        "reviewers_failed": [],
         "finding_count": len(review_results),
         "open_questions_count": len(review_open_questions),
         "risk_items_count": len(review_risk_items),
@@ -262,6 +265,10 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
 
     parallel_result = await run_parallel_review_async(requirement_doc, run_dir)
     aggregated = parallel_result.aggregated
+    aggregated_meta = dict(aggregated.get("meta", {}) or {})
+    selected_mode = str(aggregated_meta.get("review_mode", "parallel_review") or "parallel_review")
+    reviewers_completed = list(aggregated_meta.get("reviewers_completed", []) or [])
+    reviewers_failed = list(aggregated_meta.get("reviewers_failed", []) or [])
     review_results = _build_parallel_review_results(state, aggregated)
     plan_review = _build_parallel_plan_review(aggregated)
     review_open_questions = list(aggregated.get("open_questions", []) or [])
@@ -272,12 +279,15 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     trace["reviewer"] = span.end(status="ok", output_chars=output_chars)
     meta = {
         "default_mode": decision.mode,
-        "selected_mode": "parallel_review",
+        "selected_mode": selected_mode,
         "review_mode_override": override,
         "parallel_triggered": True,
         "reviewer_strategy": "asyncio.gather",
+        "review_mode": selected_mode,
         "gating_decision": asdict(decision),
-        "reviewer_count": int(aggregated.get("reviewer_count", 0) or 0),
+        "reviewer_count": int(aggregated.get("reviewer_count", len(reviewers_completed)) or len(reviewers_completed)),
+        "reviewers_completed": reviewers_completed,
+        "reviewers_failed": reviewers_failed,
         "finding_count": len(findings),
         "open_questions_count": len(review_open_questions),
         "risk_items_count": len(review_risk_items),
@@ -293,7 +303,7 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "plan_review": plan_review,
         "high_risk_ratio": _compute_parallel_high_risk_ratio(review_results),
         "trace": trace,
-        "review_mode": "parallel_review",
+        "review_mode": selected_mode,
         "parallel_review": aggregated,
         "review_open_questions": review_open_questions,
         "review_risk_items": review_risk_items,
@@ -316,7 +326,7 @@ def _build_parallel_review_results(state: ReviewState, aggregated: dict[str, Any
         for item in findings
     )
     issue_lines = [
-        f"{item.get('title', 'Finding')}: {item.get('detail', '')}".strip()
+        f"{item.get('title', 'Finding')}: {item.get('description', item.get('detail', ''))}".strip()
         for item in findings[:2]
         if str(item.get("title", "") or "").strip()
     ]
@@ -455,3 +465,6 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
     workflow.add_edge("reporter", END)
 
     return workflow.compile()
+
+
+
