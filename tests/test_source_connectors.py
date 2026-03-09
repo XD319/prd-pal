@@ -42,11 +42,15 @@ def test_local_file_connector_rejects_unsupported_suffix(tmp_path: Path) -> None
 
 
 def test_connector_registry_routes_url_sources() -> None:
-    connector = ConnectorRegistry().resolve("https://example.com/spec")
+    connector = ConnectorRegistry().resolve("https://openai.com/spec")
 
     assert isinstance(connector, URLConnector)
 
 
-def test_url_connector_rejects_fetch_until_implemented() -> None:
-    with pytest.raises(NotImplementedError, match="not implemented"):
-        URLConnector().get_content("https://example.com/spec")
+def test_url_connector_can_handle_http_sources() -> None:
+    connector = URLConnector()
+
+    assert connector.can_handle("https://openai.com/spec") is True
+    assert connector.can_handle("http://example.org/spec") is True
+    assert connector.can_handle("ftp://example.org/spec") is False
+    assert connector.can_handle("not-a-url") is False
