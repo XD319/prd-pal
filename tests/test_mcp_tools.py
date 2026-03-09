@@ -1093,4 +1093,29 @@ def test_retry_operation_tool_rejects_invalid_operation(tmp_path):
     assert result["error"]["code"] == "invalid_operation"
     assert "operation must be one of" in result["error"]["message"]
 
+@pytest.mark.asyncio
+async def test_review_prd_notion_source_requires_credentials(tmp_path, monkeypatch):
+    monkeypatch.delenv("MARRDP_NOTION_TOKEN", raising=False)
+    result = await mcp_server.review_prd(
+        source="notion://page/0123456789abcdef0123456789abcdef",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"]["code"] == "AUTHENTICATION_FAILED"
+    assert "MARRDP_NOTION_TOKEN" in result["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_review_requirement_notion_source_requires_credentials(tmp_path, monkeypatch):
+    monkeypatch.delenv("MARRDP_NOTION_TOKEN", raising=False)
+
+    result = await mcp_server.review_requirement(
+        source="notion://page/0123456789abcdef0123456789abcdef",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    assert result["error"]["code"] == "AUTHENTICATION_FAILED"
+    assert "MARRDP_NOTION_TOKEN" in result["error"]["message"]
+
 

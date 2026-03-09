@@ -1,4 +1,4 @@
-﻿"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
+"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from requirement_review_v1.connectors import ConnectorRegistry
+from requirement_review_v1.connectors import ConnectorRegistry, get_connector_error_payload
 from requirement_review_v1.connectors.feishu import (
     FeishuAuthenticationError,
     FeishuDocumentNotFoundError,
@@ -93,8 +93,23 @@ def classify_review_input_error(exc: Exception) -> ReviewInputErrorInfo | None:
         return ReviewInputErrorInfo(code="DOCUMENT_NOT_FOUND", message=str(exc))
     if isinstance(exc, FeishuUnsupportedDocumentTypeError):
         return ReviewInputErrorInfo(code="UNSUPPORTED_DOCUMENT_TYPE", message=str(exc))
-    return None
 
+    connector_error = get_connector_error_payload(exc)
+    if connector_error is None:
+        return None
+
+    code_mapping = {
+        "authentication_failed": "AUTHENTICATION_FAILED",
+        "permission_denied": "PERMISSION_DENIED",
+        "not_found": "DOCUMENT_NOT_FOUND",
+        "unsupported_source": "UNSUPPORTED_SOURCE",
+        "invalid_source": "INVALID_INPUT",
+        "network_unavailable": "NETWORK_UNAVAILABLE",
+    }
+    mapped_code = code_mapping.get(str(connector_error.code or ""))
+    if not mapped_code:
+        return None
+    return ReviewInputErrorInfo(code=mapped_code, message=connector_error.message)
 
 _REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {
     "report_md": "report.md",
@@ -1448,13 +1463,4 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
-
-
-
-
-
-
-
-
-
 

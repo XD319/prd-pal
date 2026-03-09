@@ -1,4 +1,4 @@
-﻿"""Shared source connector schemas and normalized document contract."""
+"""Shared source connector schemas and normalized document contract."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ class SourceType(str, Enum):
     local_file = "local_file"
     url = "url"
     feishu = "feishu"
+    notion = "notion"
 
 
 class SourceMetadata(AgentSchemaModel):
