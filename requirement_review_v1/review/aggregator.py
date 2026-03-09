@@ -1,4 +1,4 @@
-﻿"""Aggregate multi-role reviewer outputs into unified artifacts."""
+"""Aggregate multi-role reviewer outputs into unified artifacts."""
 
 from __future__ import annotations
 
@@ -10,6 +10,87 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .reviewer_agents.base import ReviewFinding, ReviewerResult, normalize_severity
+
+_SEMANTIC_SIGNAL_PATTERNS: dict[str, tuple[str, ...]] = {
+    "scope_inclusion": (
+        "scope included",
+        "scope is included",
+        "scope covered",
+        "scope is complete",
+        "within scope",
+        "in scope",
+    ),
+    "dependency_blocker": (
+        "dependency blocker",
+        "blocked by dependency",
+        "blocked by dependencies",
+        "implementation boundaries",
+        "cross system sequencing risk",
+        "shared dependencies",
+    ),
+    "acceptance_complete": (
+        "acceptance complete",
+        "acceptance criteria complete",
+        "acceptance criteria are complete",
+        "acceptance coverage is complete",
+        "ready for qa sign off",
+        "test ready acceptance",
+    ),
+    "testability_gap": (
+        "testability gap",
+        "test oracle is missing",
+        "cannot derive pass fail",
+        "edge case coverage looks thin",
+        "acceptance coverage is thinner",
+        "pass fail expectations",
+    ),
+    "release_ok": (
+        "release ok",
+        "release is ok",
+        "ready for release",
+        "release can proceed",
+        "approved for release",
+        "good to release",
+    ),
+    "approval_blocker": (
+        "approval blocker",
+        "release gate required",
+        "security review gate required",
+        "requires approval before release",
+        "reviewed before release approval",
+        "cannot release until approval",
+    ),
+}
+
+_SEMANTIC_SIGNAL_REVIEWERS: dict[str, tuple[str, ...]] = {
+    "scope_inclusion": ("product",),
+    "dependency_blocker": ("engineering",),
+    "acceptance_complete": ("product", "qa"),
+    "testability_gap": ("qa",),
+    "release_ok": ("product", "engineering", "security"),
+    "approval_blocker": ("security", "product"),
+}
+
+_SEMANTIC_CONFLICT_RULES: tuple[dict[str, str], ...] = (
+    {
+        "type": "scope_inclusion_vs_dependency_blocker",
+        "left_signal": "scope_inclusion",
+        "right_signal": "dependency_blocker",
+        "description_template": "{left_subject} {left_verb} the requested scope is already covered, but {right_subject} {right_verb} dependency blockers that can stop or delay implementation.",
+    },
+    {
+        "type": "acceptance_complete_vs_testability_gap",
+        "left_signal": "acceptance_complete",
+        "right_signal": "testability_gap",
+        "description_template": "{left_subject} {left_verb} the acceptance criteria are complete, but {right_subject} {right_verb} a testability gap that leaves QA without reliable pass/fail coverage.",
+    },
+    {
+        "type": "release_ok_vs_approval_blocker",
+        "left_signal": "release_ok",
+        "right_signal": "approval_blocker",
+        "description_template": "{left_subject} {left_verb} the release as ready to proceed, but {right_subject} still {right_verb} an approval gate before release.",
+    },
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +315,12 @@ def _aggregate_open_questions(results: tuple[ReviewerResult, ...]) -> list[dict[
 
 
 def _detect_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
+    conflicts = _detect_severity_conflicts(results)
+    conflicts.extend(_detect_semantic_conflicts(results))
+    return conflicts
+
+
+def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
     topic_map: dict[str, dict[str, Any]] = {}
     for result in results:
         for finding in result.findings:
@@ -244,9 +331,11 @@ def _detect_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any
                     "topic": finding.title,
                     "finding_severities": set(),
                     "risk_severities": set(),
+                    "reviewers": set(),
                 },
             )
             bucket["finding_severities"].add(normalize_severity(finding.severity))
+            bucket["reviewers"].add(_resolve_source_reviewer(result.reviewer, finding.reviewer))
         for risk in result.risk_items:
             key = _normalize_topic_key(risk.title, risk.detail)
             bucket = topic_map.setdefault(
@@ -255,33 +344,91 @@ def _detect_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any
                     "topic": risk.title,
                     "finding_severities": set(),
                     "risk_severities": set(),
+                    "reviewers": set(),
                 },
             )
             bucket["risk_severities"].add(normalize_severity(risk.severity))
+            bucket["reviewers"].add(str(result.reviewer or risk.reviewer or "").strip() or "unknown")
 
     conflicts: list[dict[str, Any]] = []
     for value in topic_map.values():
-        finding_levels = sorted(value["finding_severities"])
-        risk_levels = sorted(value["risk_severities"])
+        finding_levels = _sort_severities(value["finding_severities"])
+        risk_levels = _sort_severities(value["risk_severities"])
+        topic = str(value["topic"] or "shared topic").strip() or "shared topic"
+        reviewers = sorted(value["reviewers"])
         if len(finding_levels) > 1:
+            finding_severity = ", ".join(finding_levels)
+            risk_severity = ", ".join(risk_levels) if risk_levels else ""
+            description = (
+                f"Severity mismatch on '{topic}': findings use {finding_severity}"
+                + (f" while risks use {risk_severity}." if risk_severity else ".")
+            )
             conflicts.append(
-                {
-                    "topic": value["topic"],
-                    "finding_severity": ", ".join(finding_levels),
-                    "risk_severity": ", ".join(risk_levels) if risk_levels else "",
-                    "status": "severity_mismatch",
-                }
+                _build_conflict(
+                    conflict_type="severity_mismatch",
+                    description=description,
+                    reviewers=reviewers,
+                    topic=topic,
+                    finding_severity=finding_severity,
+                    risk_severity=risk_severity,
+                )
             )
             continue
         if finding_levels and risk_levels and finding_levels[0] != risk_levels[0]:
             conflicts.append(
-                {
-                    "topic": value["topic"],
-                    "finding_severity": finding_levels[0],
-                    "risk_severity": risk_levels[0],
-                    "status": "severity_mismatch",
-                }
+                _build_conflict(
+                    conflict_type="severity_mismatch",
+                    description=(
+                        f"Severity mismatch on '{topic}': findings use {finding_levels[0]} while risks use {risk_levels[0]}."
+                    ),
+                    reviewers=reviewers,
+                    topic=topic,
+                    finding_severity=finding_levels[0],
+                    risk_severity=risk_levels[0],
+                )
             )
+    return conflicts
+
+
+def _detect_semantic_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
+    signals = _collect_semantic_signals(results)
+    conflicts: list[dict[str, Any]] = []
+
+    for rule in _SEMANTIC_CONFLICT_RULES:
+        left_matches = signals.get(rule["left_signal"], [])
+        right_matches = signals.get(rule["right_signal"], [])
+        if not left_matches or not right_matches:
+            continue
+
+        left_reviewers = _merge_unique([], [match["reviewer"] for match in left_matches])
+        right_reviewers = _merge_unique([], [match["reviewer"] for match in right_matches])
+        if not left_reviewers or not right_reviewers:
+            continue
+        if set(left_reviewers) == set(right_reviewers):
+            continue
+
+        reviewers = _merge_unique(left_reviewers, right_reviewers)
+        left_subject, left_verb = _format_reviewer_subject(left_reviewers, singular_verb="indicates", plural_verb="indicate")
+        right_subject, right_verb = _format_reviewer_subject(right_reviewers, singular_verb="flags", plural_verb="flag")
+        if rule["type"] == "acceptance_complete_vs_testability_gap":
+            right_subject, right_verb = _format_reviewer_subject(right_reviewers, singular_verb="identifies", plural_verb="identify")
+        elif rule["type"] == "release_ok_vs_approval_blocker":
+            left_subject, left_verb = _format_reviewer_subject(left_reviewers, singular_verb="marks", plural_verb="mark")
+            right_subject, right_verb = _format_reviewer_subject(right_reviewers, singular_verb="requires", plural_verb="require")
+        description = rule["description_template"].format(
+            left_subject=left_subject,
+            left_verb=left_verb,
+            right_subject=right_subject,
+            right_verb=right_verb,
+        )
+        conflicts.append(
+            _build_conflict(
+                conflict_type=rule["type"],
+                description=description,
+                reviewers=reviewers,
+            )
+        )
+
     return conflicts
 
 
@@ -351,10 +498,7 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
         ])
         lines.extend(
             _bullet_lines(
-                [
-                    f"{item['topic']}: finding={item['finding_severity']}, risk={item['risk_severity']}"
-                    for item in conflicts
-                ],
+                [_format_conflict_line(item) for item in conflicts],
                 "No conflicts.",
             )
         )
@@ -422,10 +566,7 @@ def _render_summary(report_payload: dict[str, Any]) -> str:
         ])
         lines.extend(
             _bullet_lines(
-                [
-                    f"{item['topic']}: finding={item['finding_severity']}, risk={item['risk_severity']}"
-                    for item in conflicts
-                ],
+                [_format_conflict_line(item) for item in conflicts],
                 "No conflicts.",
             )
         )
@@ -538,6 +679,125 @@ def _resolve_assignee(finding: ReviewFinding, source_reviewer: str) -> str:
     return default_assignees.get(category, str(source_reviewer or "product").strip() or "product")
 
 
+def _collect_semantic_signals(results: tuple[ReviewerResult, ...]) -> dict[str, list[dict[str, str]]]:
+    signals: dict[str, list[dict[str, str]]] = {signal: [] for signal in _SEMANTIC_SIGNAL_PATTERNS}
+    for result in results:
+        reviewer = str(result.reviewer or "").strip().lower()
+        for signal, patterns in _SEMANTIC_SIGNAL_PATTERNS.items():
+            allowed_reviewers = _SEMANTIC_SIGNAL_REVIEWERS.get(signal, ())
+            if allowed_reviewers and reviewer not in allowed_reviewers:
+                continue
+            for source, text in _iter_result_texts(result):
+                normalized = _normalize_topic_key(text)
+                if not normalized:
+                    continue
+                if any(pattern in normalized for pattern in patterns):
+                    signals[signal].append(
+                        {
+                            "reviewer": reviewer or "unknown",
+                            "source": source,
+                            "text": str(text or "").strip(),
+                        }
+                    )
+                    break
+    return signals
+
+
+def _iter_result_texts(result: ReviewerResult) -> Iterable[tuple[str, str]]:
+    if result.summary:
+        yield "summary", result.summary
+
+    for question in result.open_questions:
+        if question:
+            yield "open_question", question
+
+    for finding in result.findings:
+        if finding.title:
+            yield "finding_title", finding.title
+        if finding.detail:
+            yield "finding_detail", finding.detail
+        if finding.suggested_action:
+            yield "finding_action", finding.suggested_action
+
+    for risk in result.risk_items:
+        if risk.title:
+            yield "risk_title", risk.title
+        if risk.detail:
+            yield "risk_detail", risk.detail
+        if risk.mitigation:
+            yield "risk_mitigation", risk.mitigation
+
+
+def _build_conflict(
+    *,
+    conflict_type: str,
+    description: str,
+    reviewers: list[str],
+    topic: str = "",
+    finding_severity: str = "",
+    risk_severity: str = "",
+) -> dict[str, Any]:
+    normalized_reviewers = _merge_unique([], reviewers)
+    conflict_id = _build_conflict_id(conflict_type, topic, description, ",".join(normalized_reviewers))
+    payload = {
+        "conflict_id": conflict_id,
+        "type": conflict_type,
+        "description": description,
+        "reviewers": normalized_reviewers,
+        "requires_manual_resolution": True,
+        "status": conflict_type,
+    }
+    if topic:
+        payload["topic"] = topic
+    if finding_severity:
+        payload["finding_severity"] = finding_severity
+    if risk_severity:
+        payload["risk_severity"] = risk_severity
+    return payload
+
+
+def _build_conflict_id(*parts: str) -> str:
+    normalized = _normalize_topic_key(*parts)
+    digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:12]
+    return f"conflict-{digest}"
+
+
+def _format_conflict_line(item: dict[str, Any]) -> str:
+    description = str(item.get("description", "") or "").strip()
+    reviewers = _format_reviewer_list(item.get("reviewers", []))
+    if description and reviewers:
+        return f"{description} Reviewers: {reviewers}."
+    if description:
+        return description
+    return "Conflict requires manual resolution."
+
+
+def _format_reviewer_list(items: Any) -> str:
+    if not isinstance(items, list) or not items:
+        return ""
+    return ", ".join(str(item).strip() for item in items if str(item or "").strip())
+
+
+_REVIEWER_DISPLAY_NAMES = {
+    "product": "Product",
+    "engineering": "Engineering",
+    "qa": "QA",
+    "security": "Security",
+}
+
+
+def _format_reviewer_subject(items: list[str], *, singular_verb: str, plural_verb: str) -> tuple[str, str]:
+    names = [
+        _REVIEWER_DISPLAY_NAMES.get(str(item).strip().lower(), str(item).strip().title())
+        for item in items
+        if str(item or "").strip()
+    ]
+    if not names:
+        return "Reviewers", plural_verb
+    subject = ", ".join(names)
+    return subject, singular_verb if len(names) == 1 else plural_verb
+
+
 def _bullet_lines(items: list[str], empty_message: str) -> list[str]:
     if not items:
         return [f"- {empty_message}"]
@@ -560,6 +820,11 @@ def _merge_unique(existing: list[str], incoming: list[str]) -> list[str]:
         seen.add(value)
         merged.append(value)
     return merged
+
+
+def _sort_severities(values: set[str]) -> list[str]:
+    order = {"low": 0, "medium": 1, "high": 2}
+    return sorted(values, key=lambda value: (order.get(value, 1), value))
 
 
 def _max_severity(left: str, right: str) -> str:
