@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -196,7 +196,7 @@ async def test_review_prd_feishu_source_returns_not_implemented(tmp_path):
 
     assert result["status"] == "failed"
     assert result["error"]["code"] == "NOT_IMPLEMENTED"
-    assert "Feishu connector fetching is not implemented" in result["error"]["message"]
+    assert "Feishu connector fetching is intentionally unavailable" in result["error"]["message"]
 
 
 
@@ -1076,4 +1076,5 @@ def test_retry_operation_tool_rejects_invalid_operation(tmp_path):
 
     assert result["error"]["code"] == "invalid_operation"
     assert "operation must be one of" in result["error"]["message"]
+
 
