@@ -191,12 +191,14 @@ async def test_review_prd_supports_local_source_and_persists_source_metadata(tmp
 
 
 @pytest.mark.asyncio
-async def test_review_prd_feishu_source_returns_not_implemented(tmp_path):
+async def test_review_prd_feishu_source_requires_credentials(tmp_path, monkeypatch):
+    monkeypatch.delenv("MARRDP_FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("MARRDP_FEISHU_APP_SECRET", raising=False)
     result = await mcp_server.review_prd(source="feishu://wiki/space/doc-token", options={"outputs_root": str(tmp_path)})
 
     assert result["status"] == "failed"
-    assert result["error"]["code"] == "NOT_IMPLEMENTED"
-    assert "Feishu connector fetching is intentionally unavailable" in result["error"]["message"]
+    assert result["error"]["code"] == "AUTHENTICATION_FAILED"
+    assert "MARRDP_FEISHU_APP_ID" in result["error"]["message"]
 
 
 

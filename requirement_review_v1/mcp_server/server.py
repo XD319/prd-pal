@@ -10,6 +10,12 @@ from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from requirement_review_v1.connectors.feishu import (
+    FeishuAuthenticationError,
+    FeishuDocumentNotFoundError,
+    FeishuPermissionDeniedError,
+    FeishuUnsupportedDocumentTypeError,
+)
 from requirement_review_v1.monitoring import (
     RetryOperationError,
     RetryTargetNotFoundError,
@@ -61,6 +67,14 @@ async def review_prd(
             options=audited_options,
             invocation_meta={"client_metadata": client_meta} if client_meta else {},
         )
+    except FeishuAuthenticationError as exc:
+        return _error_response("AUTHENTICATION_FAILED", str(exc))
+    except FeishuPermissionDeniedError as exc:
+        return _error_response("PERMISSION_DENIED", str(exc))
+    except FeishuDocumentNotFoundError as exc:
+        return _error_response("DOCUMENT_NOT_FOUND", str(exc))
+    except FeishuUnsupportedDocumentTypeError as exc:
+        return _error_response("UNSUPPORTED_DOCUMENT_TYPE", str(exc))
     except FileNotFoundError as exc:
         return _error_response("PRD_NOT_FOUND", str(exc))
     except NotImplementedError as exc:
@@ -92,6 +106,14 @@ async def review_requirement(
             options=audited_options,
             invocation_meta={"client_metadata": client_meta} if client_meta else {},
         )
+    except FeishuAuthenticationError as exc:
+        return _review_requirement_error_response("AUTHENTICATION_FAILED", str(exc))
+    except FeishuPermissionDeniedError as exc:
+        return _review_requirement_error_response("PERMISSION_DENIED", str(exc))
+    except FeishuDocumentNotFoundError as exc:
+        return _review_requirement_error_response("DOCUMENT_NOT_FOUND", str(exc))
+    except FeishuUnsupportedDocumentTypeError as exc:
+        return _review_requirement_error_response("UNSUPPORTED_DOCUMENT_TYPE", str(exc))
     except FileNotFoundError as exc:
         return _review_requirement_error_response("PRD_NOT_FOUND", str(exc))
     except NotImplementedError as exc:
