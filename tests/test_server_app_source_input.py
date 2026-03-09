@@ -64,3 +64,27 @@ async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, mon
     assert captured["prd_path"] is None
     assert captured["source"] == str(source_file)
     app_module._jobs.clear()
+
+
+@pytest.mark.asyncio
+async def test_get_review_status_keeps_legacy_report_paths_for_completed_run(tmp_path, monkeypatch):
+    run_id = "20260308T020303Z"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "report.md").write_text("# Report", encoding="utf-8")
+    (run_dir / "report.json").write_text("{}", encoding="utf-8")
+    (run_dir / "run_trace.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    app_module._jobs.clear()
+
+    result = await app_module.get_review_status(run_id)
+
+    assert result["run_id"] == run_id
+    assert result["status"] == "completed"
+    assert result["report_paths"] == {
+        "report_md": str(run_dir / "report.md"),
+        "report_json": str(run_dir / "report.json"),
+        "run_trace": str(run_dir / "run_trace.json"),
+    }
+    app_module._jobs.clear()

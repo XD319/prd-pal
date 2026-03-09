@@ -14,7 +14,12 @@ from pydantic import BaseModel, model_validator
 
 from requirement_review_v1.monitoring import query_audit_events
 from requirement_review_v1.run_review import make_run_id
-from requirement_review_v1.service.review_service import review_prd_text_async
+from requirement_review_v1.service.review_service import (
+    ReviewResultNotReadyError,
+    ReviewRunNotFoundError,
+    get_review_result_payload,
+    review_prd_text_async,
+)
 from requirement_review_v1.templates import TemplateRegistryError, list_template_records
 
 OUTPUTS_ROOT = Path("outputs")
@@ -282,6 +287,40 @@ async def get_review_status(run_id: str) -> dict[str, Any]:
             "run_trace": str(run_dir / "run_trace.json"),
         },
     }
+
+
+@app.get("/api/review/{run_id}/result")
+async def get_review_result(run_id: str) -> dict[str, Any]:
+    try:
+        return get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
+    except ReviewRunNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc)},
+        ) from exc
+    except ReviewResultNotReadyError as exc:
+        async with _jobs_lock:
+            job = _jobs.get(run_id)
+
+        status = job.status if job else "running"
+        detail = {
+            "code": "result_not_ready" if status in {"queued", "running"} else "result_unavailable",
+            "message": (
+                str(exc)
+                if status in {"queued", "running"}
+                else (job.error if job and job.error else f"review result unavailable for run_id={run_id}")
+            ),
+            "run_id": run_id,
+            "status": status,
+        }
+        if job:
+            detail["progress"] = job.as_progress_payload()
+        raise HTTPException(status_code=409, detail=detail) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "invalid_report_content", "message": str(exc)},
+        ) from exc
 
 
 @app.get("/api/report/{run_id}")

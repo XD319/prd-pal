@@ -64,6 +64,105 @@ class ReviewResultSummary:
         return asdict(self)
 
 
+class ReviewRunNotFoundError(FileNotFoundError):
+    """Raised when a review run directory cannot be found."""
+
+
+class ReviewResultNotReadyError(RuntimeError):
+    """Raised when a review run exists but report.json is not available yet."""
+
+
+_REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {
+    "report_md": "report.md",
+    "report_json": "report.json",
+    "run_trace": "run_trace.json",
+    "review_report_json": "review_report.json",
+    "risk_items_json": "risk_items.json",
+    "open_questions_json": "open_questions.json",
+    "review_summary_md": "review_summary.md",
+}
+
+
+def _resolve_review_result_artifact_paths(
+    run_dir: Path,
+    report_payload: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    artifact_paths: dict[str, str] = {}
+    for key, filename in _REVIEW_RESULT_ARTIFACT_FILENAMES.items():
+        candidate = run_dir / filename
+        if candidate.exists() and candidate.is_file():
+            artifact_paths[key] = str(candidate)
+
+    if not isinstance(report_payload, dict):
+        return artifact_paths
+
+    candidate_maps: list[dict[str, Any]] = []
+    report_artifacts = report_payload.get("artifacts")
+    if isinstance(report_artifacts, dict):
+        candidate_maps.append(report_artifacts)
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    parallel_artifacts = parallel_review.get("artifacts")
+    if isinstance(parallel_artifacts, dict):
+        candidate_maps.append(parallel_artifacts)
+
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
+    parallel_meta_artifacts = parallel_review_meta.get("artifact_paths")
+    if isinstance(parallel_meta_artifacts, dict):
+        candidate_maps.append(parallel_meta_artifacts)
+
+    for key in _REVIEW_RESULT_ARTIFACT_FILENAMES:
+        if key in artifact_paths:
+            continue
+        for artifact_map in candidate_maps:
+            raw_path = str(artifact_map.get(key, "") or "").strip()
+            if not raw_path:
+                continue
+            candidate = Path(raw_path)
+            if not candidate.is_absolute():
+                candidate = run_dir / candidate
+            if candidate.exists() and candidate.is_file():
+                artifact_paths[key] = str(candidate.resolve())
+                break
+
+    return artifact_paths
+
+
+def get_review_result_payload(
+    *,
+    run_id: str,
+    outputs_root: str | Path = "outputs",
+) -> dict[str, Any]:
+    normalized_run_id = str(run_id or "").strip()
+    run_dir = Path(outputs_root) / normalized_run_id
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise ReviewRunNotFoundError(f"run_id not found: {normalized_run_id}")
+
+    report_path = run_dir / "report.json"
+    if not report_path.exists() or not report_path.is_file():
+        raise ReviewResultNotReadyError(f"report.json not ready for run_id={normalized_run_id}")
+
+    try:
+        result = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"report.json parse failed: {exc}") from exc
+
+    if not isinstance(result, (dict, list)):
+        raise ValueError("report.json must contain a JSON object or array")
+
+    artifact_paths = _resolve_review_result_artifact_paths(
+        run_dir,
+        report_payload=result if isinstance(result, dict) else None,
+    )
+    status = _derive_status(result) if isinstance(result, dict) else "completed"
+    return {
+        "run_id": normalized_run_id,
+        "status": status,
+        "result": result,
+        "artifact_paths": artifact_paths,
+    }
+
+
 def _to_float(value: Any) -> float:
     try:
         return float(value)
