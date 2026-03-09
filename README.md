@@ -204,6 +204,13 @@ The main architecture does not require:
 
 The extension layer may add those capabilities, but they are not required to understand or adopt the core review engine.
 
+## Source Connector Boundaries
+
+- `prd_text`, `prd_path`, and local `.md` / `.txt` files remain the primary supported ingestion path.
+- `URLConnector` is built in and only supports public `http/https` text pages.
+- `FeishuConnector` is intentionally kept as an optional integration boundary in this repository build. It recognizes `feishu://...` and Feishu/Lark URLs so the system can fail fast with a controlled `NOT_IMPLEMENTED` error instead of silently dropping the source.
+- Reserved environment variables for a future private Feishu adapter are `MARRDP_FEISHU_APP_ID`, `MARRDP_FEISHU_APP_SECRET`, and `MARRDP_FEISHU_OPEN_BASE_URL`.
+- A real Feishu document adapter is not shipped in this repository. If a deployment adds one later, it must translate authentication failure, permission denial, and document-not-found cases into controlled connector errors and must not change the local-file or URL ingestion path.
 ## Related Docs
 
 - `docs/review-engine-positioning.md`: main-architecture positioning
@@ -217,3 +224,4 @@ The extension layer may add those capabilities, but they are not required to und
 python eval/run_eval.py
 pytest -q
 ```
+
