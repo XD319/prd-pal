@@ -60,6 +60,13 @@ def _reviewer_results() -> list[ReviewerResult]:
     ]
 
 
+def _find_conflict(conflicts: tuple[dict[str, object], ...], conflict_type: str) -> dict[str, object]:
+    for conflict in conflicts:
+        if conflict["type"] == conflict_type:
+            return conflict
+    raise AssertionError(f"conflict not found: {conflict_type}")
+
+
 def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path):
     first_output = tmp_path / "first"
     second_output = tmp_path / "second"
@@ -94,7 +101,16 @@ def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path)
     assert aggregated.open_questions[0]["reviewers"] == ["product", "security"]
     assert len(aggregated.risk_items) == 1
     assert len(aggregated.conflicts) == 1
-    assert aggregated.conflicts[0]["status"] == "severity_mismatch"
+    conflict = aggregated.conflicts[0]
+    assert conflict["conflict_id"] == aggregated_again.conflicts[0]["conflict_id"]
+    assert conflict["type"] == "severity_mismatch"
+    assert conflict["status"] == "severity_mismatch"
+    assert conflict["topic"] == "Security review gate required"
+    assert conflict["reviewers"] == ["product", "security"]
+    assert conflict["requires_manual_resolution"] is True
+    assert conflict["description"] == (
+        "Severity mismatch on 'Security review gate required': findings use medium, high while risks use high."
+    )
 
     review_result_payload = json.loads((first_output / "review_result.json").read_text(encoding="utf-8"))
     legacy_report_payload = json.loads((first_output / "review_report.json").read_text(encoding="utf-8"))
@@ -110,13 +126,16 @@ def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path)
     assert review_result_payload["manual_review_required"] is True
     assert _MANUAL_REVIEW_TEXT in review_result_payload["manual_review_message"]
     assert review_result_payload["findings"][0]["finding_id"] == finding["finding_id"]
+    assert review_result_payload["conflicts"][0]["conflict_id"] == conflict["conflict_id"]
     assert len(risk_payload["risk_items"]) == 1
     assert len(question_payload["open_questions"]) == 1
     assert "# Review Report" in review_report_text
     assert finding["finding_id"] in review_report_text
+    assert conflict["description"] in review_report_text
     assert _MANUAL_REVIEW_TEXT in review_report_text
     assert "# Review Summary" in summary_text
     assert "Security review gate required" in summary_text
+    assert conflict["description"] in summary_text
     assert _MANUAL_REVIEW_TEXT in summary_text
 
     artifacts = aggregated.artifacts
@@ -124,3 +143,100 @@ def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path)
     assert artifacts.review_report_md.endswith("review_report.md")
     assert artifacts.review_report_json.endswith("review_report.json")
     assert artifacts.review_summary_md.endswith("review_summary.md")
+
+
+def test_detects_scope_inclusion_vs_dependency_blocker_conflict(tmp_path):
+    aggregated = aggregate_review_results(
+        [
+            ReviewerResult(
+                reviewer="product",
+                summary="The requested scope is included in the current PRD and the scenarios are within scope.",
+            ),
+            ReviewerResult(
+                reviewer="engineering",
+                findings=(
+                    ReviewFinding(
+                        title="Dependency blocker remains",
+                        detail="Shared dependencies still block implementation sequencing.",
+                        severity="high",
+                        category="architecture",
+                        reviewer="engineering",
+                    ),
+                ),
+                summary="Engineering found a dependency blocker across shared services.",
+            ),
+        ],
+        tmp_path,
+    )
+
+    conflict = _find_conflict(aggregated.conflicts, "scope_inclusion_vs_dependency_blocker")
+    assert conflict["reviewers"] == ["product", "engineering"]
+    assert conflict["requires_manual_resolution"] is True
+    assert conflict["description"] == (
+        "Product indicates the requested scope is already covered, but Engineering flags dependency blockers that can stop or delay implementation."
+    )
+
+
+def test_detects_acceptance_complete_vs_testability_gap_conflict(tmp_path):
+    aggregated = aggregate_review_results(
+        [
+            ReviewerResult(
+                reviewer="product",
+                summary="Acceptance criteria are complete and ready for QA sign off.",
+            ),
+            ReviewerResult(
+                reviewer="qa",
+                findings=(
+                    ReviewFinding(
+                        title="Testability gap remains",
+                        detail="QA cannot derive pass/fail expectations for the highest-risk edge cases.",
+                        severity="medium",
+                        category="testability",
+                        reviewer="qa",
+                    ),
+                ),
+                summary="QA still sees a testability gap around rollback coverage.",
+            ),
+        ],
+        tmp_path,
+    )
+
+    conflict = _find_conflict(aggregated.conflicts, "acceptance_complete_vs_testability_gap")
+    assert conflict["reviewers"] == ["product", "qa"]
+    assert conflict["requires_manual_resolution"] is True
+    assert conflict["description"] == (
+        "Product indicates the acceptance criteria are complete, but QA identifies a testability gap that leaves QA without reliable pass/fail coverage."
+    )
+
+
+def test_detects_release_ok_vs_approval_blocker_conflict(tmp_path):
+    aggregated = aggregate_review_results(
+        [
+            ReviewerResult(
+                reviewer="product",
+                summary="Release is ok and the feature is ready for release.",
+            ),
+            ReviewerResult(
+                reviewer="security",
+                risk_items=(
+                    RiskItem(
+                        title="Security review gate required",
+                        detail="Sensitive data handling cannot release until approval is recorded.",
+                        severity="high",
+                        category="security",
+                        mitigation="Keep the release blocked until the security approval is signed.",
+                        reviewer="security",
+                    ),
+                ),
+                summary="Security still treats this as an approval blocker before release.",
+            ),
+        ],
+        tmp_path,
+    )
+
+    conflict = _find_conflict(aggregated.conflicts, "release_ok_vs_approval_blocker")
+    assert conflict["reviewers"] == ["product", "security"]
+    assert conflict["requires_manual_resolution"] is True
+    assert conflict["description"] == (
+        "Product marks the release as ready to proceed, but Security still requires an approval gate before release."
+    )
