@@ -1,4 +1,4 @@
-"""Minimal MCP server entrypoint (stdio transport).
+﻿"""Minimal MCP server entrypoint (stdio transport).
 
 Run:
     python -m requirement_review_v1.mcp_server.server
@@ -29,6 +29,7 @@ from requirement_review_v1.service.review_service import (
     generate_delivery_bundle_for_mcp,
     get_review_workspace_for_mcp,
     review_prd_for_mcp_async,
+    review_requirement_for_mcp_async,
 )
 from requirement_review_v1.templates import TemplateRegistryError, get_template_record, list_template_records
 
@@ -49,7 +50,7 @@ async def review_prd(
     options: dict[str, Any] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
-    """Run one PRD review and return run status, metrics and artifact paths."""
+    """Run the fuller MCP workflow-oriented review contract and return artifact-rich outputs."""
     try:
         audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="review_prd")
         client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
@@ -69,6 +70,36 @@ async def review_prd(
     except Exception as exc:
         return _error_response("INTERNAL_ERROR", f"review_prd failed: {exc}")
 
+
+@mcp.tool()
+async def review_requirement(
+    source: str | None = None,
+    prd_text: str | None = None,
+    prd_path: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Review-only facade over the review service with a compact approval-loop-style payload."""
+    try:
+        resolved_options = _merge_tool_options(metadata=metadata, options=options)
+        audited_options = _with_audit_context(options=resolved_options, ctx=ctx, tool_name="review_requirement")
+        client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
+        return await review_requirement_for_mcp_async(
+            prd_text=prd_text,
+            prd_path=prd_path,
+            source=source,
+            options=audited_options,
+            invocation_meta={"client_metadata": client_meta} if client_meta else {},
+        )
+    except FileNotFoundError as exc:
+        return _review_requirement_error_response("PRD_NOT_FOUND", str(exc))
+    except NotImplementedError as exc:
+        return _review_requirement_error_response("NOT_IMPLEMENTED", str(exc))
+    except (TypeError, ValueError) as exc:
+        return _review_requirement_error_response("INVALID_INPUT", str(exc))
+    except Exception as exc:
+        return _review_requirement_error_response("INTERNAL_ERROR", f"review_requirement failed: {exc}")
 
 @mcp.tool()
 def get_report(
@@ -439,6 +470,23 @@ def _with_audit_context(
     return updated_options
 
 
+def _merge_tool_options(
+    *,
+    metadata: dict[str, Any] | None,
+    options: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if metadata is not None and not isinstance(metadata, dict):
+        raise TypeError("metadata must be an object")
+    if options is not None and not isinstance(options, dict):
+        raise TypeError("options must be an object")
+
+    merged: dict[str, Any] = {}
+    if isinstance(metadata, dict):
+        merged.update(metadata)
+    if isinstance(options, dict):
+        merged.update(options)
+    return merged
+
 def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
     if isinstance(options, dict):
@@ -499,6 +547,22 @@ def _error_response(code: str, message: str) -> dict[str, Any]:
     }
 
 
+def _review_requirement_error_response(code: str, message: str) -> dict[str, Any]:
+    return {
+        "review_id": "",
+        "run_id": "",
+        "findings": [],
+        "open_questions": [],
+        "risk_items": [],
+        "conflicts": [],
+        "report_path": "",
+        "review_mode": "",
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    }
+
 def main() -> None:
     """Start MCP server over stdio transport."""
     mcp.run(transport="stdio")
@@ -506,3 +570,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+

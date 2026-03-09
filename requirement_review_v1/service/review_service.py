@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1034,14 +1035,191 @@ def get_review_workspace_for_mcp(
     }
 
 
-async def review_prd_for_mcp_async(
+def _copy_dict_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _slugify_identifier(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+    return slug or "unknown"
+
+
+def _extract_parallel_review_payload(report_payload: dict[str, Any]) -> dict[str, Any]:
+    parallel_review = report_payload.get("parallel_review")
+    return dict(parallel_review) if isinstance(parallel_review, dict) else {}
+
+
+def _extract_parallel_review_meta(report_payload: dict[str, Any]) -> dict[str, Any]:
+    legacy_meta = report_payload.get("parallel-review_meta")
+    if isinstance(legacy_meta, dict):
+        return dict(legacy_meta)
+    modern_meta = report_payload.get("parallel_review_meta")
+    return dict(modern_meta) if isinstance(modern_meta, dict) else {}
+
+
+def _derive_single_review_findings(review_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for item in review_results:
+        requirement_id = str(item.get("id", "") or "").strip()
+        issues = [str(issue).strip() for issue in list(item.get("issues", []) or []) if str(issue).strip()]
+        suggestion = str(item.get("suggestions", "") or "").strip()
+        flags = sum(
+            [
+                not item.get("is_clear", True),
+                not item.get("is_testable", True),
+                item.get("is_ambiguous", False),
+            ]
+        )
+        if flags == 0 and not issues and not suggestion:
+            continue
+
+        detail = "; ".join(issues) or suggestion or "Requirement needs clarification before implementation."
+        finding: dict[str, Any] = {
+            "title": requirement_id or "Requirement review finding",
+            "detail": detail,
+            "description": detail,
+            "severity": "high" if flags >= 2 else "medium",
+            "category": "review_quality",
+            "source_reviewer": "single_reviewer",
+            "reviewers": ["single_reviewer"],
+        }
+        if requirement_id:
+            finding["finding_id"] = f"finding-{_slugify_identifier(requirement_id)}"
+            finding["requirement_id"] = requirement_id
+        findings.append(finding)
+    return findings
+
+
+def _derive_review_findings(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    findings = _copy_dict_list(report_payload.get("findings"))
+    if findings:
+        return findings
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    findings = _copy_dict_list(parallel_review.get("findings"))
+    if findings:
+        return findings
+
+    review_results = _copy_dict_list(report_payload.get("review_results"))
+    return _derive_single_review_findings(review_results)
+
+
+def _derive_review_open_questions(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    questions = _copy_dict_list(report_payload.get("open_questions"))
+    if questions:
+        return questions
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    questions = _copy_dict_list(parallel_review.get("open_questions"))
+    if questions:
+        return questions
+
+    questions = _copy_dict_list(report_payload.get("review_open_questions"))
+    if questions:
+        return questions
+
+    return []
+
+
+def _derive_review_risk_items(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    risk_items = _copy_dict_list(report_payload.get("risk_items"))
+    if risk_items:
+        return risk_items
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    risk_items = _copy_dict_list(parallel_review.get("risk_items"))
+    if risk_items:
+        return risk_items
+
+    risk_items = _copy_dict_list(report_payload.get("review_risk_items"))
+    if risk_items:
+        return risk_items
+
+    derived: list[dict[str, Any]] = []
+    for risk in _copy_dict_list(report_payload.get("risks")):
+        title = str(risk.get("id", "") or risk.get("title", "") or "review-risk").strip()
+        detail = str(risk.get("description", "") or risk.get("detail", "") or "").strip()
+        severity = str(risk.get("impact", "") or risk.get("severity", "") or "medium").strip().lower() or "medium"
+        derived.append(
+            {
+                "title": title,
+                "detail": detail,
+                "severity": severity,
+                "category": str(risk.get("category", "") or "delivery_risk"),
+                "mitigation": str(risk.get("mitigation", "") or "").strip(),
+            }
+        )
+    return derived
+
+
+def _derive_review_conflicts(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    conflicts = _copy_dict_list(report_payload.get("conflicts"))
+    if conflicts:
+        return conflicts
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    return _copy_dict_list(parallel_review.get("conflicts"))
+
+
+def _derive_review_mode(report_payload: dict[str, Any]) -> str:
+    review_mode = str(report_payload.get("review_mode", "") or "").strip()
+    if review_mode:
+        return review_mode
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    review_mode = str(parallel_review.get("review_mode", "") or "").strip()
+    if review_mode:
+        return review_mode
+
+    parallel_review_meta = _extract_parallel_review_meta(report_payload)
+    review_mode = str(parallel_review_meta.get("selected_mode", "") or parallel_review_meta.get("review_mode", "") or "").strip()
+    return review_mode or "single_review"
+
+
+def _derive_review_report_path(summary: ReviewResultSummary, report_payload: dict[str, Any]) -> str:
+    parallel_review_meta = _extract_parallel_review_meta(report_payload)
+    artifact_paths = parallel_review_meta.get("artifact_paths")
+    if isinstance(artifact_paths, dict):
+        review_result_json = str(
+            artifact_paths.get("review_result_json", "") or artifact_paths.get("review_report_json", "") or ""
+        ).strip()
+        if review_result_json:
+            return review_result_json
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    artifacts = parallel_review.get("artifacts")
+    if isinstance(artifacts, dict):
+        review_result_json = str(artifacts.get("review_result_json", "") or artifacts.get("review_report_json", "") or "").strip()
+        if review_result_json:
+            return review_result_json
+
+    return summary.report_json_path or summary.report_md_path
+
+
+def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str, Any]:
+    report_payload = _load_json_object(Path(summary.report_json_path))
+    return {
+        "review_id": summary.run_id,
+        "run_id": summary.run_id,
+        "findings": _derive_review_findings(report_payload),
+        "open_questions": _derive_review_open_questions(report_payload),
+        "risk_items": _derive_review_risk_items(report_payload),
+        "conflicts": _derive_review_conflicts(report_payload),
+        "report_path": _derive_review_report_path(summary, report_payload),
+        "review_mode": _derive_review_mode(report_payload),
+    }
+
+
+async def _review_summary_for_mcp_async(
     *,
     prd_text: str | None,
     prd_path: str | None,
     source: str | None,
     options: dict[str, Any] | None = None,
     invocation_meta: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> ReviewResultSummary:
     resolved_options = options or {}
     if not isinstance(resolved_options, dict):
         raise TypeError("options must be an object")
@@ -1050,21 +1228,43 @@ async def review_prd_for_mcp_async(
     run_id = str(run_id_raw).strip() if run_id_raw is not None else ""
     outputs_root = str(resolved_options.get("outputs_root", "outputs"))
 
+    config_overrides: dict[str, Any] = {
+        "outputs_root": outputs_root,
+        "audit_context": resolved_options.get("audit_context"),
+    }
+    review_mode_override = resolved_options.get("review_mode_override")
+    if isinstance(review_mode_override, str) and review_mode_override.strip():
+        config_overrides["review_mode_override"] = review_mode_override.strip()
+
     summary = await review_prd_text_async(
         prd_text=prd_text,
         prd_path=prd_path,
         source=source,
         run_id=run_id or None,
-        config_overrides={
-            "outputs_root": outputs_root,
-            "audit_context": resolved_options.get("audit_context"),
-        },
+        config_overrides=config_overrides,
     )
 
     trace_meta = {"invoked_via": "mcp"}
     if invocation_meta:
         trace_meta.update(invocation_meta)
     _attach_trace_invocation(summary, trace_meta)
+    return summary
+
+async def review_prd_for_mcp_async(
+    *,
+    prd_text: str | None,
+    prd_path: str | None,
+    source: str | None,
+    options: dict[str, Any] | None = None,
+    invocation_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    summary = await _review_summary_for_mcp_async(
+        prd_text=prd_text,
+        prd_path=prd_path,
+        source=source,
+        options=options,
+        invocation_meta=invocation_meta,
+    )
 
     return {
         "run_id": summary.run_id,
@@ -1085,6 +1285,24 @@ async def review_prd_for_mcp_async(
         },
     }
 
+
+async def review_requirement_for_mcp_async(
+    *,
+    prd_text: str | None,
+    prd_path: str | None,
+    source: str | None,
+    options: dict[str, Any] | None = None,
+    invocation_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a review-only facade payload without bundle or execution workflow fields."""
+    summary = await _review_summary_for_mcp_async(
+        prd_text=prd_text,
+        prd_path=prd_path,
+        source=source,
+        options=options,
+        invocation_meta=invocation_meta,
+    )
+    return _build_review_requirement_payload(summary)
 
 def review_prd_for_mcp(
     *,
@@ -1107,6 +1325,8 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
+
+
 
 
 

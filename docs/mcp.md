@@ -1,4 +1,4 @@
-# Requirement Review MCP Guide
+﻿# Requirement Review MCP Guide
 
 This document explains how to run the repository's MCP server with review-first positioning.
 
@@ -31,8 +31,12 @@ These are the primary tools to emphasize:
 
 - `ping`
   - Health check for MCP connectivity
+- `review_requirement`
+  - Review-only facade for the project's main review-engine positioning
+  - Accepts `source`, `prd_text`, `prd_path`, plus `metadata` or `options`
+  - Returns `review_id`/`run_id`, `findings`, `open_questions`, `risk_items`, `conflicts`, `report_path`, and `review_mode`
 - `review_prd`
-  - Main entrypoint for review-only usage
+  - Retained fuller workflow entrypoint for clients that still want metrics and downstream artifact paths
   - Accepts `prd_text`, `prd_path`, or `source`
   - Returns `run_id`, review metrics, and artifact paths
 - `get_report`
@@ -41,8 +45,8 @@ These are the primary tools to emphasize:
 Recommended first integration flow:
 
 1. Call `ping`
-2. Call `review_prd`
-3. Use the returned `run_id`
+2. Call `review_requirement`
+3. Use the returned `review_id` or `run_id`
 4. Call `get_report`
 
 ## Core Example
@@ -51,7 +55,7 @@ Use any MCP client to call:
 
 ```json
 {
-  "tool": "review_prd",
+  "tool": "review_requirement",
   "arguments": {
     "source": "docs/sample_prd.md"
   }
@@ -121,5 +125,7 @@ This is optional and should not be confused with the main review architecture.
 
 - Prefer `source` for new integrations when you want connector-based intake.
 - Keep `prd_text` and `prd_path` for backward compatibility.
+- Treat `review_requirement` as the review-only facade.
+- Treat `review_prd` as the richer compatibility surface when you intentionally need bundle-adjacent artifact paths in the same response.
 - Treat review completion as successful even if you do not use any orchestration tool.
 - Do not assume extension tools are deprecated; they are retained, just not first-layer.
