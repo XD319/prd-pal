@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -14,6 +14,8 @@ class ReviewFinding:
     category: str = "general"
     requirement_refs: tuple[str, ...] = ()
     reviewer: str = ""
+    suggested_action: str = ""
+    assignee: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -39,6 +41,8 @@ class ReviewerResult:
     open_questions: tuple[str, ...] = ()
     risk_items: tuple[RiskItem, ...] = ()
     summary: str = ""
+    status: str = "completed"
+    error_message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +51,8 @@ class ReviewerResult:
             "open_questions": list(self.open_questions),
             "risk_items": [item.to_dict() for item in self.risk_items],
             "summary": self.summary,
+            "status": self.status,
+            "error_message": self.error_message,
         }
 
 
