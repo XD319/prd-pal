@@ -1051,7 +1051,7 @@ def _extract_parallel_review_payload(report_payload: dict[str, Any]) -> dict[str
     return dict(parallel_review) if isinstance(parallel_review, dict) else {}
 
 
-def _extract_parallel_review_meta(report_payload: dict[str, Any]) -> dict[str, Any]:
+def _extract_parallel_review_meta_from_report(report_payload: dict[str, Any]) -> dict[str, Any]:
     legacy_meta = report_payload.get("parallel-review_meta")
     if isinstance(legacy_meta, dict):
         return dict(legacy_meta)
@@ -1173,13 +1173,13 @@ def _derive_review_mode(report_payload: dict[str, Any]) -> str:
     if review_mode:
         return review_mode
 
-    parallel_review_meta = _extract_parallel_review_meta(report_payload)
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
     review_mode = str(parallel_review_meta.get("selected_mode", "") or parallel_review_meta.get("review_mode", "") or "").strip()
     return review_mode or "single_review"
 
 
 def _derive_review_report_path(summary: ReviewResultSummary, report_payload: dict[str, Any]) -> str:
-    parallel_review_meta = _extract_parallel_review_meta(report_payload)
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
     artifact_paths = parallel_review_meta.get("artifact_paths")
     if isinstance(artifact_paths, dict):
         review_result_json = str(
@@ -1325,6 +1325,7 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
+
 
 
 
