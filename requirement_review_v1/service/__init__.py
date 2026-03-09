@@ -1,4 +1,4 @@
-"""Shared service APIs for requirement_review_v1 entrypoints."""
+﻿"""Shared service APIs for requirement_review_v1 entrypoints."""
 
 from .execution_service import (
     append_execution_event,
@@ -11,8 +11,11 @@ from .execution_service import (
 from .review_service import (
     ReviewResultSummary,
     get_review_workspace_for_mcp,
+    review_prd_for_mcp,
+    review_prd_for_mcp_async,
     review_prd_text,
     review_prd_text_async,
+    review_requirement_for_mcp_async,
 )
 
 __all__ = [
@@ -23,7 +26,10 @@ __all__ = [
     "get_traceability_for_mcp",
     "handoff_to_executor_for_mcp",
     "list_execution_tasks_for_mcp",
+    "review_prd_for_mcp",
+    "review_prd_for_mcp_async",
     "review_prd_text",
     "review_prd_text_async",
+    "review_requirement_for_mcp_async",
     "update_execution_task_for_mcp",
 ]
