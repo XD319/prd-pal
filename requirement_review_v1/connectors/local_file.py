@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from requirement_review_v1.connectors.base import BaseConnector
+from requirement_review_v1.connectors.errors import (
+    ConnectorNotFoundError,
+    ConnectorUnsupportedSourceError,
+    ConnectorValidationError,
+)
 from requirement_review_v1.connectors.schemas import SourceDocument, SourceMetadata, SourceType
 
 
@@ -25,13 +30,25 @@ class LocalFileConnector(BaseConnector):
         path = Path(source)
         suffix = path.suffix.lower()
         if suffix not in self.SUPPORTED_SUFFIXES:
-            raise ValueError(f"Unsupported local file source suffix: {suffix or '<none>'}")
+            raise ConnectorUnsupportedSourceError(
+                f"Unsupported local file source suffix: {suffix or '<none>'}",
+                source=str(source),
+                details={"connector": "local_file", "suffix": suffix or "<none>"},
+            )
 
         if not path.exists():
-            raise FileNotFoundError(f"Source file does not exist: {source}")
+            raise ConnectorNotFoundError(
+                f"Source file does not exist: {source}",
+                source=str(source),
+                details={"connector": "local_file"},
+            )
 
         if not path.is_file():
-            raise ValueError(f"Source path is not a file: {source}")
+            raise ConnectorValidationError(
+                f"Source path is not a file: {source}",
+                source=str(source),
+                details={"connector": "local_file"},
+            )
 
         resolved = path.resolve()
         content = resolved.read_text(encoding="utf-8")

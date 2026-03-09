@@ -10,7 +10,17 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from requirement_review_v1.connectors.auth import ConnectorAuthConfig, ConnectorAuthType
 from requirement_review_v1.connectors.base import BaseConnector
+from requirement_review_v1.connectors.errors import (
+    ConnectorAuthError,
+    ConnectorNetworkError,
+    ConnectorNotFoundError,
+    ConnectorPermissionError,
+    ConnectorUnsupportedSourceError,
+    ConnectorValidationError,
+)
+from requirement_review_v1.connectors.normalize import extract_mapping, extract_message
 from requirement_review_v1.connectors.schemas import SourceDocument, SourceMetadata, SourceType
 
 
@@ -27,8 +37,7 @@ class FeishuSourceRef:
 
 @dataclass(frozen=True, slots=True)
 class FeishuConfig:
-    app_id: str
-    app_secret: str
+    auth: ConnectorAuthConfig
     base_url: str
 
 
@@ -47,19 +56,19 @@ class FeishuResolvedDocument:
     wiki_space: str = ""
 
 
-class FeishuAuthenticationError(PermissionError):
+class FeishuAuthenticationError(ConnectorAuthError):
     """Raised when Feishu credentials are missing or rejected."""
 
 
-class FeishuPermissionDeniedError(PermissionError):
+class FeishuPermissionDeniedError(ConnectorPermissionError):
     """Raised when the Feishu app cannot access a resolved document."""
 
 
-class FeishuDocumentNotFoundError(FileNotFoundError):
+class FeishuDocumentNotFoundError(ConnectorNotFoundError):
     """Raised when a recognized Feishu document no longer exists."""
 
 
-class FeishuUnsupportedDocumentTypeError(ValueError):
+class FeishuUnsupportedDocumentTypeError(ConnectorValidationError):
     """Raised when the recognized Feishu source resolves to an unsupported document type."""
 
 
@@ -115,12 +124,16 @@ class _DefaultFeishuHTTPClient:
                 json_body=self._decode_json_body(exc.read()),
             )
         except URLError as exc:
-            raise ConnectionError(
-                f"Network unavailable while fetching Feishu source from '{url}': {exc.reason or exc}"
+            raise ConnectorNetworkError(
+                f"Network unavailable while fetching Feishu source from '{url}': {exc.reason or exc}",
+                source=url,
+                details={"connector": "feishu_http"},
             ) from exc
         except TimeoutError as exc:
-            raise ConnectionError(
-                f"Network unavailable while fetching Feishu source from '{url}': request timed out"
+            raise ConnectorNetworkError(
+                f"Network unavailable while fetching Feishu source from '{url}': request timed out",
+                source=url,
+                details={"connector": "feishu_http"},
             ) from exc
 
         with response:
@@ -218,7 +231,11 @@ class FeishuConnector(BaseConnector):
     def _parse_source(self, source: str) -> FeishuSourceRef:
         normalized = str(source or "").strip()
         if not self.can_handle(normalized):
-            raise ValueError(f"Unsupported Feishu source: {source}")
+            raise ConnectorUnsupportedSourceError(
+                f"Unsupported Feishu source: {source}",
+                source=str(source),
+                details={"connector": "feishu"},
+            )
 
         parsed = urlparse(normalized)
         is_custom_scheme = parsed.scheme.lower() == self.FEISHU_SCHEME
@@ -253,20 +270,47 @@ class FeishuConnector(BaseConnector):
         raw_base_url = str(os.getenv(self.BASE_URL_ENV, self.DEFAULT_BASE_URL) or self.DEFAULT_BASE_URL).strip()
         parsed_base_url = urlparse(raw_base_url)
         if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
-            raise ValueError(
-                f"{self.BASE_URL_ENV} must be an absolute http(s) URL, got: {raw_base_url or '<empty>'}"
+            raise ConnectorValidationError(
+                f"{self.BASE_URL_ENV} must be an absolute http(s) URL, got: {raw_base_url or '<empty>'}",
+                details={"connector": "feishu", "base_url_env": self.BASE_URL_ENV},
             )
-        return FeishuConfig(
-            app_id=str(os.getenv(self.APP_ID_ENV, "") or "").strip(),
-            app_secret=str(os.getenv(self.APP_SECRET_ENV, "") or "").strip(),
-            base_url=raw_base_url.rstrip("/"),
-        )
+
+        client_id = str(os.getenv(self.APP_ID_ENV, "") or "").strip()
+        client_secret = str(os.getenv(self.APP_SECRET_ENV, "") or "").strip()
+        if client_id and client_secret:
+            auth = ConnectorAuthConfig(
+                auth_type=ConnectorAuthType.oauth_client_credentials,
+                client_id=client_id,
+                client_secret=client_secret,
+                extra={
+                    "client_id_env": self.APP_ID_ENV,
+                    "client_secret_env": self.APP_SECRET_ENV,
+                },
+            )
+        else:
+            auth = ConnectorAuthConfig(
+                extra={
+                    "expected_auth_type": ConnectorAuthType.oauth_client_credentials.value,
+                    "client_id_env": self.APP_ID_ENV,
+                    "client_secret_env": self.APP_SECRET_ENV,
+                }
+            )
+
+        return FeishuConfig(auth=auth, base_url=raw_base_url.rstrip("/"))
 
     def _validate_source_ref(self, source_ref: FeishuSourceRef) -> None:
         if not source_ref.document_token:
-            raise ValueError(f"Feishu source is missing a document token: {source_ref.raw_source}")
+            raise ConnectorValidationError(
+                f"Feishu source is missing a document token: {source_ref.raw_source}",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "document_kind": source_ref.document_kind},
+            )
         if source_ref.document_kind == "wiki" and not source_ref.wiki_space:
-            raise ValueError(f"Feishu wiki source is missing a wiki space identifier: {source_ref.raw_source}")
+            raise ConnectorValidationError(
+                f"Feishu wiki source is missing a wiki space identifier: {source_ref.raw_source}",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "document_kind": source_ref.document_kind},
+            )
 
     def _authenticate(
         self,
@@ -275,18 +319,20 @@ class FeishuConnector(BaseConnector):
         config: FeishuConfig,
         source_ref: FeishuSourceRef,
     ) -> str:
-        if not config.app_id or not config.app_secret:
+        if config.auth.auth_type != ConnectorAuthType.oauth_client_credentials:
             raise FeishuAuthenticationError(
                 "Feishu authentication failed because app credentials are missing. "
-                f"Set {self.APP_ID_ENV} and {self.APP_SECRET_ENV} before fetching '{source_ref.raw_source}'."
+                f"Set {self.APP_ID_ENV} and {self.APP_SECRET_ENV} before fetching '{source_ref.raw_source}'.",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "auth_type": str(config.auth.auth_type)},
             )
         payload = self._api_request(
             http_client=http_client,
             method="POST",
             path="/open-apis/auth/v3/tenant_access_token/internal",
             json_body={
-                "app_id": config.app_id,
-                "app_secret": config.app_secret,
+                "app_id": config.auth.client_id,
+                "app_secret": config.auth.client_secret,
             },
             source_ref=source_ref,
             failure_kind="auth",
@@ -295,7 +341,9 @@ class FeishuConnector(BaseConnector):
         access_token = str(payload.get("tenant_access_token") or data.get("tenant_access_token") or "").strip()
         if not access_token:
             raise FeishuAuthenticationError(
-                f"Feishu authentication failed for '{source_ref.raw_source}': tenant_access_token missing from auth response."
+                f"Feishu authentication failed for '{source_ref.raw_source}': tenant_access_token missing from auth response.",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "auth_type": str(config.auth.auth_type)},
             )
         return access_token
 
@@ -359,7 +407,9 @@ class FeishuConnector(BaseConnector):
             )
         if not resolved_token:
             raise FeishuDocumentNotFoundError(
-                f"Feishu document not found for source '{source_ref.raw_source}': wiki node did not expose an object token."
+                f"Feishu document not found for source '{source_ref.raw_source}': wiki node did not expose an object token.",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "document_kind": resolved_kind or "unknown"},
             )
         if resolved_kind == "docs":
             converted_ref = FeishuSourceRef(
@@ -418,7 +468,9 @@ class FeishuConnector(BaseConnector):
         converted_title = str(document_payload.get("title") or data.get("title") or "").strip()
         if not converted_token:
             raise FeishuDocumentNotFoundError(
-                f"Feishu document not found for source '{source_ref.raw_source}': legacy document conversion did not return a docx token."
+                f"Feishu document not found for source '{source_ref.raw_source}': legacy document conversion did not return a docx token.",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "document_kind": "docs"},
             )
         return FeishuResolvedDocument(
             source_document_kind=source_ref.document_kind,
@@ -456,7 +508,11 @@ class FeishuConnector(BaseConnector):
         title = self._extract_document_title(metadata_payload, fallback_title=resolved_document.title)
         content_markdown = self._extract_document_content(content_payload)
         if not content_markdown:
-            raise ValueError(f"Feishu document content is empty for source '{source_ref.raw_source}'")
+            raise ConnectorValidationError(
+                f"Feishu document content is empty for source '{source_ref.raw_source}'",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "document_kind": resolved_document.document_kind},
+            )
         return title, content_markdown
 
     def _api_request(
@@ -511,15 +567,21 @@ class FeishuConnector(BaseConnector):
             or any(keyword in normalized_message for keyword in ("tenant_access_token", "unauthorized", "auth", "credential"))
         ):
             raise FeishuAuthenticationError(
-                f"Feishu authentication failed for source '{source_ref.raw_source}': {diagnostic}"
+                f"Feishu authentication failed for source '{source_ref.raw_source}': {diagnostic}",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "status_code": status_code, "api_code": api_code},
             )
         if status_code == 404 or any(keyword in normalized_message for keyword in ("not found", "not exist", "no such")):
             raise FeishuDocumentNotFoundError(
-                f"Feishu document not found for source '{source_ref.raw_source}': {diagnostic}"
+                f"Feishu document not found for source '{source_ref.raw_source}': {diagnostic}",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "status_code": status_code, "api_code": api_code},
             )
         if status_code == 403 or any(keyword in normalized_message for keyword in ("permission", "forbidden", "scope", "access denied")):
             raise FeishuPermissionDeniedError(
-                f"Permission denied while fetching Feishu source '{source_ref.raw_source}': {diagnostic}"
+                f"Permission denied while fetching Feishu source '{source_ref.raw_source}': {diagnostic}",
+                source=source_ref.raw_source,
+                details={"connector": "feishu", "status_code": status_code, "api_code": api_code},
             )
         if any(keyword in normalized_message for keyword in ("unsupported", "not support", "doc type")):
             raise self._unsupported_document_type_error(
@@ -527,20 +589,21 @@ class FeishuConnector(BaseConnector):
                 resolved_document_kind=source_ref.document_kind,
                 detail=diagnostic,
             )
-        raise ConnectionError(f"Failed to fetch Feishu source '{source_ref.raw_source}': {diagnostic}")
+        raise ConnectorNetworkError(
+            f"Failed to fetch Feishu source '{source_ref.raw_source}': {diagnostic}",
+            source=source_ref.raw_source,
+            details={"connector": "feishu", "status_code": status_code, "api_code": api_code},
+            retryable=status_code >= 500,
+        )
 
     def _extract_data(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._extract_mapping(payload.get("data")) or {}
 
     def _extract_mapping(self, value: Any) -> dict[str, Any] | None:
-        return dict(value) if isinstance(value, dict) else None
+        return extract_mapping(value)
 
     def _extract_api_message(self, payload: dict[str, Any]) -> str:
-        for key in ("msg", "message", "error", "error_message"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return "unknown Feishu API error"
+        return extract_message(payload) or "unknown Feishu API error"
 
     def _format_error_diagnostic(self, *, status_code: int, api_code: Any, api_message: str) -> str:
         code_segment = f", code={api_code}" if api_code not in (None, "") else ""
@@ -572,7 +635,9 @@ class FeishuConnector(BaseConnector):
         suffix = f" Detail: {detail}" if detail else ""
         return FeishuUnsupportedDocumentTypeError(
             f"Unsupported Feishu document type '{normalized_kind}' for source '{source_ref.raw_source}'. "
-            f"Supported types: {supported_types}.{suffix}"
+            f"Supported types: {supported_types}.{suffix}",
+            source=source_ref.raw_source,
+            details={"connector": "feishu", "document_kind": normalized_kind},
         )
 
     def _detect_document_kind(self, segments: list[str]) -> str:
@@ -590,3 +655,7 @@ class FeishuConnector(BaseConnector):
             return ""
         space_index = wiki_index + 1
         return segments[space_index] if len(segments) > space_index else ""
+
+
+
+

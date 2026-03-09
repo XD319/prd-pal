@@ -12,6 +12,17 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from requirement_review_v1.connectors.base import BaseConnector
+from requirement_review_v1.connectors.errors import (
+    ConnectorNetworkError,
+    ConnectorUnsupportedSourceError,
+    ConnectorValidationError,
+)
+from requirement_review_v1.connectors.normalize import (
+    decode_text_body,
+    resolve_charset,
+    resolve_content_type,
+    resolve_declared_length,
+)
 from requirement_review_v1.connectors.schemas import SourceDocument, SourceMetadata, SourceType
 
 
@@ -152,16 +163,22 @@ class URLConnector(BaseConnector):
         try:
             response = self._opener(request, timeout=self._timeout_seconds)
         except HTTPError as exc:
-            raise ConnectionError(
-                f"Failed to fetch URL source '{normalized_source}': HTTP {exc.code}"
+            raise ConnectorNetworkError(
+                f"Failed to fetch URL source '{normalized_source}': HTTP {exc.code}",
+                source=normalized_source,
+                details={"connector": "url", "status_code": int(exc.code)},
             ) from exc
         except URLError as exc:
-            raise ConnectionError(
-                f"Network unavailable while fetching URL source '{normalized_source}': {self._format_network_reason(exc.reason)}"
+            raise ConnectorNetworkError(
+                f"Network unavailable while fetching URL source '{normalized_source}': {self._format_network_reason(exc.reason)}",
+                source=normalized_source,
+                details={"connector": "url"},
             ) from exc
         except TimeoutError as exc:
-            raise ConnectionError(
-                f"Network unavailable while fetching URL source '{normalized_source}': request timed out"
+            raise ConnectorNetworkError(
+                f"Network unavailable while fetching URL source '{normalized_source}': request timed out",
+                source=normalized_source,
+                details={"connector": "url"},
             ) from exc
 
         with response:
@@ -172,9 +189,11 @@ class URLConnector(BaseConnector):
             headers = getattr(response, "headers", None)
             content_type = self._resolve_content_type(headers)
             if not self._is_supported_content_type(content_type):
-                raise ValueError(
+                raise ConnectorValidationError(
                     "Unsupported URL content type: "
-                    f"{content_type or '<missing>'}. Only text/plain, text/markdown, text/html, and other text/* pages are supported."
+                    f"{content_type or '<missing>'}. Only text/plain, text/markdown, text/html, and other text/* pages are supported.",
+                    source=normalized_source,
+                    details={"connector": "url", "content_type": content_type or "<missing>"},
                 )
 
             charset = self._resolve_charset(headers)
@@ -201,24 +220,42 @@ class URLConnector(BaseConnector):
 
     def _parse_supported_url(self, source: str):
         if not self.can_handle(source):
-            raise ValueError(f"Unsupported URL source: {source}")
+            raise ConnectorUnsupportedSourceError(
+                f"Unsupported URL source: {source}",
+                source=source,
+                details={"connector": "url"},
+            )
         parsed = urlparse(source)
         if parsed.username or parsed.password:
-            raise ValueError("URL sources with embedded credentials are not supported")
+            raise ConnectorValidationError(
+                "URL sources with embedded credentials are not supported",
+                source=source,
+                details={"connector": "url"},
+            )
         return parsed
 
     def _assert_public_host(self, hostname: str) -> None:
         normalized_host = str(hostname or "").strip().strip(".").lower()
         if not normalized_host:
-            raise ValueError("URL source is missing a hostname")
+            raise ConnectorValidationError(
+                "URL source is missing a hostname",
+                source=hostname,
+                details={"connector": "url"},
+            )
         if normalized_host in {"localhost", "0.0.0.0"} or normalized_host.endswith(".local"):
-            raise ValueError(f"URL source must be publicly reachable: {hostname}")
+            raise ConnectorValidationError(
+                f"URL source must be publicly reachable: {hostname}",
+                source=hostname,
+                details={"connector": "url", "hostname": normalized_host},
+            )
 
         try:
             addresses = socket.getaddrinfo(normalized_host, None, proto=socket.IPPROTO_TCP)
         except socket.gaierror as exc:
-            raise ConnectionError(
-                f"Network unavailable while validating URL source '{hostname}': {exc.strerror or exc}"
+            raise ConnectorNetworkError(
+                f"Network unavailable while validating URL source '{hostname}': {exc.strerror or exc}",
+                source=hostname,
+                details={"connector": "url", "hostname": normalized_host},
             ) from exc
 
         for _family, _socktype, _proto, _canonname, sockaddr in addresses:
@@ -234,26 +271,17 @@ class URLConnector(BaseConnector):
                     ip.is_unspecified,
                 )
             ):
-                raise ValueError(f"URL source must be publicly reachable: {hostname}")
+                raise ConnectorValidationError(
+                    f"URL source must be publicly reachable: {hostname}",
+                    source=hostname,
+                    details={"connector": "url", "hostname": normalized_host, "ip": ip_value},
+                )
 
     def _resolve_content_type(self, headers: Any) -> str:
-        if headers is None:
-            return ""
-        content_type_getter = getattr(headers, "get_content_type", None)
-        if callable(content_type_getter):
-            return str(content_type_getter()).lower()
-        getter = getattr(headers, "get", None)
-        if callable(getter):
-            return str(getter("Content-Type", "") or "").split(";", 1)[0].strip().lower()
-        return ""
+        return resolve_content_type(headers)
 
     def _resolve_charset(self, headers: Any) -> str:
-        if headers is None:
-            return "utf-8"
-        charset_getter = getattr(headers, "get_content_charset", None)
-        if callable(charset_getter):
-            return str(charset_getter() or "utf-8")
-        return "utf-8"
+        return resolve_charset(headers)
 
     def _is_supported_content_type(self, content_type: str) -> bool:
         normalized = str(content_type or "").strip().lower()
@@ -262,38 +290,24 @@ class URLConnector(BaseConnector):
     def _read_body(self, response: Any, *, content_type: str) -> bytes:
         declared_length = self._resolve_declared_length(getattr(response, "headers", None))
         if declared_length is not None and declared_length > self._max_response_bytes:
-            raise ValueError(
-                f"URL content too large to ingest safely: {declared_length} bytes exceeds {self._max_response_bytes} bytes"
+            raise ConnectorValidationError(
+                f"URL content too large to ingest safely: {declared_length} bytes exceeds {self._max_response_bytes} bytes",
+                details={"connector": "url", "content_type": content_type or "", "declared_length": declared_length},
             )
 
         raw_content = response.read(self._max_response_bytes + 1)
         if len(raw_content) > self._max_response_bytes:
-            raise ValueError(
-                f"URL content too large to ingest safely: exceeds {self._max_response_bytes} bytes for {content_type or 'unknown content'}"
+            raise ConnectorValidationError(
+                f"URL content too large to ingest safely: exceeds {self._max_response_bytes} bytes for {content_type or 'unknown content'}",
+                details={"connector": "url", "content_type": content_type or "", "max_bytes": self._max_response_bytes},
             )
         return raw_content
 
     def _resolve_declared_length(self, headers: Any) -> int | None:
-        if headers is None:
-            return None
-        getter = getattr(headers, "get", None)
-        if not callable(getter):
-            return None
-        raw_value = getter("Content-Length")
-        if raw_value in (None, ""):
-            return None
-        try:
-            return int(str(raw_value))
-        except (TypeError, ValueError):
-            return None
+        return resolve_declared_length(headers)
 
     def _decode_body(self, raw_content: bytes, *, charset: str) -> str:
-        try:
-            return raw_content.decode(charset or "utf-8")
-        except LookupError:
-            return raw_content.decode("utf-8", errors="replace")
-        except UnicodeDecodeError:
-            return raw_content.decode(charset or "utf-8", errors="replace")
+        return decode_text_body(raw_content, charset=charset)
 
     def _normalize_content(self, content: str, content_type: str, path: str) -> tuple[str, str]:
         normalized_type = str(content_type or "").strip().lower()
