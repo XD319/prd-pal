@@ -11,6 +11,7 @@ Core API flow:
 1. Submit a review
 2. Poll review status
 3. Fetch the generated report
+4. List recent runs for frontend history views
 
 The repository also exposes governance-support endpoints, but the main architecture remains review-first.
 
@@ -55,6 +56,51 @@ Response:
   "run_id": "20260309T000000Z"
 }
 ```
+
+### `GET /api/runs`
+
+List recent review runs discovered under `outputs/`.
+
+This endpoint is file-based and lightweight: it scans run directories and reports artifact presence without eagerly parsing large review payloads.
+
+Example:
+
+```bash
+curl "http://127.0.0.1:8000/api/runs"
+```
+
+Typical response:
+
+```json
+{
+  "count": 2,
+  "runs": [
+    {
+      "run_id": "20260309T030405Z",
+      "status": "completed",
+      "created_at": "2026-03-09T03:04:05+00:00",
+      "updated_at": "2026-03-09T03:05:12+00:00",
+      "artifact_presence": {
+        "report_md": true,
+        "report_json": true,
+        "run_trace": true,
+        "review_report_json": true,
+        "risk_items_json": true,
+        "open_questions_json": true,
+        "review_summary_md": true
+      }
+    }
+  ]
+}
+```
+
+Each run includes:
+
+- `run_id`
+- `status`
+- `created_at`
+- `updated_at`
+- `artifact_presence`
 
 ### `GET /api/review/{run_id}`
 

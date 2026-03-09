@@ -20,11 +20,85 @@ from requirement_review_v1.service.review_service import (
     get_review_result_payload,
     review_prd_text_async,
 )
+from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 from requirement_review_v1.templates import TemplateRegistryError, list_template_records
 
 OUTPUTS_ROOT = Path("outputs")
 PRIMARY_NODES = ("parser", "planner", "risk", "reviewer", "reporter")
 TRACKED_NODES = ("parser", "clarify", "planner", "risk", "reviewer", "route_decider", "reporter")
+RUN_LIST_ARTIFACTS: dict[str, str] = {
+    "report_md": "report.md",
+    "report_json": "report.json",
+    "run_trace": "run_trace.json",
+    "review_report_json": "review_report.json",
+    "risk_items_json": "risk_items.json",
+    "open_questions_json": "open_questions.json",
+    "review_summary_md": "review_summary.md",
+}
+
+
+def _run_id_to_datetime(run_id: str) -> datetime | None:
+    normalized = str(run_id or "").strip()
+    if not RUN_ID_PATTERN.fullmatch(normalized):
+        return None
+    return datetime.strptime(normalized, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+
+
+def _timestamp_to_iso(timestamp: float) -> str:
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+
+
+def _safe_iso_to_datetime(value: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value or "").strip())
+    except ValueError:
+        return None
+
+
+def _artifact_presence(run_dir: Path) -> dict[str, bool]:
+    return {key: (run_dir / filename).exists() for key, filename in RUN_LIST_ARTIFACTS.items()}
+
+
+def _latest_run_timestamp(run_dir: Path) -> float:
+    timestamps = [run_dir.stat().st_mtime]
+    for child in run_dir.iterdir():
+        try:
+            timestamps.append(child.stat().st_mtime)
+        except OSError:
+            continue
+    return max(timestamps)
+
+
+def _build_run_list_entry(run_dir: Path, job: JobRecord | None = None) -> dict[str, Any]:
+    run_id = run_dir.name
+    artifacts = _artifact_presence(run_dir)
+    created_dt = _safe_iso_to_datetime(job.created_at) if job else None
+    if created_dt is None:
+        created_dt = _run_id_to_datetime(run_id)
+    created_at = created_dt.isoformat() if created_dt else _timestamp_to_iso(run_dir.stat().st_ctime)
+
+    updated_dt = _safe_iso_to_datetime(job.updated_at) if job else None
+    updated_at = updated_dt.isoformat() if updated_dt else _timestamp_to_iso(_latest_run_timestamp(run_dir))
+
+    status = job.status if job else ("completed" if artifacts["report_json"] else "running")
+    return {
+        "run_id": run_id,
+        "status": status,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "artifact_presence": artifacts,
+    }
+
+
+def _run_sort_timestamp(run_dir: Path, job: JobRecord | None = None) -> float:
+    if job is not None:
+        created_dt = _safe_iso_to_datetime(job.created_at)
+        if created_dt is not None:
+            return created_dt.timestamp()
+    run_dt = _run_id_to_datetime(run_dir.name)
+    if run_dt is not None:
+        return run_dt.timestamp()
+    return _latest_run_timestamp(run_dir)
 
 
 class ReviewCreateRequest(BaseModel):
@@ -232,6 +306,25 @@ def list_audit_events_endpoint(
             "status": status,
         },
     }
+
+
+@app.get("/api/runs")
+async def list_runs() -> dict[str, Any]:
+    async with _jobs_lock:
+        jobs = dict(_jobs)
+
+    if not OUTPUTS_ROOT.exists() or not OUTPUTS_ROOT.is_dir():
+        return {"count": 0, "runs": []}
+
+    runs: list[tuple[float, str, dict[str, Any]]] = []
+    for run_dir in OUTPUTS_ROOT.iterdir():
+        if not run_dir.is_dir() or not RUN_ID_PATTERN.fullmatch(run_dir.name):
+            continue
+        job = jobs.get(run_dir.name)
+        runs.append((_run_sort_timestamp(run_dir, job), run_dir.name, _build_run_list_entry(run_dir, job)))
+
+    runs.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return {"count": len(runs), "runs": [item[2] for item in runs]}
 
 
 @app.post("/api/review")
