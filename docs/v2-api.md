@@ -39,7 +39,7 @@ Request body accepts:
 - `prd_text`
 - `prd_path`
 
-`source` is the preferred forward-looking input. `prd_text` and `prd_path` remain supported for compatibility.
+`source` is the preferred forward-looking input. It accepts local files, public text URLs, and authenticated Feishu/Lark sources. `prd_text` and `prd_path` remain supported for compatibility.
 
 Example:
 
@@ -56,6 +56,13 @@ Response:
   "run_id": "20260309T000000Z"
 }
 ```
+
+Feishu source notes:
+
+- Supported source forms include recognized `https://*.feishu.cn/...`, `https://*.larksuite.com/...`, and `feishu://...` document references.
+- Supported Feishu document types are `wiki`, `docx`, and legacy `docs` documents that can be converted to `docx`.
+- Set `MARRDP_FEISHU_APP_ID` and `MARRDP_FEISHU_APP_SECRET` before submitting authenticated Feishu sources.
+- Override `MARRDP_FEISHU_OPEN_BASE_URL` only when you need a non-default Open API base URL.
 
 ### `GET /api/runs`
 
@@ -119,6 +126,15 @@ Typical response fields:
 - `progress.current_node`
 - `progress.nodes`
 - `report_paths`
+- `error` when the run has failed with a controlled connector or processing error
+
+For failed Feishu connector runs, the response keeps `status: failed` and includes a structured error such as `AUTHENTICATION_FAILED`, `PERMISSION_DENIED`, `DOCUMENT_NOT_FOUND`, or `UNSUPPORTED_DOCUMENT_TYPE`.
+
+### `GET /api/review/{run_id}/result`
+
+Fetch the parsed result payload and stable artifact paths for a completed run.
+
+If the run is still in progress, the endpoint returns `409` with `detail.code = result_not_ready`. If the run failed before writing `report.json`, the endpoint returns `409` with the controlled failure code and message so connector failures remain visible to API clients.
 
 ### `GET /api/report/{run_id}?format=md|json`
 
@@ -147,6 +163,8 @@ When the multi-reviewer path is selected, the run may also include:
 - `review_summary.md`
 
 The current service implementation may also write retained extension artifacts in the same directory. That does not change the API's review-first positioning.
+
+When a review is created from `source`, connector metadata is preserved in run artifacts where supported. In particular, `report.json`, `run_trace.json`, and `delivery_bundle.json` retain `source_metadata` for downstream inspection.
 
 ## Supporting Governance Endpoints
 

@@ -87,3 +87,63 @@ def test_get_review_result_returns_409_when_report_is_not_ready(tmp_path, monkey
     assert detail["status"] == "running"
     assert detail["progress"]["current_node"] == "planner"
     app_module._jobs.clear()
+
+
+def test_get_review_status_returns_structured_feishu_error_for_failed_run(tmp_path, monkeypatch):
+    run_id = "20260309T010206Z"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    app_module._jobs.clear()
+    app_module._jobs[run_id] = app_module.JobRecord(
+        run_id=run_id,
+        run_dir=run_dir,
+        status="failed",
+        error="Feishu authentication failed because app credentials are missing.",
+        error_code="AUTHENTICATION_FAILED",
+    )
+
+    client = TestClient(app_module.app)
+    response = client.get(f"/api/review/{run_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed"
+    assert payload["progress"]["error"] == "Feishu authentication failed because app credentials are missing."
+    assert payload["error"] == {
+        "code": "AUTHENTICATION_FAILED",
+        "message": "Feishu authentication failed because app credentials are missing.",
+    }
+    app_module._jobs.clear()
+
+
+def test_get_review_result_returns_controlled_feishu_error_for_failed_run(tmp_path, monkeypatch):
+    run_id = "20260309T010207Z"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    app_module._jobs.clear()
+    app_module._jobs[run_id] = app_module.JobRecord(
+        run_id=run_id,
+        run_dir=run_dir,
+        status="failed",
+        current_node="",
+        error="Permission denied while fetching Feishu source 'feishu://docx/doc-token': HTTP 403: permission denied",
+        error_code="PERMISSION_DENIED",
+    )
+
+    client = TestClient(app_module.app)
+    response = client.get(f"/api/review/{run_id}/result")
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "PERMISSION_DENIED"
+    assert detail["status"] == "failed"
+    assert detail["error"] == {
+        "code": "PERMISSION_DENIED",
+        "message": "Permission denied while fetching Feishu source 'feishu://docx/doc-token': HTTP 403: permission denied",
+    }
+    assert detail["message"] == "Permission denied while fetching Feishu source 'feishu://docx/doc-token': HTTP 403: permission denied"
+    app_module._jobs.clear()

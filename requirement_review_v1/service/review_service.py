@@ -12,6 +12,12 @@ from time import perf_counter
 from typing import Any
 
 from requirement_review_v1.connectors import ConnectorRegistry
+from requirement_review_v1.connectors.feishu import (
+    FeishuAuthenticationError,
+    FeishuDocumentNotFoundError,
+    FeishuPermissionDeniedError,
+    FeishuUnsupportedDocumentTypeError,
+)
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
 from requirement_review_v1.templates import get_adapter_prompt_template
 from requirement_review_v1.monitoring import append_audit_event, retry_metadata_for_status
@@ -70,6 +76,24 @@ class ReviewRunNotFoundError(FileNotFoundError):
 
 class ReviewResultNotReadyError(RuntimeError):
     """Raised when a review run exists but report.json is not available yet."""
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewInputErrorInfo:
+    code: str
+    message: str
+
+
+def classify_review_input_error(exc: Exception) -> ReviewInputErrorInfo | None:
+    if isinstance(exc, FeishuAuthenticationError):
+        return ReviewInputErrorInfo(code="AUTHENTICATION_FAILED", message=str(exc))
+    if isinstance(exc, FeishuPermissionDeniedError):
+        return ReviewInputErrorInfo(code="PERMISSION_DENIED", message=str(exc))
+    if isinstance(exc, FeishuDocumentNotFoundError):
+        return ReviewInputErrorInfo(code="DOCUMENT_NOT_FOUND", message=str(exc))
+    if isinstance(exc, FeishuUnsupportedDocumentTypeError):
+        return ReviewInputErrorInfo(code="UNSUPPORTED_DOCUMENT_TYPE", message=str(exc))
+    return None
 
 
 _REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {

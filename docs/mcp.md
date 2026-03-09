@@ -34,11 +34,13 @@ These are the primary tools to emphasize:
 - `review_requirement`
   - Review-only facade for the project's main review-engine positioning
   - Accepts `source`, `prd_text`, `prd_path`, plus `metadata` or `options`
+  - `source` supports local files, public text URLs, and authenticated Feishu/Lark documents
   - Returns `review_id`/`run_id`, `findings`, `open_questions`, `risk_items`, `conflicts`, `report_path`, and `review_mode`
 - `review_prd`
   - Retained fuller workflow entrypoint for clients that still want metrics and downstream artifact paths
   - Accepts `prd_text`, `prd_path`, or `source`
   - Returns `run_id`, review metrics, and artifact paths
+  - Surfaces controlled Feishu connector failures with explicit error codes such as `AUTHENTICATION_FAILED`, `PERMISSION_DENIED`, `DOCUMENT_NOT_FOUND`, and `UNSUPPORTED_DOCUMENT_TYPE`
 - `get_report`
   - Fetches `report.md` or `report.json` for a completed run
 
@@ -48,6 +50,12 @@ Recommended first integration flow:
 2. Call `review_requirement`
 3. Use the returned `review_id` or `run_id`
 4. Call `get_report`
+
+Feishu source setup:
+
+- Set `MARRDP_FEISHU_APP_ID` and `MARRDP_FEISHU_APP_SECRET` in the MCP server environment before calling `review_requirement` or `review_prd` with Feishu sources.
+- Use `MARRDP_FEISHU_OPEN_BASE_URL` only when you need a non-default Open API base URL.
+- Supported Feishu document types are `wiki`, `docx`, and legacy `docs` sources that can be converted to `docx`.
 
 ## Core Example
 
@@ -90,6 +98,8 @@ When the multi-reviewer path is selected, the run may also include:
 - `review_summary.md`
 
 The implementation may also persist additional extension artifacts in the same run directory, but those are not required to understand the core MCP usage.
+
+When the run starts from connector-backed `source`, the persisted artifacts also retain `source_metadata` where supported so downstream MCP clients can trace the origin of the reviewed document.
 
 ## Extension Tools
 

@@ -10,12 +10,6 @@ from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from requirement_review_v1.connectors.feishu import (
-    FeishuAuthenticationError,
-    FeishuDocumentNotFoundError,
-    FeishuPermissionDeniedError,
-    FeishuUnsupportedDocumentTypeError,
-)
 from requirement_review_v1.monitoring import (
     RetryOperationError,
     RetryTargetNotFoundError,
@@ -32,6 +26,7 @@ from requirement_review_v1.service.execution_service import (
 from requirement_review_v1.service.report_service import get_report_for_mcp
 from requirement_review_v1.service.review_service import (
     approve_handoff_for_mcp,
+    classify_review_input_error,
     generate_delivery_bundle_for_mcp,
     get_review_workspace_for_mcp,
     review_prd_for_mcp_async,
@@ -67,21 +62,19 @@ async def review_prd(
             options=audited_options,
             invocation_meta={"client_metadata": client_meta} if client_meta else {},
         )
-    except FeishuAuthenticationError as exc:
-        return _error_response("AUTHENTICATION_FAILED", str(exc))
-    except FeishuPermissionDeniedError as exc:
-        return _error_response("PERMISSION_DENIED", str(exc))
-    except FeishuDocumentNotFoundError as exc:
-        return _error_response("DOCUMENT_NOT_FOUND", str(exc))
-    except FeishuUnsupportedDocumentTypeError as exc:
-        return _error_response("UNSUPPORTED_DOCUMENT_TYPE", str(exc))
     except FileNotFoundError as exc:
         return _error_response("PRD_NOT_FOUND", str(exc))
     except NotImplementedError as exc:
         return _error_response("NOT_IMPLEMENTED", str(exc))
     except (TypeError, ValueError) as exc:
+        classified_error = _review_input_error_response(exc)
+        if classified_error is not None:
+            return _error_response(classified_error["code"], classified_error["message"])
         return _error_response("INVALID_INPUT", str(exc))
     except Exception as exc:
+        classified_error = _review_input_error_response(exc)
+        if classified_error is not None:
+            return _error_response(classified_error["code"], classified_error["message"])
         return _error_response("INTERNAL_ERROR", f"review_prd failed: {exc}")
 
 
@@ -106,21 +99,19 @@ async def review_requirement(
             options=audited_options,
             invocation_meta={"client_metadata": client_meta} if client_meta else {},
         )
-    except FeishuAuthenticationError as exc:
-        return _review_requirement_error_response("AUTHENTICATION_FAILED", str(exc))
-    except FeishuPermissionDeniedError as exc:
-        return _review_requirement_error_response("PERMISSION_DENIED", str(exc))
-    except FeishuDocumentNotFoundError as exc:
-        return _review_requirement_error_response("DOCUMENT_NOT_FOUND", str(exc))
-    except FeishuUnsupportedDocumentTypeError as exc:
-        return _review_requirement_error_response("UNSUPPORTED_DOCUMENT_TYPE", str(exc))
     except FileNotFoundError as exc:
         return _review_requirement_error_response("PRD_NOT_FOUND", str(exc))
     except NotImplementedError as exc:
         return _review_requirement_error_response("NOT_IMPLEMENTED", str(exc))
     except (TypeError, ValueError) as exc:
+        classified_error = _review_input_error_response(exc)
+        if classified_error is not None:
+            return _review_requirement_error_response(classified_error["code"], classified_error["message"])
         return _review_requirement_error_response("INVALID_INPUT", str(exc))
     except Exception as exc:
+        classified_error = _review_input_error_response(exc)
+        if classified_error is not None:
+            return _review_requirement_error_response(classified_error["code"], classified_error["message"])
         return _review_requirement_error_response("INTERNAL_ERROR", f"review_requirement failed: {exc}")
 
 @mcp.tool()
@@ -546,6 +537,13 @@ def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None
         pass
 
     return metadata
+
+
+def _review_input_error_response(exc: Exception) -> dict[str, str] | None:
+    classified_error = classify_review_input_error(exc)
+    if classified_error is None:
+        return None
+    return {"code": classified_error.code, "message": classified_error.message}
 
 
 def _error_response(code: str, message: str) -> dict[str, Any]:

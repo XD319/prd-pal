@@ -203,6 +203,20 @@ async def test_review_prd_feishu_source_requires_credentials(tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_review_requirement_feishu_source_requires_credentials(tmp_path, monkeypatch):
+    monkeypatch.delenv("MARRDP_FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("MARRDP_FEISHU_APP_SECRET", raising=False)
+
+    result = await mcp_server.review_requirement(
+        source="feishu://wiki/space/doc-token",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    assert result["error"]["code"] == "AUTHENTICATION_FAILED"
+    assert "MARRDP_FEISHU_APP_ID" in result["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_review_requirement_routes_to_review_service_with_metadata_alias(monkeypatch):
     captured: dict[str, object] = {}
 

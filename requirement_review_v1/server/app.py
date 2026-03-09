@@ -17,6 +17,7 @@ from requirement_review_v1.run_review import make_run_id
 from requirement_review_v1.service.review_service import (
     ReviewResultNotReadyError,
     ReviewRunNotFoundError,
+    classify_review_input_error,
     get_review_result_payload,
     review_prd_text_async,
 )
@@ -128,6 +129,7 @@ class JobRecord:
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     error: str = ""
+    error_code: str = ""
     report_paths: dict[str, str] = field(default_factory=dict)
     node_progress: dict[str, dict[str, Any]] = field(
         default_factory=lambda: {name: {"status": "pending", "runs": 0} for name in TRACKED_NODES}
@@ -233,6 +235,8 @@ async def _run_job(
     source: str | None = None,
 ) -> None:
     job.status = "running"
+    job.error = ""
+    job.error_code = ""
     job.updated_at = datetime.now(timezone.utc).isoformat()
     try:
         summary = await review_prd_text_async(
@@ -250,7 +254,9 @@ async def _run_job(
         job.report_paths = summary.to_report_paths()
     except Exception as exc:
         job.status = "failed"
-        job.error = str(exc)
+        classified_error = classify_review_input_error(exc)
+        job.error_code = classified_error.code if classified_error is not None else "INTERNAL_ERROR"
+        job.error = classified_error.message if classified_error is not None else str(exc)
         job.current_node = ""
     finally:
         job.updated_at = datetime.now(timezone.utc).isoformat()
@@ -349,12 +355,15 @@ async def get_review_status(run_id: str) -> dict[str, Any]:
         job = _jobs.get(run_id)
 
     if job:
-        return {
+        payload = {
             "run_id": run_id,
             "status": job.status,
             "progress": job.as_progress_payload(),
             "report_paths": job.report_paths,
         }
+        if job.error_code:
+            payload["error"] = {"code": job.error_code, "message": job.error}
+        return payload
 
     run_dir = OUTPUTS_ROOT / run_id
     if not run_dir.exists():
@@ -396,18 +405,24 @@ async def get_review_result(run_id: str) -> dict[str, Any]:
             job = _jobs.get(run_id)
 
         status = job.status if job else "running"
-        detail = {
-            "code": "result_not_ready" if status in {"queued", "running"} else "result_unavailable",
-            "message": (
-                str(exc)
-                if status in {"queued", "running"}
-                else (job.error if job and job.error else f"review result unavailable for run_id={run_id}")
-            ),
-            "run_id": run_id,
-            "status": status,
-        }
+        if status in {"queued", "running"}:
+            detail = {
+                "code": "result_not_ready",
+                "message": str(exc),
+                "run_id": run_id,
+                "status": status,
+            }
+        else:
+            detail = {
+                "code": job.error_code if job and job.error_code else "result_unavailable",
+                "message": job.error if job and job.error else f"review result unavailable for run_id={run_id}",
+                "run_id": run_id,
+                "status": status,
+            }
         if job:
             detail["progress"] = job.as_progress_payload()
+            if job.error_code:
+                detail["error"] = {"code": job.error_code, "message": job.error}
         raise HTTPException(status_code=409, detail=detail) from exc
     except ValueError as exc:
         raise HTTPException(
