@@ -93,6 +93,14 @@ python -m requirement_review_v1.main --input docs/sample_prd.md
 
 The CLI still writes both core review artifacts and retained extension artifacts under `outputs/<run_id>/`.
 
+### Review Engine Entry Points
+
+Treat the repository's mainline usage as review-result-first:
+
+- Use `review_requirement` when the consumer needs structured review output only.
+- Keep `review_prd` for compatibility or for workflows that intentionally continue into bundle, approval, handoff, or execution artifacts.
+- Do not treat bundle / approval / handoff / execution as the first architectural layer; they remain extension capabilities built on top of the review result.
+
 ### FastAPI
 
 Start the API server:
@@ -124,8 +132,13 @@ python -m requirement_review_v1.mcp_server.server
 Core review tools:
 
 - `ping`
+- `review_requirement`
 - `review_prd`
 - `get_report`
+
+Use `review_requirement` when you want the review engine contract: `findings`, `open_questions`, `risk_items`, `conflicts`, `report_path`, and `review_mode`.
+
+Keep `review_prd` as a richer compatibility surface when you intentionally need bundle-adjacent artifact paths in the same response, but it should not remain the repository's only primary narrative.
 
 Retained extension tools:
 
@@ -224,4 +237,3 @@ The extension layer may add those capabilities, but they are not required to und
 python eval/run_eval.py
 pytest -q
 ```
-
