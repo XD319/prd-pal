@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
+﻿import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import RouteLoadingFallback from './components/RouteLoadingFallback';
 import { useTheme } from './hooks/useTheme';
 import HomePage from './pages/HomePage';
-import RunDetailsPage from './pages/RunDetailsPage';
 import './styles/layout.css';
+
+const RunDetailsPage = lazy(() => import('./pages/RunDetailsPage'));
 
 function AppLayout() {
   const location = useLocation();
@@ -47,7 +49,14 @@ function App() {
     <Routes>
       <Route path="/" element={<AppLayout />}>
         <Route index element={<HomePage />} />
-        <Route path="run/:runId" element={<RunDetailsPage />} />
+        <Route
+          path="run/:runId"
+          element={(
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <RunDetailsPage />
+            </Suspense>
+          )}
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

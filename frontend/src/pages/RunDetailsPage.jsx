@@ -2,6 +2,7 @@
 import ArtifactDownloadPanel from '../components/ArtifactDownloadPanel';
 import FindingsPanel from '../components/FindingsPanel';
 import OpenQuestionsPanel from '../components/OpenQuestionsPanel';
+import PanelErrorBoundary from '../components/PanelErrorBoundary';
 import ReviewSummaryPanel from '../components/ReviewSummaryPanel';
 import RisksPanel from '../components/RisksPanel';
 import RunProgressCard from '../components/RunProgressCard';
@@ -46,41 +47,53 @@ function RunDetailsPage() {
 
       <main className="workspace-grid workspace-grid-detail">
         <section className="stack">
-          <RunProgressCard
-            runId={runId}
-            status={status}
-            statusPayload={runState.statusPayload}
-            failureMessage={runState.failureMessage}
-          />
+          <PanelErrorBoundary panelTitle="运行进度" resetKey={`${runId}:${status}`}>
+            <RunProgressCard
+              runId={runId}
+              status={status}
+              statusPayload={runState.statusPayload}
+              failureMessage={runState.failureMessage}
+            />
+          </PanelErrorBoundary>
 
-          <ArtifactDownloadPanel
-            runId={runId}
-            status={status}
-            resultPayload={runState.resultPayload}
-            statusPayload={runState.statusPayload}
-            downloadFormat={runState.downloadFormat}
-            onDownload={downloadArtifact}
-          />
+          <PanelErrorBoundary panelTitle="产物下载" resetKey={`${runId}:${runState.downloadFormat}`}>
+            <ArtifactDownloadPanel
+              runId={runId}
+              status={status}
+              resultPayload={runState.resultPayload}
+              statusPayload={runState.statusPayload}
+              downloadFormat={runState.downloadFormat}
+              onDownload={downloadArtifact}
+            />
+          </PanelErrorBoundary>
         </section>
 
         <section className="stack stack-wide">
-          <ReviewSummaryPanel
-            runId={runId}
-            status={status}
-            result={result}
-            statusPayload={runState.statusPayload}
-            resultPayload={runState.resultPayload}
-            resultState={runState.resultState}
-            failureMessage={runState.failureMessage}
-            resultError={runState.resultError}
-          />
+          <PanelErrorBoundary panelTitle="结果总览" resetKey={`${runId}:${runState.resultState}`}>
+            <ReviewSummaryPanel
+              runId={runId}
+              status={status}
+              result={result}
+              statusPayload={runState.statusPayload}
+              resultPayload={runState.resultPayload}
+              resultState={runState.resultState}
+              failureMessage={runState.failureMessage}
+              resultError={runState.resultError}
+            />
+          </PanelErrorBoundary>
 
           <div className="panel-grid panel-grid-two-up">
-            <FindingsPanel result={result} status={status} resultState={runState.resultState} />
-            <RisksPanel result={result} />
+            <PanelErrorBoundary panelTitle="发现列表" resetKey={`${runId}:${runState.resultState}:findings`}>
+              <FindingsPanel result={result} status={status} resultState={runState.resultState} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary panelTitle="风险列表" resetKey={`${runId}:${runState.resultState}:risks`}>
+              <RisksPanel result={result} />
+            </PanelErrorBoundary>
           </div>
 
-          <OpenQuestionsPanel result={result} />
+          <PanelErrorBoundary panelTitle="开放问题" resetKey={`${runId}:${runState.resultState}:questions`}>
+            <OpenQuestionsPanel result={result} />
+          </PanelErrorBoundary>
         </section>
       </main>
     </>

@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitReview } from '../api';
+import PanelErrorBoundary from '../components/PanelErrorBoundary';
 import ReviewHistoryPanel from '../components/ReviewHistoryPanel';
 import ReviewSubmitPanel from '../components/ReviewSubmitPanel';
 import { useToast } from '../components/ToastProvider';
@@ -115,24 +116,28 @@ function HomePage() {
 
       <main className="workspace-grid workspace-grid-home">
         <section className="stack">
-          <ReviewSubmitPanel
-            form={form}
-            onFieldChange={updateField}
-            onSubmit={handleSubmit}
-            onReset={resetWorkspace}
-            onLoadSample={loadSample}
-            isSubmitting={submitState === 'submitting'}
-            errorMessage={submitError}
-          />
+          <PanelErrorBoundary panelTitle="提审表单" resetKey={submitState}>
+            <ReviewSubmitPanel
+              form={form}
+              onFieldChange={updateField}
+              onSubmit={handleSubmit}
+              onReset={resetWorkspace}
+              onLoadSample={loadSample}
+              isSubmitting={submitState === 'submitting'}
+              errorMessage={submitError}
+            />
+          </PanelErrorBoundary>
         </section>
 
         <section id="history" className="stack section-anchor-target">
-          <ReviewHistoryPanel
-            history={history}
-            activeRunId=""
-            onRefresh={() => loadRunHistory({ preserveRuns: true })}
-            onOpenRun={handleOpenRun}
-          />
+          <PanelErrorBoundary panelTitle="历史列表" resetKey={history.status}>
+            <ReviewHistoryPanel
+              history={history}
+              activeRunId=""
+              onRefresh={() => loadRunHistory({ preserveRuns: true })}
+              onOpenRun={handleOpenRun}
+            />
+          </PanelErrorBoundary>
         </section>
       </main>
     </>

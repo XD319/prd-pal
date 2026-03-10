@@ -20,6 +20,11 @@
   transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
+.panel-error-state,
+.panel-loading-state {
+  min-height: 100%;
+}
+
 .panel-header {
   display: flex;
   align-items: flex-start;
@@ -242,6 +247,11 @@
 
 .empty-state-compact {
   min-height: 14rem;
+}
+
+.panel-error-state .empty-state,
+.panel-loading-state .loading-state {
+  min-height: 100%;
 }
 
 .empty-orb,
