@@ -1,4 +1,4 @@
-import '../styles/panels.css';
+﻿import '../styles/panels.css';
 import '../styles/components.css';
 import { deriveNodes } from '../utils/derivers';
 import { formatDateTime, formatPercentFromWhole, formatStatusLabel, pluralize } from '../utils/formatters';
@@ -27,6 +27,8 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
         </div>
       ) : (
         <div className="status-stack">
+          <p className="sr-only" aria-live="polite">{`Run ${runId} status ${statusLabel}.`}</p>
+
           <div className="status-meta status-meta-two-up">
             <div>
               <span>Run ID</span>
@@ -46,7 +48,7 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
             </div>
           </div>
 
-          {failureMessage && <div className="feedback-banner feedback-error">{failureMessage}</div>}
+          {failureMessage && <div className="feedback-banner feedback-error" aria-live="polite">{failureMessage}</div>}
 
           {nodes.length === 0 ? (
             <div className="empty-inline">Node-level progress has not been reported yet.</div>

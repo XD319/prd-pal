@@ -1,4 +1,4 @@
-import '../styles/panels.css';
+﻿import '../styles/panels.css';
 import '../styles/components.css';
 import { deriveModeLabel, deriveSummary } from '../utils/derivers';
 
@@ -12,7 +12,7 @@ function ReviewSummaryPanel({ runId, status, result, statusPayload, resultPayloa
           <p className="section-kicker">Review Results</p>
           <h2>Result overview</h2>
         </div>
-        {result && <span className="inline-meta">{deriveModeLabel(result)}</span>}
+        {result && <span className="inline-meta" aria-live="polite">{deriveModeLabel(result)}</span>}
       </div>
 
       {status === 'failed' ? (
@@ -60,7 +60,7 @@ function ReviewSummaryPanel({ runId, status, result, statusPayload, resultPayloa
           <p>
             The workspace will pull structured output from <code>GET /api/review/{'{run_id}'}/result</code> as soon as the run completes.
           </p>
-          {resultError && <div className="feedback-banner feedback-error">{resultError}</div>}
+          {resultError && <div className="feedback-banner feedback-error" aria-live="polite">{resultError}</div>}
         </div>
       )}
     </section>

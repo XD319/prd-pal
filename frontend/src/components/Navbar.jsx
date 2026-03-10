@@ -1,4 +1,4 @@
-import { Link, NavLink, useLocation } from 'react-router-dom';
+﻿import { Link, NavLink, useLocation } from 'react-router-dom';
 
 function SunIcon() {
   return (
@@ -47,12 +47,18 @@ function Navbar({ theme, onToggleTheme }) {
 
         <div className="navbar-actions">
           <nav className="navbar-links" aria-label="Primary">
-            <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? ' nav-link-active' : ''}`}>
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) => `nav-link${isActive ? ' nav-link-active' : ''}`}
+              aria-label="Go to home page"
+            >
               Home
             </NavLink>
             <Link
               to={{ pathname: '/', hash: '#history' }}
               className={`nav-link${isHistoryActive ? ' nav-link-active' : ''}`}
+              aria-label="Jump to review history"
             >
               History
             </Link>

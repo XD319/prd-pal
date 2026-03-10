@@ -1,4 +1,4 @@
-"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
+﻿"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
 
 from __future__ import annotations
 
@@ -77,6 +77,9 @@ class ReviewRunNotFoundError(FileNotFoundError):
 class ReviewResultNotReadyError(RuntimeError):
     """Raised when a review run exists but report.json is not available yet."""
 
+
+class ReviewArtifactNotFoundError(FileNotFoundError):
+    """Raised when a requested review artifact cannot be found."""
 
 @dataclass(frozen=True, slots=True)
 class ReviewInputErrorInfo:
@@ -199,6 +202,61 @@ def get_review_result_payload(
         "status": status,
         "result": result,
         "artifact_paths": artifact_paths,
+    }
+
+
+def get_review_artifact_preview_payload(
+    *,
+    run_id: str,
+    artifact_key: str,
+    outputs_root: str | Path = "outputs",
+) -> dict[str, Any]:
+    normalized_run_id = str(run_id or "").strip()
+    normalized_artifact_key = str(artifact_key or "").strip()
+    result_payload = get_review_result_payload(run_id=normalized_run_id, outputs_root=outputs_root)
+    artifact_paths = result_payload.get("artifact_paths", {})
+    raw_path = str(artifact_paths.get(normalized_artifact_key, "") or "").strip()
+    if not raw_path:
+        raise ReviewArtifactNotFoundError(
+            f"artifact '{normalized_artifact_key}' not found for run_id={normalized_run_id}"
+        )
+
+    run_dir = (Path(outputs_root) / normalized_run_id).resolve()
+    artifact_path = Path(raw_path)
+    if not artifact_path.is_absolute():
+        artifact_path = run_dir / artifact_path
+    artifact_path = artifact_path.resolve()
+
+    try:
+        artifact_path.relative_to(run_dir)
+    except ValueError as exc:
+        raise ValueError(
+            f"artifact path escapes run directory for run_id={normalized_run_id}: {artifact_path}"
+        ) from exc
+
+    if not artifact_path.exists() or not artifact_path.is_file():
+        raise ReviewArtifactNotFoundError(
+            f"artifact '{normalized_artifact_key}' is unavailable for run_id={normalized_run_id}"
+        )
+
+    try:
+        content = artifact_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"artifact preview is only available for UTF-8 text files: {artifact_path.name}") from exc
+
+    suffix = artifact_path.suffix.lower()
+    format_name = "text"
+    if suffix in {".md", ".markdown"}:
+        format_name = "markdown"
+    elif suffix == ".json":
+        format_name = "json"
+
+    return {
+        "run_id": normalized_run_id,
+        "artifact_key": normalized_artifact_key,
+        "path": str(artifact_path),
+        "format": format_name,
+        "content": content,
     }
 
 
@@ -1463,4 +1521,7 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
+
+
+
 

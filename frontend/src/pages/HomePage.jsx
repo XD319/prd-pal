@@ -1,8 +1,9 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitReview } from '../api';
 import ReviewHistoryPanel from '../components/ReviewHistoryPanel';
 import ReviewSubmitPanel from '../components/ReviewSubmitPanel';
+import { useToast } from '../components/ToastProvider';
 import useReviewHistory from '../hooks/useReviewHistory';
 import { formatApiError } from '../utils/errors';
 import { buildSubmissionPayload, validateSubmission } from '../utils/submission';
@@ -15,6 +16,7 @@ const initialForm = {
 
 function HomePage() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const { history, loadRunHistory } = useReviewHistory();
   const [form, setForm] = useState(initialForm);
   const [submitState, setSubmitState] = useState('idle');
@@ -63,6 +65,7 @@ function HomePage() {
 
     try {
       const response = await submitReview(payload);
+      showToast(`Review submitted successfully. Tracking run ${response.run_id}.`, 'success');
       navigate(`/run/${response.run_id}`);
     } catch (error) {
       setSubmitState('idle');
@@ -93,7 +96,7 @@ function HomePage() {
 
         <div className="hero-panel">
           <span className="hero-label">Quick Start</span>
-          <ol className="quick-start-list">
+          <ol className="quick-start-list" aria-label="Quick start steps">
             <li className="quick-start-step">
               <strong>1. Submit the PRD</strong>
               <p>Paste the requirement document or point to the canonical source.</p>
@@ -137,4 +140,3 @@ function HomePage() {
 }
 
 export default HomePage;
-

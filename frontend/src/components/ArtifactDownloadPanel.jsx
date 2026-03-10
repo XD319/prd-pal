@@ -1,11 +1,118 @@
+﻿import { useCallback, useEffect, useState } from 'react';
+import { fetchArtifactPreview } from '../api';
 import '../styles/panels.css';
 import '../styles/components.css';
 import { pluralize } from '../utils/formatters';
+
+function getPreviewFormat(path) {
+  const normalized = String(path ?? '').toLowerCase();
+  if (normalized.endsWith('.md') || normalized.endsWith('.markdown')) {
+    return 'markdown';
+  }
+  if (normalized.endsWith('.json')) {
+    return 'json';
+  }
+  return 'text';
+}
 
 function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, downloadFormat, onDownload }) {
   const artifactPaths = resultPayload?.artifact_paths ?? statusPayload?.report_paths ?? {};
   const artifactKeys = Object.keys(artifactPaths);
   const canDownload = Boolean(runId) && status === 'completed';
+  const [previewState, setPreviewState] = useState({
+    artifactKey: '',
+    status: 'idle',
+    content: '',
+    format: '',
+    error: '',
+  });
+
+  const closePreview = useCallback(() => {
+    setPreviewState({
+      artifactKey: '',
+      status: 'idle',
+      content: '',
+      format: '',
+      error: '',
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!previewState.artifactKey) {
+      return undefined;
+    }
+
+    function handleWindowKeyDown(event) {
+      if (event.key === 'Escape') {
+        closePreview();
+      }
+    }
+
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleWindowKeyDown);
+    };
+  }, [closePreview, previewState.artifactKey]);
+
+  async function handleTogglePreview(artifactKey) {
+    if (!runId) {
+      return;
+    }
+
+    if (previewState.artifactKey === artifactKey) {
+      closePreview();
+      return;
+    }
+
+    const path = artifactPaths[artifactKey];
+    setPreviewState({
+      artifactKey,
+      status: 'loading',
+      content: '',
+      format: getPreviewFormat(path),
+      error: '',
+    });
+
+    try {
+      const payload = await fetchArtifactPreview(runId, artifactKey);
+      setPreviewState({
+        artifactKey,
+        status: 'ready',
+        content: String(payload.content ?? ''),
+        format: payload.format ?? getPreviewFormat(payload.path),
+        error: '',
+      });
+    } catch (error) {
+      setPreviewState({
+        artifactKey,
+        status: 'error',
+        content: '',
+        format: getPreviewFormat(path),
+        error: error.message || 'Artifact preview could not be loaded.',
+      });
+    }
+  }
+
+  function renderPreviewContent() {
+    if (previewState.status === 'loading') {
+      return <div className="empty-inline">Loading preview...</div>;
+    }
+
+    if (previewState.status === 'error') {
+      return <div className="feedback-banner feedback-error" aria-live="polite">{previewState.error}</div>;
+    }
+
+    if (previewState.format === 'json') {
+      try {
+        const parsed = JSON.parse(previewState.content);
+        return <pre className="artifact-preview-code">{JSON.stringify(parsed, null, 2)}</pre>;
+      } catch {
+        return <pre className="artifact-preview-code">{previewState.content}</pre>;
+      }
+    }
+
+    return <pre className="artifact-preview-markdown">{previewState.content}</pre>;
+  }
 
   return (
     <section className="panel artifact-download-panel">
@@ -27,6 +134,7 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
           className="primary-button"
           disabled={!canDownload || downloadFormat === 'md'}
           onClick={() => onDownload('md')}
+          aria-label={downloadFormat === 'md' ? 'Downloading markdown report' : 'Download markdown report'}
         >
           {downloadFormat === 'md' ? 'Downloading Markdown...' : 'Download Markdown'}
         </button>
@@ -35,6 +143,7 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
           className="secondary-button"
           disabled={!canDownload || downloadFormat === 'json'}
           onClick={() => onDownload('json')}
+          aria-label={downloadFormat === 'json' ? 'Downloading JSON report' : 'Download JSON report'}
         >
           {downloadFormat === 'json' ? 'Downloading JSON...' : 'Download JSON'}
         </button>
@@ -44,12 +153,45 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
 
       {artifactKeys.length > 0 && (
         <div className="artifact-list">
-          {artifactKeys.map((key) => (
-            <div key={key} className="artifact-row">
-              <span>{key}</span>
-              <code>{artifactPaths[key]}</code>
-            </div>
-          ))}
+          {artifactKeys.map((key) => {
+            const isExpanded = previewState.artifactKey === key;
+            const previewPanelId = `artifact-preview-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+            return (
+              <div key={key} className="artifact-entry">
+                <div className="artifact-row">
+                  <button
+                    type="button"
+                    className="artifact-key-button"
+                    onClick={() => handleTogglePreview(key)}
+                    aria-expanded={isExpanded}
+                    aria-controls={previewPanelId}
+                    aria-label={`${isExpanded ? 'Hide' : 'Show'} preview for ${key}`}
+                  >
+                    {key}
+                  </button>
+                  <code>{artifactPaths[key]}</code>
+                </div>
+
+                {isExpanded && (
+                  <div id={previewPanelId} className="artifact-preview" aria-live="polite">
+                    <div className="artifact-preview-header">
+                      <strong>{key}</strong>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={closePreview}
+                        aria-label={`Close preview for ${key}`}
+                      >
+                        Close preview
+                      </button>
+                    </div>
+                    {renderPreviewContent()}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import json
@@ -20,9 +20,11 @@ from pydantic import BaseModel, model_validator
 from requirement_review_v1.monitoring import query_audit_events
 from requirement_review_v1.run_review import make_run_id
 from requirement_review_v1.service.review_service import (
+    ReviewArtifactNotFoundError,
     ReviewResultNotReadyError,
     ReviewRunNotFoundError,
     classify_review_input_error,
+    get_review_artifact_preview_payload,
     get_review_result_payload,
     review_prd_text_async,
 )
@@ -622,6 +624,55 @@ async def get_review_result(run_id: str) -> dict[str, Any]:
         ) from exc
 
 
+@app.get("/api/review/{run_id}/artifacts/{artifact_key}")
+async def get_review_artifact_preview(run_id: str, artifact_key: str) -> dict[str, Any]:
+    try:
+        return get_review_artifact_preview_payload(
+            run_id=run_id,
+            artifact_key=artifact_key,
+            outputs_root=OUTPUTS_ROOT,
+        )
+    except ReviewRunNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc)},
+        ) from exc
+    except ReviewResultNotReadyError as exc:
+        async with _jobs_lock:
+            job = _jobs.get(run_id)
+
+        status = job.status if job else "running"
+        if status in {"queued", "running"}:
+            detail = {
+                "code": "result_not_ready",
+                "message": str(exc),
+                "run_id": run_id,
+                "status": status,
+            }
+        else:
+            detail = {
+                "code": job.error_code if job and job.error_code else "result_unavailable",
+                "message": job.error if job and job.error else f"review result unavailable for run_id={run_id}",
+                "run_id": run_id,
+                "status": status,
+            }
+        if job:
+            detail["progress"] = job.as_progress_payload()
+            if job.error_code:
+                detail["error"] = {"code": job.error_code, "message": job.error}
+        raise HTTPException(status_code=409, detail=detail) from exc
+    except ReviewArtifactNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "artifact_not_found", "message": str(exc), "run_id": run_id},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "invalid_artifact_preview", "message": str(exc), "run_id": run_id},
+        ) from exc
+
+
 @app.get("/api/report/{run_id}")
 async def get_report(run_id: str, format: Literal["md", "json"] = Query(default="md")) -> FileResponse:
     run_dir = OUTPUTS_ROOT / run_id
@@ -635,3 +686,5 @@ async def get_report(run_id: str, format: Literal["md", "json"] = Query(default=
 
     media_type = "text/markdown; charset=utf-8" if format == "md" else "application/json"
     return FileResponse(path=str(path), media_type=media_type, filename=filename)
+
+

@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+﻿import { Link, useParams } from 'react-router-dom';
 import ArtifactDownloadPanel from '../components/ArtifactDownloadPanel';
 import FindingsPanel from '../components/FindingsPanel';
 import OpenQuestionsPanel from '../components/OpenQuestionsPanel';
@@ -15,7 +15,7 @@ function RunDetailsPage() {
     <>
       <header className="page-header">
         <nav className="breadcrumbs" aria-label="Breadcrumb">
-          <Link to="/">Home</Link>
+          <Link to="/" aria-label="Return to home page">Home</Link>
           <span>{'>'}</span>
           <span>Run</span>
           <span>{'>'}</span>
@@ -31,12 +31,17 @@ function RunDetailsPage() {
             </p>
           </div>
 
-          <button type="button" className="ghost-button" onClick={() => refreshStatus()}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => refreshStatus()}
+            aria-label={`Refresh status for run ${runId}`}
+          >
             Refresh status
           </button>
         </div>
 
-        {runState.loadError && <div className="feedback-banner feedback-error">{runState.loadError}</div>}
+        {runState.loadError && <div className="feedback-banner feedback-error" aria-live="polite">{runState.loadError}</div>}
       </header>
 
       <main className="workspace-grid workspace-grid-detail">
@@ -83,4 +88,3 @@ function RunDetailsPage() {
 }
 
 export default RunDetailsPage;
-

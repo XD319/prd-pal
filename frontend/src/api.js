@@ -1,4 +1,4 @@
-function getErrorMessage(payload, fallbackMessage) {
+﻿function getErrorMessage(payload, fallbackMessage) {
   if (payload?.detail?.message) {
     return payload.detail.message;
   }
@@ -54,6 +54,10 @@ export function fetchReviewStatus(runId) {
 
 export function fetchReviewResult(runId) {
   return requestJson(`/api/review/${encodeURIComponent(runId)}/result`);
+}
+
+export function fetchArtifactPreview(runId, artifactKey) {
+  return requestJson(`/api/review/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactKey)}`);
 }
 
 export function fetchRuns() {
