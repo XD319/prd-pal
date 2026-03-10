@@ -54,6 +54,11 @@ select {
   font: inherit;
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 button {
   cursor: pointer;
 }
@@ -71,3 +76,4 @@ code {
     transform: translateX(100%);
   }
 }
+

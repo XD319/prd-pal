@@ -192,7 +192,8 @@ export function describeHistoryRun(run) {
       : status === 'failed'
         ? 'The run ended without a ready result artifact.'
         : 'The review is still producing or finalizing artifacts.',
-    actionLabel: hasResult ? 'Open result details' : 'Open run details',
+    actionLabel: 'Open',
     hasResult,
   };
 }
+
