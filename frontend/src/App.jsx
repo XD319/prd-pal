@@ -1,5 +1,11 @@
 import React, { startTransition, useEffect, useEffectEvent, useState } from 'react';
-import { fetchReviewResult, fetchReviewStatus, fetchRuns, submitReview } from './api';
+import {
+  downloadReportArtifact,
+  fetchReviewResult,
+  fetchReviewStatus,
+  fetchRuns,
+  submitReview,
+} from './api';
 
 const initialForm = {
   prd_text: '',
@@ -17,6 +23,8 @@ const initialWorkspace = {
   submitError: '',
   failureMessage: '',
   resultError: '',
+  downloadFormat: '',
+  artifactError: '',
 };
 
 const initialHistory = {
@@ -38,6 +46,24 @@ function normalizeMultiline(value) {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function joinList(values) {
+  return values.filter(Boolean).join(', ');
+}
+
+function severityRank(value) {
+  const normalized = String(value ?? '').toLowerCase();
+  if (normalized === 'high') {
+    return 3;
+  }
+  if (normalized === 'medium') {
+    return 2;
+  }
+  if (normalized === 'low') {
+    return 1;
+  }
+  return 0;
 }
 
 function formatApiError(error, fallbackMessage) {
@@ -156,57 +182,86 @@ function deriveProgressNodes(progress) {
     return [];
   }
 
-  return Object.entries(nodes).map(([name, node]) => ({
-    name,
-    status: node?.status ?? 'pending',
-    runs: node?.runs ?? 0,
-    lastStart: node?.last_start ?? '',
-    lastEnd: node?.last_end ?? '',
-  }));
+  return Object.entries(nodes)
+    .map(([name, node]) => ({
+      name,
+      status: node?.status ?? 'pending',
+      runs: node?.runs ?? 0,
+      lastStart: node?.last_start ?? '',
+      lastEnd: node?.last_end ?? '',
+    }))
+    .sort((left, right) => {
+      const order = ['running', 'failed', 'completed', 'pending'];
+      return order.indexOf(left.status) - order.indexOf(right.status);
+    });
 }
 
 function deriveFindings(result) {
   const structuredFindings = asArray(result?.parallel_review?.findings);
   if (structuredFindings.length > 0) {
-    return structuredFindings.map((item, index) => ({
-      id: item.finding_id ?? item.id ?? `finding-${index}`,
-      title: item.title ?? `Finding ${index + 1}`,
-      detail: item.detail ?? item.description ?? item.summary ?? 'No detail provided.',
-      severity: String(item.severity ?? 'medium').toLowerCase(),
-    }));
+    return structuredFindings
+      .map((item, index) => ({
+        id: item.finding_id ?? item.id ?? `finding-${index}`,
+        title: item.title ?? `Finding ${index + 1}`,
+        detail: item.detail ?? item.description ?? item.summary ?? 'No detail provided.',
+        severity: String(item.severity ?? 'medium').toLowerCase(),
+        category: item.category ?? 'review',
+        reviewers: asArray(item.reviewers),
+        assignee: item.assignee ?? '',
+        action: item.suggested_action ?? '',
+      }))
+      .sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
   }
 
-  return asArray(result?.review_results).map((item, index) => ({
-    id: item.id ?? `finding-${index}`,
-    title: item.id ? `${item.id} review note` : `Finding ${index + 1}`,
-    detail: asArray(item.issues).join(' ') || item.suggestions || 'No detail provided.',
-    severity: item.is_ambiguous || item.is_clear === false ? 'high' : 'medium',
-  }));
+  return asArray(result?.review_results)
+    .map((item, index) => ({
+      id: item.id ?? `finding-${index}`,
+      title: item.id ? `${item.id} review note` : `Finding ${index + 1}`,
+      detail: asArray(item.issues).join(' ') || item.suggestions || 'No detail provided.',
+      severity: item.is_ambiguous || item.is_clear === false || item.is_testable === false ? 'high' : 'medium',
+      category: 'review_quality',
+      reviewers: ['single_reviewer'],
+      assignee: '',
+      action: item.suggestions ?? '',
+    }))
+    .sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
 }
 
 function deriveRisks(result) {
   const structuredRisks = asArray(result?.review_risk_items);
   if (structuredRisks.length > 0) {
-    return structuredRisks.map((item, index) => ({
-      id: item.id ?? `risk-${index}`,
-      title: item.title ?? `Risk ${index + 1}`,
-      detail: item.detail ?? item.description ?? 'No detail provided.',
-      severity: String(item.severity ?? item.impact ?? 'medium').toLowerCase(),
-    }));
+    return structuredRisks
+      .map((item, index) => ({
+        id: item.id ?? `risk-${index}`,
+        title: item.title ?? `Risk ${index + 1}`,
+        detail: item.detail ?? item.description ?? 'No detail provided.',
+        severity: String(item.severity ?? item.impact ?? 'medium').toLowerCase(),
+        category: item.category ?? 'delivery',
+        mitigation: item.mitigation ?? '',
+        reviewers: asArray(item.reviewers),
+      }))
+      .sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
   }
 
-  return asArray(result?.risks).map((item, index) => ({
-    id: item.id ?? `risk-${index}`,
-    title: item.title ?? `Risk ${index + 1}`,
-    detail: item.description ?? 'No detail provided.',
-    severity: String(item.severity ?? item.impact ?? 'medium').toLowerCase(),
-  }));
+  return asArray(result?.risks)
+    .map((item, index) => ({
+      id: item.id ?? `risk-${index}`,
+      title: item.title ?? `Risk ${index + 1}`,
+      detail: item.description ?? 'No detail provided.',
+      severity: String(item.severity ?? item.impact ?? 'medium').toLowerCase(),
+      category: item.category ?? 'delivery',
+      mitigation: item.mitigation ?? '',
+      reviewers: [],
+    }))
+    .sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
 }
 
 function deriveOpenQuestions(result) {
   return asArray(result?.review_open_questions).map((item, index) => ({
     id: item.id ?? `question-${index}`,
     question: item.question ?? `Open question ${index + 1}`,
+    detail: asArray(item.issues).join(' '),
+    reviewers: asArray(item.reviewers),
   }));
 }
 
@@ -223,9 +278,14 @@ function deriveReviewMode(result) {
   return String(result?.review_mode ?? meta.selected_mode ?? meta.review_mode ?? 'single_review').replace(/_/g, ' ');
 }
 
-function deriveResultOverview(result, resultPayload, runId) {
+function deriveResultOverview(result, resultPayload, runId, statusPayload) {
   if (!result) {
-    return null;
+    return {
+      title: 'Result overview is waiting for a completed run',
+      narrative: 'When a run completes, the structured review result will land here with the highest-signal issues first.',
+      metrics: [],
+      chips: [],
+    };
   }
 
   const findings = deriveFindings(result);
@@ -242,27 +302,18 @@ function deriveResultOverview(result, resultPayload, runId) {
   return {
     title: `Run ${runId} is ready for review`,
     narrative,
-    chips: [
-      `Mode: ${deriveReviewMode(result)}`,
-      `${asArray(result.parsed_items).length} parsed requirements`,
-      `${artifactCount} artifacts`,
-    ],
     metrics: [
       { label: 'Coverage', value: formatRatio(metrics.coverage_ratio) },
       { label: 'High-risk ratio', value: formatRatio(result.high_risk_ratio) },
       { label: 'Findings', value: String(findings.length) },
       { label: 'Open questions', value: String(openQuestions.length) },
     ],
-    insights: [
-      findings[0]
-        ? { kind: findings[0].severity, title: findings[0].title, detail: findings[0].detail }
-        : null,
-      risks[0]
-        ? { kind: risks[0].severity, title: risks[0].title, detail: risks[0].detail }
-        : null,
-      openQuestions[0]
-        ? { kind: 'info', title: openQuestions[0].question, detail: 'Clarify this before moving into delivery planning.' }
-        : null,
+    chips: [
+      `Mode: ${deriveReviewMode(result)}`,
+      `${asArray(result.parsed_items).length} parsed requirements`,
+      `${risks.length} risks`,
+      `${artifactCount} artifacts`,
+      statusPayload?.status ? `Status: ${statusPayload.status}` : '',
     ].filter(Boolean),
   };
 }
@@ -270,24 +321,24 @@ function deriveResultOverview(result, resultPayload, runId) {
 function loadSampleForm() {
   return {
     prd_text:
-      'Goal: reviewers should submit one PRD, monitor progress, and inspect findings without leaving the workspace.\n\nAcceptance criteria should state success metrics, delivery risks, and ownership for ambiguous requirements before planning begins.\n\nEdge cases should explain how failed runs and missing artifacts are surfaced to the reviewer.',
+      'Goal: reviewers should submit one PRD, monitor progress, inspect findings, and download the result package without leaving the workspace.\n\nAcceptance criteria should state success metrics, delivery risks, and ownership for ambiguous requirements before planning begins.\n\nEdge cases should explain how failed runs and missing artifacts are surfaced to the reviewer.',
     prd_path: '',
     source: '',
   };
 }
 
-function SubmissionPanel({ form, isSubmitting, errorMessage, onFieldChange, onLoadSample, onReset, onSubmit }) {
+function ReviewSubmitPanel({ form, isSubmitting, errorMessage, onFieldChange, onLoadSample, onReset, onSubmit }) {
   return (
-    <section className="panel intake-panel">
+    <section className="panel">
       <div className="panel-topline">
-        <p className="panel-kicker">Step 1</p>
-        <span className="panel-tag">Review intake</span>
+        <p className="panel-kicker">ReviewSubmitPanel</p>
+        <span className="panel-tag">Start a run</span>
       </div>
 
       <div className="panel-heading">
         <div>
           <h2>Submit the PRD you want reviewed</h2>
-          <p>Use a canonical `source` when you already have one. Otherwise provide exactly one of `prd_text` or `prd_path`.</p>
+          <p>Provide a canonical `source` when you already have one. Otherwise use exactly one of `prd_text` or `prd_path`.</p>
         </div>
         <button type="button" className="button ghost" onClick={onLoadSample}>
           Load sample
@@ -300,7 +351,7 @@ function SubmissionPanel({ form, isSubmitting, errorMessage, onFieldChange, onLo
           <textarea
             rows="12"
             value={form.prd_text}
-            placeholder="Paste a PRD draft here when you want the review to run directly against text."
+            placeholder="Paste a PRD draft when you want to review text directly."
             onChange={(event) => onFieldChange('prd_text', event.target.value)}
           />
         </label>
@@ -321,7 +372,7 @@ function SubmissionPanel({ form, isSubmitting, errorMessage, onFieldChange, onLo
             <input
               type="text"
               value={form.source}
-              placeholder="feishu://prd/123 or docs/sample_prd.md"
+              placeholder="docs/sample_prd.md or connector source"
               onChange={(event) => onFieldChange('source', event.target.value)}
             />
           </label>
@@ -334,7 +385,7 @@ function SubmissionPanel({ form, isSubmitting, errorMessage, onFieldChange, onLo
             {isSubmitting ? 'Submitting review...' : 'Submit review'}
           </button>
           <button type="button" className="button secondary" onClick={onReset}>
-            Reset
+            Reset workspace
           </button>
         </div>
       </form>
@@ -342,23 +393,23 @@ function SubmissionPanel({ form, isSubmitting, errorMessage, onFieldChange, onLo
   );
 }
 
-function StatusPanel({ runId, status, statusPayload, failureMessage, history, onRefreshHistory, onOpenRun }) {
+function RunProgressCard({ runId, status, statusPayload, failureMessage, history, onRefreshHistory, onOpenRun }) {
   const progress = statusPayload?.progress ?? {};
   const percent = Number(progress.percent ?? 0);
   const nodes = deriveProgressNodes(progress);
   const recentRuns = history.runs.slice(0, 4);
 
   return (
-    <section className="panel status-panel">
+    <section className="panel">
       <div className="panel-topline">
-        <p className="panel-kicker">Step 2</p>
+        <p className="panel-kicker">RunProgressCard</p>
         <span className={`status-pill status-${status}`}>{formatStatusLabel(status)}</span>
       </div>
 
       <div className="panel-heading">
         <div>
-          <h2>Track the run while reviewers do their work</h2>
-          <p>The status surface keeps the current run visible and makes it easy to reopen recent reviews.</p>
+          <h2>Track the review run</h2>
+          <p>Poll the active run until it completes or fails, while keeping a few recent runs within reach.</p>
         </div>
         <button type="button" className="button ghost" onClick={onRefreshHistory} disabled={history.refreshing}>
           {history.refreshing ? 'Refreshing...' : 'Refresh runs'}
@@ -369,7 +420,7 @@ function StatusPanel({ runId, status, statusPayload, failureMessage, history, on
         <div className="empty-state">
           <div className="empty-rings" />
           <h3>No active review yet</h3>
-          <p>Submit a PRD to start a run. This panel will switch into live progress once a run ID is available.</p>
+          <p>Submit a PRD to start a run. Progress, status, and polling updates will appear here.</p>
         </div>
       ) : (
         <div className="status-layout">
@@ -385,7 +436,7 @@ function StatusPanel({ runId, status, statusPayload, failureMessage, history, on
             </div>
           </div>
 
-          <div className="status-grid">
+          <div className="status-grid status-grid-three">
             <article className="status-card">
               <span>Progress</span>
               <strong>{formatPercentFromWhole(percent)}</strong>
@@ -408,7 +459,7 @@ function StatusPanel({ runId, status, statusPayload, failureMessage, history, on
 
           <div className="timeline">
             {nodes.length === 0 ? (
-              <div className="empty-inline">Node-level updates will appear here when the backend reports them.</div>
+              <div className="empty-inline">Node-level progress will appear here when the backend reports it.</div>
             ) : (
               nodes.map((node) => (
                 <article key={node.name} className="timeline-item">
@@ -462,20 +513,29 @@ function StatusPanel({ runId, status, statusPayload, failureMessage, history, on
   );
 }
 
-function ResultPanel({ runId, status, resultState, result, resultPayload, resultError, failureMessage }) {
-  const overview = deriveResultOverview(result, resultPayload, runId);
+function ReviewSummaryPanel({
+  runId,
+  status,
+  statusPayload,
+  result,
+  resultPayload,
+  resultState,
+  failureMessage,
+  resultError,
+}) {
+  const summary = deriveResultOverview(result, resultPayload, runId, statusPayload);
 
   return (
-    <section className="panel result-panel">
+    <section className="panel">
       <div className="panel-topline">
-        <p className="panel-kicker">Step 3</p>
-        <span className="panel-tag">Result overview</span>
+        <p className="panel-kicker">ReviewSummaryPanel</p>
+        {result ? <span className="panel-tag">{deriveReviewMode(result)}</span> : <span className="panel-tag">Result overview</span>}
       </div>
 
       <div className="panel-heading">
         <div>
-          <h2>Review the outcome before delivery planning starts</h2>
-          <p>This area surfaces the review signal first: coverage, risk, the leading finding, and the next unanswered question.</p>
+          <h2>Review the outcome before planning starts</h2>
+          <p>This area surfaces the run summary first: coverage, risk signal, findings volume, and the review narrative.</p>
         </div>
         {runId && <span className={`status-pill status-${status}`}>{formatStatusLabel(status)}</span>}
       </div>
@@ -495,18 +555,16 @@ function ResultPanel({ runId, status, resultState, result, resultPayload, result
             <div className="metric-card loading-card" />
             <div className="metric-card loading-card" />
           </div>
-          <div className="skeleton-line" />
-          <div className="skeleton-line short" />
         </div>
-      ) : overview ? (
+      ) : result ? (
         <div className="result-stack">
           <div className="result-lead">
-            <h3>{overview.title}</h3>
-            <p>{overview.narrative}</p>
+            <h3>{summary.title}</h3>
+            <p>{summary.narrative}</p>
           </div>
 
           <div className="metric-grid">
-            {overview.metrics.map((metric) => (
+            {summary.metrics.map((metric) => (
               <article key={metric.label} className="metric-card">
                 <span>{metric.label}</span>
                 <strong>{metric.value}</strong>
@@ -515,31 +573,216 @@ function ResultPanel({ runId, status, resultState, result, resultPayload, result
           </div>
 
           <div className="chip-row">
-            {overview.chips.map((chip) => (
+            {summary.chips.map((chip) => (
               <span key={chip} className="chip">{chip}</span>
             ))}
-          </div>
-
-          <div className="insight-grid">
-            {overview.insights.length === 0 ? (
-              <div className="empty-inline">The run completed, but no structured findings were returned.</div>
-            ) : (
-              overview.insights.map((insight) => (
-                <article key={insight.title} className={`insight-card tone-${insight.kind}`}>
-                  <span className="insight-label">{insight.kind}</span>
-                  <h4>{insight.title}</h4>
-                  <p>{insight.detail}</p>
-                </article>
-              ))
-            )}
           </div>
         </div>
       ) : (
         <div className="empty-state soft">
           <div className="empty-grid" />
           <h3>Result overview is waiting for a completed run</h3>
-          <p>Once a run finishes, this panel will fetch `GET /api/review/{'{run_id}'}/result` and surface the highest-signal review output first.</p>
+          <p>Once the run completes, the frontend will fetch `GET /api/review/{'{run_id}'}/result` and render the structured review output here.</p>
           {resultError && <div className="feedback error">{resultError}</div>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FindingsPanel({ result, status, resultState }) {
+  const findings = result ? deriveFindings(result) : [];
+
+  return (
+    <section className="panel">
+      <div className="panel-topline">
+        <p className="panel-kicker">FindingsPanel</p>
+        <span className="panel-tag">{findings.length} findings</span>
+      </div>
+
+      <div className="panel-heading panel-heading-tight">
+        <div>
+          <h2>Findings</h2>
+          <p>The strongest review issues appear first so reviewers can act on the most important gaps quickly.</p>
+        </div>
+      </div>
+
+      {status === 'completed' && resultState === 'loading' ? (
+        <div className="loading-state compact">
+          <div className="skeleton-line" />
+          <div className="skeleton-line short" />
+          <div className="skeleton-line" />
+        </div>
+      ) : findings.length === 0 ? (
+        <div className="empty-inline">No findings are available for this run yet.</div>
+      ) : (
+        <div className="list-stack">
+          {findings.map((finding) => (
+            <article key={finding.id} className="finding-card">
+              <div className="card-head">
+                <h4>{finding.title}</h4>
+                <span className={`severity severity-${finding.severity}`}>{finding.severity}</span>
+              </div>
+              <p>{finding.detail}</p>
+              <div className="detail-row">
+                {finding.category && <span>{finding.category}</span>}
+                {finding.reviewers.length > 0 && <span>{joinList(finding.reviewers)}</span>}
+                {finding.assignee && <span>Owner: {finding.assignee}</span>}
+              </div>
+              {finding.action && <div className="subtle-note">Suggested action: {finding.action}</div>}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RisksPanel({ result, status, resultState }) {
+  const risks = result ? deriveRisks(result) : [];
+
+  return (
+    <section className="panel">
+      <div className="panel-topline">
+        <p className="panel-kicker">RisksPanel</p>
+        <span className="panel-tag">{risks.length} risks</span>
+      </div>
+
+      <div className="panel-heading panel-heading-tight">
+        <div>
+          <h2>Risks</h2>
+          <p>Structured delivery risks stay separate from findings so review quality and execution exposure are easy to parse.</p>
+        </div>
+      </div>
+
+      {status === 'completed' && resultState === 'loading' ? (
+        <div className="loading-state compact">
+          <div className="skeleton-line" />
+          <div className="skeleton-line short" />
+          <div className="skeleton-line" />
+        </div>
+      ) : risks.length === 0 ? (
+        <div className="empty-inline">No structured risks were returned for this run.</div>
+      ) : (
+        <div className="list-stack">
+          {risks.map((risk) => (
+            <article key={risk.id} className="finding-card">
+              <div className="card-head">
+                <h4>{risk.title}</h4>
+                <span className={`severity severity-${risk.severity}`}>{risk.severity}</span>
+              </div>
+              <p>{risk.detail}</p>
+              <div className="detail-row">
+                {risk.category && <span>{risk.category}</span>}
+                {risk.reviewers.length > 0 && <span>{joinList(risk.reviewers)}</span>}
+              </div>
+              {risk.mitigation && <div className="subtle-note">Mitigation: {risk.mitigation}</div>}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OpenQuestionsPanel({ result, status, resultState }) {
+  const questions = result ? deriveOpenQuestions(result) : [];
+
+  return (
+    <section className="panel">
+      <div className="panel-topline">
+        <p className="panel-kicker">OpenQuestionsPanel</p>
+        <span className="panel-tag">{questions.length} open questions</span>
+      </div>
+
+      <div className="panel-heading panel-heading-tight">
+        <div>
+          <h2>Open questions</h2>
+          <p>Questions that still need clarification stay visible so delivery planning does not advance on unresolved assumptions.</p>
+        </div>
+      </div>
+
+      {status === 'completed' && resultState === 'loading' ? (
+        <div className="loading-state compact">
+          <div className="skeleton-line" />
+          <div className="skeleton-line short" />
+        </div>
+      ) : questions.length === 0 ? (
+        <div className="empty-inline">No open questions were generated for this run.</div>
+      ) : (
+        <div className="list-stack">
+          {questions.map((question) => (
+            <article key={question.id} className="question-card">
+              <h4>{question.question}</h4>
+              {question.detail && <p>{question.detail}</p>}
+              {question.reviewers.length > 0 && <div className="detail-row"><span>{joinList(question.reviewers)}</span></div>}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ArtifactDownloadPanel({
+  runId,
+  status,
+  resultPayload,
+  statusPayload,
+  downloadFormat,
+  artifactError,
+  onDownload,
+}) {
+  const artifactPaths = resultPayload?.artifact_paths ?? statusPayload?.report_paths ?? {};
+  const artifactKeys = Object.keys(artifactPaths);
+  const canDownload = Boolean(runId) && status === 'completed';
+
+  return (
+    <section className="panel">
+      <div className="panel-topline">
+        <p className="panel-kicker">ArtifactDownloadPanel</p>
+        <span className="panel-tag">{artifactKeys.length} artifact paths</span>
+      </div>
+
+      <div className="panel-heading panel-heading-tight">
+        <div>
+          <h2>Download result artifacts</h2>
+          <p>Export the review report as Markdown or JSON after the run completes, and keep the resolved artifact paths visible.</p>
+        </div>
+      </div>
+
+      <p className="panel-copy">Downloads call `GET /api/report/{'{run_id}'}?format=md|json` and preserve the filename returned by the backend.</p>
+
+      <div className="button-row">
+        <button
+          type="button"
+          className="button primary"
+          disabled={!canDownload || downloadFormat === 'md'}
+          onClick={() => onDownload('md')}
+        >
+          {downloadFormat === 'md' ? 'Downloading Markdown...' : 'Download Markdown'}
+        </button>
+        <button
+          type="button"
+          className="button secondary"
+          disabled={!canDownload || downloadFormat === 'json'}
+          onClick={() => onDownload('json')}
+        >
+          {downloadFormat === 'json' ? 'Downloading JSON...' : 'Download JSON'}
+        </button>
+      </div>
+
+      {!canDownload && <div className="empty-inline">Artifacts unlock after a run completes successfully.</div>}
+      {artifactError && <div className="feedback error">{artifactError}</div>}
+
+      {artifactKeys.length > 0 && (
+        <div className="artifact-list">
+          {artifactKeys.map((key) => (
+            <div key={key} className="artifact-row">
+              <span>{key}</span>
+              <code>{artifactPaths[key]}</code>
+            </div>
+          ))}
         </div>
       )}
     </section>
@@ -607,7 +850,7 @@ function App() {
           failureMessage:
             statusPayload.status === 'failed'
               ? deriveFailureMessage(statusPayload, current.failureMessage)
-              : current.failureMessage,
+              : '',
         };
       });
     } catch (error) {
@@ -723,7 +966,6 @@ function App() {
     setWorkspace({
       ...initialWorkspace,
       submitState: 'submitting',
-      submitError: '',
     });
 
     try {
@@ -742,6 +984,7 @@ function App() {
             nodes: {},
             updated_at: new Date().toISOString(),
           },
+          report_paths: {},
         },
       });
 
@@ -775,10 +1018,37 @@ function App() {
           nodes: {},
           updated_at: run.updated_at ?? run.created_at ?? '',
         },
+        report_paths: {},
       },
     });
 
     await pollRunStatus(runId);
+  }
+
+  async function handleDownload(format) {
+    if (!workspace.runId) {
+      return;
+    }
+
+    setWorkspace((current) => ({
+      ...current,
+      downloadFormat: format,
+      artifactError: '',
+    }));
+
+    try {
+      await downloadReportArtifact(workspace.runId, format);
+    } catch (error) {
+      setWorkspace((current) => ({
+        ...current,
+        artifactError: formatApiError(error, `Failed to download the ${format.toUpperCase()} report.`),
+      }));
+    } finally {
+      setWorkspace((current) => ({
+        ...current,
+        downloadFormat: '',
+      }));
+    }
   }
 
   return (
@@ -788,27 +1058,28 @@ function App() {
 
       <header className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Review Workspace MVP</p>
-          <h1>Keep requirement review intake, run tracking, and outcome inspection in one place.</h1>
+          <p className="eyebrow">Review Workspace</p>
+          <h1>Submit a PRD, watch the run, inspect the result, and download the review artifacts.</h1>
           <p>
-            This frontend stays review-first. There are no platform menus or CRUD furniture here, only the surfaces needed to
-            submit a PRD, follow the run, and decide what needs clarification before planning continues.
+            This frontend stays review-first. It connects directly to review submit, status, result, and report endpoints
+            without adding heavy state machinery or generic platform menus.
           </p>
         </div>
 
         <aside className="hero-aside">
-          <span className="hero-tag">Review flow</span>
+          <span className="hero-tag">Connected endpoints</span>
           <ol>
-            <li>Submit one PRD through `prd_text`, `prd_path`, or `source`.</li>
-            <li>Track the active run and reopen recent runs when needed.</li>
-            <li>Inspect the result summary before delivery planning starts.</li>
+            <li>`POST /api/review` starts a run and returns the `run_id`.</li>
+            <li>`GET /api/review/{'{run_id}'}` powers live polling and failure messaging.</li>
+            <li>`GET /api/review/{'{run_id}'}/result` hydrates the structured review output.</li>
+            <li>`GET /api/report/{'{run_id}'}?format=md|json` downloads final report artifacts.</li>
           </ol>
         </aside>
       </header>
 
       <main className="workspace-layout">
-        <div className="left-column">
-          <SubmissionPanel
+        <section className="left-column">
+          <ReviewSubmitPanel
             form={form}
             isSubmitting={workspace.submitState === 'submitting'}
             errorMessage={workspace.submitError}
@@ -818,7 +1089,7 @@ function App() {
             onSubmit={handleSubmit}
           />
 
-          <StatusPanel
+          <RunProgressCard
             runId={workspace.runId}
             status={status}
             statusPayload={workspace.statusPayload}
@@ -827,19 +1098,37 @@ function App() {
             onRefreshHistory={() => loadRunHistory({ preserveRuns: true })}
             onOpenRun={handleOpenRun}
           />
-        </div>
 
-        <div className="right-column">
-          <ResultPanel
+          <ArtifactDownloadPanel
             runId={workspace.runId}
             status={status}
-            resultState={workspace.resultState}
+            resultPayload={workspace.resultPayload}
+            statusPayload={workspace.statusPayload}
+            downloadFormat={workspace.downloadFormat}
+            artifactError={workspace.artifactError}
+            onDownload={handleDownload}
+          />
+        </section>
+
+        <section className="right-column">
+          <ReviewSummaryPanel
+            runId={workspace.runId}
+            status={status}
+            statusPayload={workspace.statusPayload}
             result={result}
             resultPayload={workspace.resultPayload}
-            resultError={workspace.resultError}
+            resultState={workspace.resultState}
             failureMessage={workspace.failureMessage}
+            resultError={workspace.resultError}
           />
-        </div>
+
+          <div className="panel-grid">
+            <FindingsPanel result={result} status={status} resultState={workspace.resultState} />
+            <RisksPanel result={result} status={status} resultState={workspace.resultState} />
+          </div>
+
+          <OpenQuestionsPanel result={result} status={status} resultState={workspace.resultState} />
+        </section>
       </main>
     </div>
   );
