@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import { useTheme } from './hooks/useTheme';
 import HomePage from './pages/HomePage';
 import RunDetailsPage from './pages/RunDetailsPage';
 import './styles/layout.css';
 
 function AppLayout() {
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (location.hash) {
@@ -31,7 +33,7 @@ function AppLayout() {
     <div className="app-shell">
       <div className="ambient ambient-left" />
       <div className="ambient ambient-right" />
-      <Navbar />
+      <Navbar theme={theme} onToggleTheme={toggleTheme} />
 
       <div className="page-shell">
         <Outlet />
@@ -53,4 +55,3 @@ function App() {
 }
 
 export default App;
-

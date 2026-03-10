@@ -55,11 +55,12 @@
   justify-content: space-between;
   gap: var(--space-4);
   padding: 0.95rem 1.2rem;
-  border: 1px solid rgba(248, 245, 238, 0.14);
+  border: 1px solid var(--border-strong);
   border-radius: calc(var(--radius-lg) - 8px);
-  background: rgba(8, 22, 34, 0.62);
+  background: var(--surface-navbar);
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(16px);
+  transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
 .navbar-brand {
@@ -88,11 +89,11 @@
 }
 
 .navbar-brand-copy strong {
-  color: var(--text-inverse);
+  color: var(--hero-text);
 }
 
 .navbar-brand-copy small {
-  color: rgba(248, 245, 238, 0.68);
+  color: var(--text-soft);
   font-size: 0.82rem;
 }
 
@@ -109,9 +110,9 @@
   display: inline-grid;
   place-items: center;
   border-radius: 999px;
-  border: 1px dashed rgba(248, 245, 238, 0.3);
-  color: rgba(248, 245, 238, 0.76);
-  background: rgba(248, 245, 238, 0.06);
+  border: 1px dashed var(--border-soft);
+  color: var(--text-soft);
+  background: var(--button-subtle-bg);
 }
 
 .hero,
@@ -149,7 +150,7 @@
 .question-card h4,
 .result-lead h3,
 .history-card h3 {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-display);
 }
 
 .eyebrow,
@@ -159,7 +160,7 @@
   letter-spacing: 0.12em;
   font-size: 0.74rem;
   font-weight: 700;
-  color: rgba(248, 245, 238, 0.72);
+  color: var(--eyebrow-color);
 }
 
 .hero h1,
@@ -168,6 +169,7 @@
   max-width: 14ch;
   font-size: clamp(2.6rem, 5vw, 4.8rem);
   line-height: 0.96;
+  color: var(--hero-text);
 }
 
 .page-header h1 {
@@ -177,7 +179,7 @@
 .hero-copy {
   margin: 0;
   max-width: 54rem;
-  color: rgba(248, 245, 238, 0.84);
+  color: var(--hero-muted);
   font-size: 1.05rem;
   line-height: 1.7;
 }
@@ -192,18 +194,20 @@
 
 .hero-panel {
   padding: var(--space-4);
-  background: rgba(10, 29, 43, 0.58);
+  background: var(--surface-hero);
+  transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
 .hero-panel strong {
   display: block;
   margin-top: var(--space-2);
   font-size: 1.35rem;
+  color: var(--hero-text);
 }
 
 .hero-panel p {
   margin: var(--space-2) 0 0;
-  color: rgba(248, 245, 238, 0.78);
+  color: var(--hero-muted);
   line-height: 1.6;
 }
 
@@ -212,12 +216,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem;
-  color: rgba(248, 245, 238, 0.72);
+  color: var(--eyebrow-color);
   font-size: 0.9rem;
 }
 
 .breadcrumbs a:hover {
-  color: var(--text-inverse);
+  color: var(--hero-text);
 }
 
 .workspace-grid {
@@ -269,7 +273,7 @@
 
 .quick-start-step {
   padding-top: var(--space-3);
-  border-top: 1px solid rgba(248, 245, 238, 0.14);
+  border-top: 1px solid var(--border-strong);
 }
 
 .quick-start-step:first-child {
@@ -320,4 +324,3 @@
     flex-wrap: wrap;
   }
 }
-

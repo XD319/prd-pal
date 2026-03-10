@@ -5,7 +5,7 @@
   letter-spacing: 0.12em;
   font-size: 0.74rem;
   font-weight: 700;
-  color: rgba(248, 245, 238, 0.72);
+  color: var(--eyebrow-color);
 }
 
 .history-kicker {
@@ -16,6 +16,8 @@
   background: var(--panel);
   color: var(--text-main);
   padding: clamp(1.2rem, 2vw, 1.75rem);
+  animation: fadeInUp 300ms ease both;
+  transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
 .panel-header {
@@ -84,7 +86,7 @@
   padding: 0.95rem 1rem;
   background: var(--panel-strong);
   color: var(--text-main);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: var(--field-shadow);
 }
 
 .field textarea {
@@ -113,9 +115,10 @@
 .history-card,
 .history-meta div {
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-card);
   border: 1px solid rgba(19, 35, 51, 0.08);
   padding: var(--space-3);
+  transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
 .status-meta strong,
@@ -181,7 +184,7 @@
   border-radius: calc(var(--radius-lg) - 6px);
   border: 1px dashed rgba(19, 35, 51, 0.16);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 241, 230, 0.82)),
+    var(--surface-empty),
     radial-gradient(circle at top, rgba(242, 176, 76, 0.14), transparent 38%);
   padding: var(--space-5);
 }
@@ -203,9 +206,7 @@
   width: 6rem;
   height: 6rem;
   border-radius: 999px;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.95), rgba(242, 176, 76, 0.42)),
-    linear-gradient(135deg, rgba(73, 185, 139, 0.3), rgba(25, 76, 110, 0.12));
+  background: var(--surface-empty-orb);
   top: 1.7rem;
   opacity: 0.76;
 }
@@ -213,8 +214,8 @@
 .empty-grid {
   inset: 0;
   background-image:
-    linear-gradient(rgba(19, 35, 51, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(19, 35, 51, 0.045) 1px, transparent 1px);
+    linear-gradient(var(--surface-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--surface-grid-line) 1px, transparent 1px);
   background-size: 2rem 2rem;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 90%);
 }
@@ -225,7 +226,7 @@
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--surface-card);
 }
 
 .shimmer-block::after,

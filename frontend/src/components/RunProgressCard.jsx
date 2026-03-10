@@ -7,6 +7,7 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
   const progress = statusPayload?.progress ?? {};
   const nodes = deriveNodes(progress);
   const statusLabel = formatStatusLabel(status);
+  const currentNodeName = String(progress.current_node ?? '');
 
   return (
     <section className="panel run-progress-card">
@@ -47,29 +48,68 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
 
           {failureMessage && <div className="feedback-banner feedback-error">{failureMessage}</div>}
 
-          <div className="progress-bar-shell" aria-hidden="true">
-            <div className="progress-bar-fill" style={{ width: `${Math.max(8, Number(progress.percent ?? 0))}%` }} />
-          </div>
+          {nodes.length === 0 ? (
+            <div className="empty-inline">Node-level progress has not been reported yet.</div>
+          ) : (
+            <>
+              <div className="stepper-shell" aria-label="Pipeline progress">
+                <div className="stepper-header">
+                  <strong>Execution flow</strong>
+                  <span className="stepper-progress">{formatPercentFromWhole(progress.percent ?? 0)} complete</span>
+                </div>
 
-          <div className="node-list">
-            {nodes.length === 0 ? (
-              <div className="empty-inline">Node-level progress has not been reported yet.</div>
-            ) : (
-              nodes.map((node) => (
-                <article key={node.name} className={`node-card node-${node.status}`}>
-                  <div className="node-header">
-                    <strong>{node.name}</strong>
-                    <span className={`node-pill node-pill-${node.status}`}>{node.status}</span>
-                  </div>
-                  <p>
-                    {node.runs > 0 ? `${pluralize(node.runs, 'attempt')}` : 'Not started'}
-                    {node.lastEnd ? ` - finished ${formatDateTime(node.lastEnd)}` : ''}
-                    {!node.lastEnd && node.lastStart ? ` - started ${formatDateTime(node.lastStart)}` : ''}
-                  </p>
-                </article>
-              ))
-            )}
-          </div>
+                <div className="stepper-track">
+                  {nodes.map((node, index) => {
+                    const normalizedStatus = String(node.status ?? 'pending');
+                    const isCurrent =
+                      normalizedStatus === 'running' ||
+                      (normalizedStatus !== 'completed' && currentNodeName && node.name === currentNodeName);
+                    const stepClassName = [
+                      'stepper-step',
+                      `stepper-step-${normalizedStatus}`,
+                      normalizedStatus === 'completed' ? 'is-completed' : '',
+                      isCurrent ? 'is-current' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ');
+
+                    return (
+                      <div
+                        key={node.name}
+                        className={stepClassName}
+                        aria-current={isCurrent ? 'step' : undefined}
+                      >
+                        <div className="stepper-rail" aria-hidden="true">
+                          <span className="stepper-dot" />
+                          {index < nodes.length - 1 && <span className="stepper-line" />}
+                        </div>
+                        <div className="stepper-copy">
+                          <strong>{node.name}</strong>
+                          <span>{node.status}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="node-list">
+                {nodes.map((node) => (
+                  <article key={node.name} className={`node-card node-${node.status}`}>
+                    <div className="node-header">
+                      <strong>{node.name}</strong>
+                      <span className={`node-pill node-pill-${node.status}`}>{node.status}</span>
+                    </div>
+                    <p>
+                      {node.runs > 0 ? `${pluralize(node.runs, 'attempt')}` : 'Not started'}
+                      {node.lastEnd ? ` - finished ${formatDateTime(node.lastEnd)}` : ''}
+                      {!node.lastEnd && node.lastStart ? ` - started ${formatDateTime(node.lastStart)}` : ''}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </section>
