@@ -1,0 +1,155 @@
+.ghost-button,
+.secondary-button,
+.primary-button {
+  border-radius: 999px;
+  border: none;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.ghost-button,
+.secondary-button {
+  padding: 0.75rem 1rem;
+  background: rgba(19, 35, 51, 0.08);
+  color: var(--text-main);
+}
+
+.primary-button {
+  padding: 0.9rem 1.35rem;
+  background: linear-gradient(135deg, #18354b, #295677);
+  color: var(--text-inverse);
+  box-shadow: 0 14px 24px rgba(19, 53, 75, 0.28);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.ghost-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ghost-button:hover,
+.secondary-button:hover,
+.primary-button:hover {
+  transform: translateY(-1px);
+}
+
+.action-row,
+.chip-row,
+.detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.feedback-banner {
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+  font-weight: 700;
+}
+
+.feedback-error {
+  background: rgba(217, 101, 81, 0.16);
+  color: #9e3022;
+  border: 1px solid rgba(217, 101, 81, 0.24);
+}
+
+.status-badge,
+.inline-meta,
+.node-pill,
+.severity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.42rem 0.82rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.inline-meta {
+  background: rgba(19, 35, 51, 0.08);
+  color: var(--text-main);
+}
+
+.inline-meta-soft {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.status-idle {
+  background: rgba(144, 164, 181, 0.18);
+  color: #5f7485;
+}
+
+.status-queued {
+  background: rgba(141, 125, 224, 0.18);
+  color: #5f4fb1;
+}
+
+.status-running {
+  background: rgba(242, 176, 76, 0.18);
+  color: #996519;
+}
+
+.status-completed {
+  background: rgba(73, 185, 139, 0.18);
+  color: #267452;
+}
+
+.status-failed {
+  background: rgba(217, 101, 81, 0.18);
+  color: #aa4435;
+}
+
+.progress-bar-shell {
+  width: 100%;
+  height: 0.8rem;
+  border-radius: 999px;
+  background: rgba(19, 35, 51, 0.08);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f2b04c, #49b98b);
+  transition: width 240ms ease;
+}
+
+.node-pill-pending,
+.node-pill-idle {
+  background: rgba(144, 164, 181, 0.18);
+  color: #5f7485;
+}
+
+.node-pill-running {
+  background: rgba(242, 176, 76, 0.18);
+  color: #996519;
+}
+
+.node-pill-completed {
+  background: rgba(73, 185, 139, 0.18);
+  color: #267452;
+}
+
+.node-pill-failed,
+.severity-high {
+  background: rgba(217, 101, 81, 0.16);
+  color: #aa4435;
+}
+
+.severity-low {
+  background: rgba(78, 165, 125, 0.16);
+  color: #2b7b56;
+}
+
+.severity-medium {
+  background: rgba(240, 171, 77, 0.18);
+  color: #996519;
+}
+
+@media (max-width: 780px) {
+  .action-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
