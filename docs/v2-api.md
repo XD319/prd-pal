@@ -27,6 +27,40 @@ Or directly:
 uvicorn requirement_review_v1.server.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+## Shared-Environment Hardening
+
+The FastAPI surface now supports a simple environment-controlled auth layer and a submission rate limiter.
+
+Environment variables:
+
+- `MARRDP_API_AUTH_DISABLED=true|false`
+- `MARRDP_API_KEY=`
+- `MARRDP_API_BEARER_TOKEN=`
+- `MARRDP_API_RATE_LIMIT_DISABLED=true|false`
+- `MARRDP_API_RATE_LIMIT_MAX_REQUESTS=5`
+- `MARRDP_API_RATE_LIMIT_WINDOW_SEC=60`
+
+Recommended modes:
+
+- Local development: keep `MARRDP_API_AUTH_DISABLED=true` and `MARRDP_API_RATE_LIMIT_DISABLED=true`.
+- Shared environment: set `MARRDP_API_AUTH_DISABLED=false`, configure `MARRDP_API_KEY` and/or `MARRDP_API_BEARER_TOKEN`, then enable rate limiting with `MARRDP_API_RATE_LIMIT_DISABLED=false`.
+
+Auth behavior:
+
+- Send `X-API-Key: <secret>` or `Authorization: Bearer <token>`.
+- If auth is enabled but no credentials are configured, the API returns a controlled `503` instead of exposing the surface anonymously.
+- Invalid or missing credentials return controlled `401` responses.
+
+Rate-limit behavior:
+
+- The limiter applies to `POST /api/review`.
+- When the limit is exceeded, the API returns `429` with `detail.code = rate_limit_exceeded` and a `Retry-After` header.
+
+Controlled errors:
+
+- Request validation failures return `422` with `detail.code = request_validation_error`.
+- Unexpected server failures return `500` with `detail.code = internal_server_error`.
+
 ## Core Review Endpoints
 
 ### `POST /api/review`
@@ -41,11 +75,21 @@ Request body accepts:
 
 `source` is the preferred forward-looking input. It accepts local files, public text URLs, and authenticated Feishu/Lark sources. `prd_text` and `prd_path` remain supported for compatibility.
 
-Example:
+Example with API key:
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/review" \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: local-dev-secret" \
+  -d "{\"source\":\"docs/sample_prd.md\"}"
+```
+
+Example with bearer token:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/review" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer shared-env-token" \
   -d "{\"source\":\"docs/sample_prd.md\"}"
 ```
 
@@ -73,7 +117,7 @@ This endpoint is file-based and lightweight: it scans run directories and report
 Example:
 
 ```bash
-curl "http://127.0.0.1:8000/api/runs"
+curl -H "X-API-Key: local-dev-secret" "http://127.0.0.1:8000/api/runs"
 ```
 
 Typical response:
@@ -116,7 +160,7 @@ Fetch job status and node progress.
 Example:
 
 ```bash
-curl "http://127.0.0.1:8000/api/review/20260309T000000Z"
+curl -H "X-API-Key: local-dev-secret" "http://127.0.0.1:8000/api/review/20260309T000000Z"
 ```
 
 Typical response fields:
@@ -143,8 +187,8 @@ Download the main report artifact.
 Examples:
 
 ```bash
-curl "http://127.0.0.1:8000/api/report/20260309T000000Z?format=md"
-curl "http://127.0.0.1:8000/api/report/20260309T000000Z?format=json"
+curl -H "X-API-Key: local-dev-secret" "http://127.0.0.1:8000/api/report/20260309T000000Z?format=md"
+curl -H "X-API-Key: local-dev-secret" "http://127.0.0.1:8000/api/report/20260309T000000Z?format=json"
 ```
 
 ## Primary Output Interpretation

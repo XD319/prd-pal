@@ -21,6 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from requirement_review_v1.metrics import build_runtime_trace_summary
 from requirement_review_v1.workflow import build_review_graph
 
 REQUIRED_TRACE_AGENTS = ("parser", "planner", "risk", "reviewer", "reporter")
@@ -32,7 +33,6 @@ REQUIRED_TRACE_FIELDS = (
     "status",
     "input_chars",
     "output_chars",
-    "prompt_version",
     "raw_output_path",
     "error_message",
 )
@@ -45,6 +45,10 @@ REQUIRED_METRICS_FIELDS = (
     "risk_latency_ms",
     "cache_hit_count",
     "cache_miss_count",
+    "cache_total_count",
+    "cache_hit_rate",
+    "slowest_span_name",
+    "slowest_span_duration_ms",
     "parallel_enabled",
 )
 DEFAULT_PROFILE = "full"
@@ -131,7 +135,6 @@ def _select_cases(cases: list[dict[str, Any]], profile: str) -> list[dict[str, A
 
 
 def _case_to_requirement_doc(case: dict[str, Any]) -> str:
-    # Feed the workflow with a deterministic text representation of each case.
     return json.dumps(case, ensure_ascii=False, indent=2)
 
 
@@ -245,6 +248,24 @@ def _check_metrics_fields_present(report_data: dict[str, Any]) -> tuple[bool, li
     return len(errors) == 0, errors
 
 
+def _collect_case_runtime_snapshot(report_data: dict[str, Any]) -> dict[str, Any]:
+    trace = report_data.get("trace", {})
+    runtime_summary = build_runtime_trace_summary(trace if isinstance(trace, dict) else {})
+    metrics = report_data.get("metrics", {}) if isinstance(report_data.get("metrics"), dict) else {}
+    return {
+        "total_latency_ms": int(metrics.get("total_latency_ms", 0) or 0),
+        "parallel_enabled": bool(metrics.get("parallel_enabled", False)),
+        "cache_hit_count": int(metrics.get("cache_hit_count", 0) or 0),
+        "cache_miss_count": int(metrics.get("cache_miss_count", 0) or 0),
+        "cache_hit_rate": float(metrics.get("cache_hit_rate", 0.0) or 0.0),
+        "slowest_span_name": runtime_summary.get("slowest_span_name", ""),
+        "slowest_span_duration_ms": int(runtime_summary.get("slowest_span_duration_ms", 0) or 0),
+        "failed_spans": list(runtime_summary.get("failed_spans", []) or []),
+        "completed_primary_spans": list(runtime_summary.get("completed_primary_spans", []) or []),
+        "cache_backend_usage": dict(runtime_summary.get("cache_backend_usage", {}) or {}),
+    }
+
+
 async def _run_case(
     graph: Any,
     case: dict[str, Any],
@@ -270,6 +291,7 @@ async def _run_case(
         report_data = _build_report_json(result, run_id)
         final_report = result.get("final_report", "")
         trace = result.get("trace", {})
+        runtime_summary = _collect_case_runtime_snapshot(report_data)
 
         (run_dir / "report.md").write_text(str(final_report), encoding="utf-8")
         (run_dir / "report.json").write_text(
@@ -303,6 +325,7 @@ async def _run_case(
             "status": "passed" if all_ok else "failed",
             "checks": checks,
             "coverage_ratio": coverage_ratio,
+            "runtime_summary": runtime_summary,
             "trace_status": {
                 agent: (trace.get(agent, {}) if isinstance(trace, dict) else {}).get("status")
                 for agent in REQUIRED_TRACE_AGENTS
@@ -326,6 +349,18 @@ async def _run_case(
                 "metrics_fields_present": {"passed": False, "errors": ["workflow failed before metrics validation"]},
             },
             "coverage_ratio": None,
+            "runtime_summary": {
+                "total_latency_ms": 0,
+                "parallel_enabled": False,
+                "cache_hit_count": 0,
+                "cache_miss_count": 0,
+                "cache_hit_rate": 0.0,
+                "slowest_span_name": "",
+                "slowest_span_duration_ms": 0,
+                "failed_spans": [],
+                "completed_primary_spans": [],
+                "cache_backend_usage": {},
+            },
             "trace_status": {},
             "error": str(exc),
             "case_duration_sec": round(perf_counter() - started_perf, 4),
@@ -406,12 +441,52 @@ def _build_duration_summary(
     }
 
 
+def _build_runtime_summary(case_results: list[dict[str, Any]]) -> dict[str, Any]:
+    total_latency_ms = sum(int(item.get("runtime_summary", {}).get("total_latency_ms", 0) or 0) for item in case_results)
+    cache_hits = sum(int(item.get("runtime_summary", {}).get("cache_hit_count", 0) or 0) for item in case_results)
+    cache_misses = sum(int(item.get("runtime_summary", {}).get("cache_miss_count", 0) or 0) for item in case_results)
+    cache_total = cache_hits + cache_misses
+    backend_usage: dict[str, int] = {}
+    slowest_case = {
+        "case_id": "",
+        "slowest_span_name": "",
+        "slowest_span_duration_ms": 0,
+    }
+    cases_with_failed_spans: list[dict[str, Any]] = []
+
+    for item in case_results:
+        runtime_summary = item.get("runtime_summary", {}) if isinstance(item.get("runtime_summary"), dict) else {}
+        for backend_name, count in dict(runtime_summary.get("cache_backend_usage", {}) or {}).items():
+            backend_usage[str(backend_name)] = backend_usage.get(str(backend_name), 0) + int(count or 0)
+        slowest_span_duration_ms = int(runtime_summary.get("slowest_span_duration_ms", 0) or 0)
+        if slowest_span_duration_ms > slowest_case["slowest_span_duration_ms"]:
+            slowest_case = {
+                "case_id": str(item.get("case_id", "") or ""),
+                "slowest_span_name": str(runtime_summary.get("slowest_span_name", "") or ""),
+                "slowest_span_duration_ms": slowest_span_duration_ms,
+            }
+        failed_spans = list(runtime_summary.get("failed_spans", []) or [])
+        if failed_spans:
+            cases_with_failed_spans.append({"case_id": str(item.get("case_id", "") or ""), "failed_spans": failed_spans})
+
+    return {
+        "aggregate_total_latency_ms": total_latency_ms,
+        "aggregate_cache_hit_count": cache_hits,
+        "aggregate_cache_miss_count": cache_misses,
+        "aggregate_cache_hit_rate": round(cache_hits / cache_total, 4) if cache_total else 0.0,
+        "cache_backend_usage": backend_usage,
+        "slowest_case_span": slowest_case,
+        "cases_with_failed_spans": cases_with_failed_spans,
+    }
+
+
 def _print_summary(
     profile: str,
     workers: int,
     cases_file: Path,
     summary: dict[str, int],
     duration_summary: dict[str, Any],
+    runtime_summary: dict[str, Any],
     out_path: Path,
 ) -> None:
     print("")
@@ -433,6 +508,13 @@ def _print_summary(
         f"sum_case={duration_summary['sum_case_time_sec']:.4f}s, "
         f"avg_case={duration_summary['avg_case_duration_sec']:.4f}s, "
         f"speedup_estimate={duration_summary['speedup_estimate']:.4f}x"
+    )
+    print(
+        "  runtime: "
+        f"aggregate_total_latency_ms={runtime_summary['aggregate_total_latency_ms']}, "
+        f"cache_hit_rate={runtime_summary['aggregate_cache_hit_rate']:.4f}, "
+        f"slowest_case_span={runtime_summary['slowest_case_span']['case_id']}::"
+        f"{runtime_summary['slowest_case_span']['slowest_span_name']}"
     )
     if duration_summary["slowest_cases_top_3"]:
         print("  slowest cases:")
@@ -467,6 +549,7 @@ async def _amain() -> int:
         "error_cases": errored,
     }
     duration_summary = _build_duration_summary(case_results, wall_time_sec, args.workers)
+    runtime_summary = _build_runtime_summary(case_results)
 
     eval_report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -481,13 +564,12 @@ async def _amain() -> int:
         "runs_dir": str(args.runs_dir),
         "summary": summary,
         "duration_summary": duration_summary,
+        "runtime_summary": runtime_summary,
         "cases": case_results,
     }
 
     args.out.write_text(json.dumps(eval_report, ensure_ascii=False, indent=2), encoding="utf-8")
-    _print_summary(args.profile, args.workers, args.cases, summary, duration_summary, args.out)
-
-    # Non-zero on failed/error to support CI usage.
+    _print_summary(args.profile, args.workers, args.cases, summary, duration_summary, runtime_summary, args.out)
     return 0 if (failed == 0 and errored == 0) else 1
 
 
@@ -497,4 +579,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
