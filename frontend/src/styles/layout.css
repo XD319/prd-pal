@@ -153,3 +153,21 @@
     font-size: clamp(2.2rem, 12vw, 3.3rem);
   }
 }
+
+.quick-start-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quick-start-step {
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(248, 245, 238, 0.14);
+}
+
+.quick-start-step:first-child {
+  padding-top: 0;
+  border-top: none;
+}

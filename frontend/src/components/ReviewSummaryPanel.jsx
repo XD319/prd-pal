@@ -9,7 +9,7 @@ function ReviewSummaryPanel({ runId, status, result, statusPayload, resultPayloa
     <section className="panel review-summary-panel">
       <div className="panel-header">
         <div>
-          <p className="section-kicker">ReviewSummaryPanel</p>
+          <p className="section-kicker">Review Results</p>
           <h2>Result overview</h2>
         </div>
         {result && <span className="inline-meta">{deriveModeLabel(result)}</span>}

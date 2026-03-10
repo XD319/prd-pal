@@ -12,7 +12,7 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
     <section className="panel run-progress-card">
       <div className="panel-header">
         <div>
-          <p className="section-kicker">RunProgressCard</p>
+          <p className="section-kicker">Pipeline Status</p>
           <h2>Run progress</h2>
         </div>
         <span className={`status-badge status-${status}`}>{statusLabel}</span>

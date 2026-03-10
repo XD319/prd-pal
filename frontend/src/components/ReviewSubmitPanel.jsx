@@ -2,13 +2,18 @@ import '../styles/panels.css';
 import '../styles/components.css';
 
 function ReviewSubmitPanel({ form, onFieldChange, onSubmit, onReset, onLoadSample, isSubmitting, errorMessage }) {
-  const helperText = 'Use source when you already have a canonical document reference. Otherwise provide exactly one of prd_text or prd_path.';
+  const helperText = 'Use Document Source when you already have a canonical document reference. Otherwise provide exactly one of PRD Content or File Path.';
+  const hasPrdText = Boolean(form.prd_text.trim());
+  const hasPrdPath = Boolean(form.prd_path.trim());
+  const hasConflictingInputs = hasPrdText && hasPrdPath;
+  const conflictingInputMessage = 'Please provide either PRD content or a file path, not both.';
+  const characterCountLabel = `${new Intl.NumberFormat('en-US').format(form.prd_text.length)} characters`;
 
   return (
     <section className="panel review-submit-panel">
       <div className="panel-header">
         <div>
-          <p className="section-kicker">ReviewSubmitPanel</p>
+          <p className="section-kicker">New Review</p>
           <h2>Start a review run</h2>
         </div>
         <button type="button" className="ghost-button" onClick={onLoadSample}>
@@ -18,32 +23,37 @@ function ReviewSubmitPanel({ form, onFieldChange, onSubmit, onReset, onLoadSampl
 
       <form className="submission-form" onSubmit={onSubmit}>
         <label className="field">
-          <span>prd_text</span>
+          <span>PRD Content</span>
           <textarea
             rows="12"
             value={form.prd_text}
-            placeholder="Paste a PRD draft when you want to review text directly."
+            placeholder="Paste or type your Product Requirements Document here..."
             onChange={(event) => onFieldChange('prd_text', event.target.value)}
           />
+          <div className="field-meta">
+            <span className="field-counter" aria-live="polite">{characterCountLabel}</span>
+            {hasConflictingInputs && <p className="field-feedback field-warning">{conflictingInputMessage}</p>}
+          </div>
         </label>
 
         <div className="compact-fields compact-fields-stacked">
           <label className="field">
-            <span>prd_path</span>
+            <span>File Path</span>
             <input
               type="text"
               value={form.prd_path}
-              placeholder="docs/product/requirement.md"
+              placeholder="e.g. docs/requirements/feature-x.md"
               onChange={(event) => onFieldChange('prd_path', event.target.value)}
             />
+            {hasConflictingInputs && <p className="field-feedback field-warning">{conflictingInputMessage}</p>}
           </label>
 
           <label className="field">
-            <span>source</span>
+            <span>Document Source</span>
             <input
               type="text"
               value={form.source}
-              placeholder="docs/sample_prd.md or connector source"
+              placeholder="e.g. docs/sample_prd.md or a connector reference"
               onChange={(event) => onFieldChange('source', event.target.value)}
             />
           </label>

@@ -10,7 +10,7 @@ function OpenQuestionsPanel({ result }) {
     <section className="panel open-questions-panel">
       <div className="panel-header">
         <div>
-          <p className="section-kicker">OpenQuestionsPanel</p>
+          <p className="section-kicker">Open Questions</p>
           <h2>Open questions</h2>
         </div>
         <span className="inline-meta">{pluralize(questions.length, 'item')}</span>

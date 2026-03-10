@@ -11,7 +11,7 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
     <section className="panel artifact-download-panel">
       <div className="panel-header">
         <div>
-          <p className="section-kicker">ArtifactDownloadPanel</p>
+          <p className="section-kicker">Export & Artifacts</p>
           <h2>Artifacts</h2>
         </div>
         <span className="inline-meta">{pluralize(artifactKeys.length, 'path')}</span>

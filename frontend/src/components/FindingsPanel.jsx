@@ -10,7 +10,7 @@ function FindingsPanel({ result, status, resultState }) {
     <section className="panel findings-panel">
       <div className="panel-header">
         <div>
-          <p className="section-kicker">FindingsPanel</p>
+          <p className="section-kicker">Review Findings</p>
           <h2>Findings</h2>
         </div>
         <span className="inline-meta">{pluralize(findings.length, 'item')}</span>

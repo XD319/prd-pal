@@ -77,6 +77,10 @@ function App() {
       ...current,
       [field]: value,
     }));
+    setWorkspaceState((current) => ({
+      ...current,
+      submitError: '',
+    }));
   }
 
   function loadSample() {
@@ -89,6 +93,11 @@ function App() {
   }
 
   function resetWorkspace() {
+    const shouldReset = window.confirm('This will clear all current review data. Are you sure?');
+    if (!shouldReset) {
+      return;
+    }
+
     setWorkspaceState(initialWorkspace);
     setForm(initialForm);
   }
@@ -355,16 +364,28 @@ function App() {
       <header className="hero hero-tight">
         <div>
           <p className="eyebrow">Requirement Review Workspace</p>
-          <h1>Review intake, history, progress, and result inspection in one focused workspace.</h1>
+          <h1>AI-Powered Requirement Review</h1>
           <p className="hero-copy">
-            This phase stays review-first: submit a PRD, reopen recent runs, inspect progress, and pull the result package without adding approval or orchestration controls.
+            Submit your PRD, get structured findings, risks, and delivery insights - all in one workspace.
           </p>
         </div>
 
         <div className="hero-panel">
-          <span className="hero-label">Connected endpoints</span>
-          <strong>POST /api/review and GET /api/runs</strong>
-          <p>The detail view continues to rely on status, result, and report endpoints, while the history view keeps recent review work within easy reach.</p>
+          <span className="hero-label">Quick Start</span>
+          <ol className="quick-start-list">
+            <li className="quick-start-step">
+              <strong>1. Paste PRD</strong>
+              <p>Add the PRD content directly or point to the right source document.</p>
+            </li>
+            <li className="quick-start-step">
+              <strong>2. Review</strong>
+              <p>Track pipeline progress, inspect findings, and clarify open questions.</p>
+            </li>
+            <li className="quick-start-step">
+              <strong>3. Download report</strong>
+              <p>Export the structured review package when the run completes.</p>
+            </li>
+          </ol>
         </div>
       </header>
 

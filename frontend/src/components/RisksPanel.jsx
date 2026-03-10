@@ -10,7 +10,7 @@ function RisksPanel({ result }) {
     <section className="panel risks-panel">
       <div className="panel-header">
         <div>
-          <p className="section-kicker">RisksPanel</p>
+          <p className="section-kicker">Risk Assessment</p>
           <h2>Risks</h2>
         </div>
         <span className="inline-meta">{pluralize(risks.length, 'item')}</span>

@@ -153,3 +153,23 @@
     align-items: flex-start;
   }
 }
+
+.field-meta {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field-counter,
+.field-feedback {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.field-counter {
+  color: var(--text-soft);
+}
+
+.field-warning {
+  color: #9e5c10;
+}
