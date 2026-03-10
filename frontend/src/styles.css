@@ -198,7 +198,8 @@ code {
 .timeline,
 .recent-runs,
 .artifact-list,
-.list-stack {
+.list-stack,
+.history-list {
   display: grid;
   gap: var(--space-3);
 }
@@ -451,7 +452,8 @@ code {
 .insight-card,
 .finding-card,
 .question-card,
-.artifact-row {
+.artifact-row,
+.history-card {
   padding: var(--space-3);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-soft);
@@ -548,6 +550,7 @@ code {
 .panel-copy,
 .finding-card p,
 .question-card p,
+.history-card p,
 .subtle-note,
 .detail-row,
 .artifact-row span {
@@ -603,6 +606,28 @@ code {
   width: 100%;
   color: var(--text-strong);
   overflow-wrap: anywhere;
+}
+
+.history-card-active {
+  border-color: rgba(41, 91, 109, 0.28);
+  box-shadow: 0 0 0 3px rgba(41, 91, 109, 0.1), var(--shadow-soft);
+}
+
+.history-id {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .insight-card {
@@ -663,6 +688,10 @@ code {
 
 .empty-state.soft {
   min-height: 22rem;
+}
+
+.empty-state.compact {
+  min-height: 12rem;
 }
 
 .loading-state.compact {
@@ -727,6 +756,23 @@ code {
 
 .loading-card {
   min-height: 5.8rem;
+}
+
+.history-skeleton-card {
+  min-height: 7rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+  position: relative;
+  overflow: hidden;
+}
+
+.history-skeleton-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.76), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.6s infinite;
 }
 
 .boot-error-shell {
@@ -807,7 +853,8 @@ code {
   .timeline-head,
   .subsection-head,
   .button-row,
-  .card-head {
+  .card-head,
+  .history-actions {
     flex-direction: column;
     align-items: flex-start;
   }

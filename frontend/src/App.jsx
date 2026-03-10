@@ -196,6 +196,23 @@ function deriveProgressNodes(progress) {
     });
 }
 
+function describeHistoryRun(run) {
+  const status = String(run?.status ?? 'idle');
+  const hasResult = Boolean(run?.artifact_presence?.report_json) || status === 'completed';
+
+  return {
+    status,
+    statusLabel: formatStatusLabel(status),
+    createdAt: formatDateTime(run?.created_at),
+    detail: hasResult
+      ? 'Structured review output is available to inspect.'
+      : status === 'failed'
+        ? 'The run ended without a ready result artifact.'
+        : 'The run is still producing or finalizing review output.',
+    actionLabel: hasResult ? 'Open result details' : 'Open run details',
+  };
+}
+
 function deriveFindings(result) {
   const structuredFindings = asArray(result?.parallel_review?.findings);
   if (structuredFindings.length > 0) {
@@ -393,11 +410,10 @@ function ReviewSubmitPanel({ form, isSubmitting, errorMessage, onFieldChange, on
   );
 }
 
-function RunProgressCard({ runId, status, statusPayload, failureMessage, history, onRefreshHistory, onOpenRun }) {
+function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
   const progress = statusPayload?.progress ?? {};
   const percent = Number(progress.percent ?? 0);
   const nodes = deriveProgressNodes(progress);
-  const recentRuns = history.runs.slice(0, 4);
 
   return (
     <section className="panel">
@@ -409,11 +425,8 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage, history
       <div className="panel-heading">
         <div>
           <h2>Track the review run</h2>
-          <p>Poll the active run until it completes or fails, while keeping a few recent runs within reach.</p>
+          <p>Poll the active run until it completes or fails, with clear node-level progress and failure messaging.</p>
         </div>
-        <button type="button" className="button ghost" onClick={onRefreshHistory} disabled={history.refreshing}>
-          {history.refreshing ? 'Refreshing...' : 'Refresh runs'}
-        </button>
       </div>
 
       {!runId ? (
@@ -481,34 +494,86 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage, history
           </div>
         </div>
       )}
+    </section>
+  );
+}
 
-      <div className="recent-runs">
-        <div className="subsection-head">
-          <h3>Recent runs</h3>
-          <span className="subtle-text">From `GET /api/runs`</span>
-        </div>
+function ReviewHistoryPanel({ history, activeRunId, onRefreshHistory, onOpenRun }) {
+  const recentRuns = history.runs.slice(0, 8);
 
-        {history.status === 'loading' && history.runs.length === 0 ? (
-          <div className="loading-state compact">
-            <div className="skeleton-line" />
-            <div className="skeleton-line short" />
-            <div className="skeleton-line" />
-          </div>
-        ) : recentRuns.length === 0 ? (
-          <div className="empty-inline">No recent review runs have been returned yet.</div>
-        ) : (
-          <div className="run-list">
-            {recentRuns.map((run) => (
-              <button key={run.run_id} type="button" className="run-chip" onClick={() => onOpenRun(run)}>
-                <span>{run.run_id}</span>
-                <strong>{formatStatusLabel(run.status ?? 'idle')}</strong>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {history.error && <div className="feedback error subdued">{history.error}</div>}
+  return (
+    <section className="panel">
+      <div className="panel-topline">
+        <p className="panel-kicker">ReviewHistoryPanel</p>
+        <span className="panel-tag">Recent review runs</span>
       </div>
+
+      <div className="panel-heading">
+        <div>
+          <h2>Review history</h2>
+          <p>Reopen recent review runs without leaving the workspace. This phase stays focused on review intake and inspection only.</p>
+        </div>
+        <button type="button" className="button ghost" onClick={onRefreshHistory} disabled={history.refreshing}>
+          {history.refreshing ? 'Refreshing...' : 'Refresh runs'}
+        </button>
+      </div>
+
+      {history.status === 'loading' && history.runs.length === 0 ? (
+        <div className="loading-state compact loading-state-list">
+          <div className="history-skeleton-card" />
+          <div className="history-skeleton-card" />
+          <div className="history-skeleton-card" />
+        </div>
+      ) : history.status === 'error' && history.runs.length === 0 ? (
+        <div className="empty-state compact">
+          <div className="empty-grid" />
+          <h3>Review history is unavailable</h3>
+          <p>{history.error}</p>
+        </div>
+      ) : recentRuns.length === 0 ? (
+        <div className="empty-state compact">
+          <div className="empty-rings" />
+          <h3>No review runs yet</h3>
+          <p>Recent runs from `GET /api/runs` will appear here once the workspace has review activity.</p>
+        </div>
+      ) : (
+        <div className="history-list">
+          {history.error && <div className="feedback error subdued">{history.error}</div>}
+
+          {recentRuns.map((run) => {
+            const summary = describeHistoryRun(run);
+            const isActive = run.run_id === activeRunId;
+
+            return (
+              <article key={run.run_id} className={`history-card${isActive ? ' history-card-active' : ''}`}>
+                <div className="card-head">
+                  <div>
+                    <span className="history-id">{run.run_id}</span>
+                    <h4>{summary.actionLabel}</h4>
+                  </div>
+                  <span className={`status-pill status-${summary.status}`}>{summary.statusLabel}</span>
+                </div>
+
+                <p>{summary.detail}</p>
+
+                <div className="detail-row">
+                  <span>Created {summary.createdAt}</span>
+                  {run.updated_at && <span>Updated {formatDateTime(run.updated_at)}</span>}
+                </div>
+
+                <div className="history-actions">
+                  <button type="button" className="button secondary" onClick={() => onOpenRun(run)}>
+                    {summary.actionLabel}
+                  </button>
+                  <span className="subtle-text">
+                    {run.artifact_presence?.report_json ? 'Result artifact ready' : 'Waiting on result artifact'}
+                  </span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -1089,14 +1154,18 @@ function App() {
             onSubmit={handleSubmit}
           />
 
+          <ReviewHistoryPanel
+            history={history}
+            activeRunId={workspace.runId}
+            onRefreshHistory={() => loadRunHistory({ preserveRuns: true })}
+            onOpenRun={handleOpenRun}
+          />
+
           <RunProgressCard
             runId={workspace.runId}
             status={status}
             statusPayload={workspace.statusPayload}
             failureMessage={workspace.failureMessage}
-            history={history}
-            onRefreshHistory={() => loadRunHistory({ preserveRuns: true })}
-            onOpenRun={handleOpenRun}
           />
 
           <ArtifactDownloadPanel
