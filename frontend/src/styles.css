@@ -189,22 +189,15 @@ code {
   gap: var(--space-5);
 }
 
-.panel-grid,
 .left-column,
 .right-column,
 .submission-form,
 .status-layout,
 .result-stack,
 .timeline,
-.recent-runs,
-.artifact-list,
-.list-stack {
+.recent-runs {
   display: grid;
   gap: var(--space-3);
-}
-
-.panel-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .panel {
@@ -344,10 +337,6 @@ code {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.status-grid.status-grid-three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .metric-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -448,10 +437,7 @@ code {
 .status-card,
 .metric-card,
 .run-chip,
-.insight-card,
-.finding-card,
-.question-card,
-.artifact-row {
+.insight-card {
   padding: var(--space-3);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-soft);
@@ -539,70 +525,6 @@ code {
 .result-lead p {
   margin: var(--space-2) 0 0;
   color: var(--text-soft);
-}
-
-.panel-heading-tight {
-  margin-bottom: var(--space-3);
-}
-
-.panel-copy,
-.finding-card p,
-.question-card p,
-.subtle-note,
-.detail-row,
-.artifact-row span {
-  color: var(--text-soft);
-  line-height: 1.6;
-}
-
-.card-head,
-.detail-row,
-.artifact-row {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.detail-row {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-}
-
-.severity {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 0.4rem 0.78rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: capitalize;
-}
-
-.severity-high {
-  background: rgba(182, 78, 60, 0.16);
-  color: var(--tone-high);
-}
-
-.severity-medium {
-  background: rgba(188, 125, 33, 0.16);
-  color: var(--tone-medium);
-}
-
-.severity-low {
-  background: rgba(47, 142, 107, 0.16);
-  color: var(--tone-completed);
-}
-
-.artifact-row {
-  flex-direction: column;
-}
-
-.artifact-row code {
-  width: 100%;
-  color: var(--text-strong);
-  overflow-wrap: anywhere;
 }
 
 .insight-card {
@@ -779,7 +701,6 @@ code {
 @media (max-width: 1180px) {
   .hero,
   .workspace-layout,
-  .panel-grid,
   .metric-grid,
   .insight-grid,
   .field-grid,
@@ -806,8 +727,7 @@ code {
   .status-hero,
   .timeline-head,
   .subsection-head,
-  .button-row,
-  .card-head {
+  .button-row {
     flex-direction: column;
     align-items: flex-start;
   }
