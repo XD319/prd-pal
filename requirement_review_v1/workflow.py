@@ -1,8 +1,10 @@
-﻿"""Requirement-review workflow with parser-driven parallel planner/risk fan-out."""
+"""Requirement-review workflow with parser-driven parallel planner/risk fan-out."""
 
 from __future__ import annotations
 
+import inspect
 import json
+import os
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -14,6 +16,8 @@ from langgraph.graph import END, StateGraph
 from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent
 from .review import decide_review_mode, run_parallel_review_async
 from .state import ReviewState, plan_from_state
+from .review.memory_store import FileBackedMemoryStore, NoopMemoryStore
+from .review.normalizer_cache import FileBackedNormalizerCache, InMemoryNormalizerCache, normalize_requirement_with_cache
 from .subflows.risk_analysis import run_risk_analysis_from_review_state
 from .templates.registry import CLARIFY_PARSER_REVIEW_PROMPT, PARSER_REVIEW_PROMPT
 from .utils.trace import trace_start
@@ -228,15 +232,102 @@ def _resolve_requested_mode(state: ReviewState) -> str:
     return legacy_map.get(override, override if override in {"auto", "quick", "full"} else "auto")
 
 
+
+def _truthy(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_normalizer_cache(state: ReviewState):
+    cache_config = dict(state.get("normalizer_cache_config", {}) or {})
+    cache_path = str(cache_config.get("path") or os.getenv("NORMALIZER_CACHE_PATH", "")).strip()
+    if cache_path:
+        return FileBackedNormalizerCache(cache_path)
+    return InMemoryNormalizerCache()
+
+
+def _resolve_memory_store(state: ReviewState):
+    memory_config = dict(state.get("memory_config", {}) or {})
+    enabled = memory_config.get("enabled")
+    if enabled is None:
+        enabled = _truthy(os.getenv("REVIEW_MEMORY_ENABLED", ""))
+    storage_path = str(memory_config.get("path") or os.getenv("REVIEW_MEMORY_PATH", "")).strip()
+    seeds_dir = str(memory_config.get("seeds_dir") or os.getenv("REVIEW_MEMORY_SEEDS_DIR", "")).strip()
+    if not storage_path and enabled:
+        run_dir = str(state.get("run_dir", "") or "").strip()
+        if run_dir:
+            storage_path = str(Path(run_dir).resolve().parent / "_memory" / "review_memory.json")
+    if not storage_path:
+        return NoopMemoryStore()
+    return FileBackedMemoryStore(storage_path, seeds_dir=seeds_dir or None)
+
+
+def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
+    requirement_doc = str(state.get("requirement_doc", "") or "")
+    cache = _resolve_normalizer_cache(state)
+    cache_result = normalize_requirement_with_cache(requirement_doc, cache=cache)
+    memory_store = _resolve_memory_store(state)
+    memory_hit_objects = memory_store.retrieve_similar(cache_result.requirement, limit=3)
+    memory_hits = [item.to_dict() for item in memory_hit_objects]
+    similar_reviews_referenced = [str(item.get("reference_id", "") or "").strip() for item in memory_hits if str(item.get("reference_id", "") or "").strip()]
+    return {
+        "normalized_requirement_obj": cache_result.requirement,
+        "normalized_requirement": asdict(cache_result.requirement),
+        "memory_hits": memory_hits,
+        "memory_hits_objects": memory_hit_objects,
+        "similar_reviews_referenced": similar_reviews_referenced,
+        "normalizer_cache_hit": cache_result.cache_hit,
+        "rag_enabled": not isinstance(memory_store, NoopMemoryStore),
+    }
+
+
+def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> ReviewState:
+    memory_hits = [dict(item) for item in context.get("memory_hits", []) or [] if isinstance(item, dict)]
+    similar_reviews_referenced = [str(item) for item in context.get("similar_reviews_referenced", []) or [] if str(item).strip()]
+    update["normalized_requirement"] = dict(context.get("normalized_requirement", {}) or {})
+    update["memory_hits"] = memory_hits
+    update["similar_reviews_referenced"] = similar_reviews_referenced
+    update["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
+    update["rag_enabled"] = bool(context.get("rag_enabled", False))
+
+    meta = dict(update.get("parallel_review_meta", {}) or {})
+    meta["memory_hits"] = memory_hits
+    meta["memory_hit_count"] = len(memory_hits)
+    meta["similar_reviews_referenced"] = similar_reviews_referenced
+    meta["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
+    meta["rag_enabled"] = bool(context.get("rag_enabled", False))
+    update["parallel_review_meta"] = meta
+
+    parallel_review = dict(update.get("parallel_review", {}) or {})
+    if parallel_review:
+        parallel_review["memory_hits"] = memory_hits
+        parallel_review["similar_reviews_referenced"] = similar_reviews_referenced
+        parallel_review["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
+        parallel_review["rag_enabled"] = bool(context.get("rag_enabled", False))
+        update["parallel_review"] = parallel_review
+    return update
+
 async def _reviewer_node(state: ReviewState) -> ReviewState:
     requested_mode = _resolve_requested_mode(state)
-    decision = decide_review_mode(str(state.get("requirement_doc", "") or ""), requested_mode=requested_mode)
+    review_context = _prepare_review_context(state)
+    decision = decide_review_mode(
+        str(state.get("requirement_doc", "") or ""),
+        requested_mode=requested_mode,
+        normalized_requirement=review_context["normalized_requirement_obj"],
+    )
 
     if decision.selected_mode == "skip":
-        return _build_skip_reviewer_response(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+        update = _build_skip_reviewer_response(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+        return _apply_review_context(update, review_context)
     if decision.selected_mode == "full":
-        return await _run_parallel_reviewer(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
-    return await _run_single_reviewer(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+        update = await _run_parallel_reviewer(
+            state,
+            decision=decision,
+            override=str(state.get("review_mode_override", "") or "").strip().lower(),
+            review_context=review_context,
+        )
+        return _apply_review_context(update, review_context)
+    update = await _run_single_reviewer(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+    return _apply_review_context(update, review_context)
 
 
 async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: str) -> ReviewState:
@@ -377,7 +468,19 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
     }
 
 
-async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override: str) -> ReviewState:
+
+async def _invoke_parallel_review_manager(requirement_doc: str, run_dir: str, decision: Any, review_context: dict[str, Any]):
+    kwargs = {
+        "gating_decision": decision,
+        "normalized_requirement": review_context["normalized_requirement_obj"],
+        "memory_hits": list(review_context.get("memory_hits_objects", []) or []),
+        "normalizer_cache_hit": bool(review_context.get("normalizer_cache_hit", False)),
+        "rag_enabled": bool(review_context.get("rag_enabled", False)),
+    }
+    supported = set(inspect.signature(run_parallel_review_async).parameters)
+    filtered_kwargs = {key: value for key, value in kwargs.items() if key in supported}
+    return await run_parallel_review_async(requirement_doc, run_dir, **filtered_kwargs)
+async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override: str, review_context: dict[str, Any]) -> ReviewState:
     requirement_doc = str(state.get("requirement_doc", "") or "")
     run_dir = str(state.get("run_dir", "") or "")
     trace: dict[str, Any] = dict(state.get("trace", {}))
@@ -386,7 +489,7 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     span.set_attr("reviewer_strategy", "asyncio.gather")
     started = perf_counter()
 
-    parallel_result = await run_parallel_review_async(requirement_doc, run_dir, gating_decision=decision)
+    parallel_result = await _invoke_parallel_review_manager(requirement_doc, run_dir, decision, review_context)
     aggregated = parallel_result.aggregated
     aggregated_meta = dict(aggregated.get("meta", {}) or {})
     selected_mode = str(aggregated.get("review_mode", aggregated_meta.get("review_mode", "full")) or "full")
@@ -614,6 +717,14 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
     workflow.add_edge("reporter", END)
 
     return workflow.compile()
+
+
+
+
+
+
+
+
 
 
 

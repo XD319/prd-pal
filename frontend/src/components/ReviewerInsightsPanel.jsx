@@ -3,8 +3,8 @@ import '../styles/components.css';
 import { deriveReviewerInsights } from '../utils/derivers';
 import { formatStatusLabel, pluralize } from '../utils/formatters';
 
-function ReviewerInsightsPanel({ result }) {
-  const insights = result ? deriveReviewerInsights(result) : [];
+function ReviewerInsightsPanel({ result, resultPayload }) {
+  const insights = result ? deriveReviewerInsights(result, resultPayload) : [];
 
   return (
     <section className="panel">
@@ -31,6 +31,7 @@ function ReviewerInsightsPanel({ result }) {
               <div className="detail-row">
                 {item.ambiguityType && <span>Ambiguity: {item.ambiguityType}</span>}
                 {item.clarificationQuestion && <span>Clarify: {item.clarificationQuestion}</span>}
+                <span>Memory hits: {item.memoryHitCount}</span>
               </div>
               {item.notes.length > 0 && (
                 <div className="insight-notes">
@@ -38,6 +39,18 @@ function ReviewerInsightsPanel({ result }) {
                     <div key={`${item.id}-note-${index}`} className="subtle-note">{note}</div>
                   ))}
                 </div>
+              )}
+              {item.memoryHits.length > 0 && (
+                <details className="metric-card" style={{ marginTop: '0.75rem' }}>
+                  <summary>Referenced memory</summary>
+                  <div className="list-stack" style={{ marginTop: '1rem' }}>
+                    {item.memoryHits.map((hit) => (
+                      <div key={`${item.id}-${hit.id}`} className="subtle-note">
+                        <strong>{hit.title}</strong>: {hit.summary}
+                      </div>
+                    ))}
+                  </div>
+                </details>
               )}
             </article>
           ))}

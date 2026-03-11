@@ -9,7 +9,7 @@ from requirement_review_v1.service.review_service import ReviewResultSummary
 
 
 @pytest.mark.asyncio
-async def test_review_requirement_for_mcp_async_exposes_mode_gating_and_reviewers(tmp_path, monkeypatch):
+async def test_review_requirement_for_mcp_async_exposes_mode_gating_reviewers_and_memory(tmp_path, monkeypatch):
     run_id = '20260309T010203Z'
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
@@ -17,6 +17,15 @@ async def test_review_requirement_for_mcp_async_exposes_mode_gating_and_reviewer
     run_trace_path = run_dir / 'run_trace.json'
     review_result_json_path = run_dir / 'review_result.json'
 
+    memory_hits = [
+        {
+            'reference_id': 'seed:export-contract-hardening',
+            'source_kind': 'seed',
+            'title': 'Admin export contract hardening',
+            'summary': 'Capture downstream schema ownership and rollback expectations.',
+            'score': 0.74,
+        }
+    ]
     report_payload = {
         'mode': 'full',
         'review_mode': 'full',
@@ -32,6 +41,9 @@ async def test_review_requirement_for_mcp_async_exposes_mode_gating_and_reviewer
             'in_scope': ['admin export'],
             'out_of_scope': ['security reviewer skipped: no security-sensitive scope was detected'],
         },
+        'memory_hits': memory_hits,
+        'similar_reviews_referenced': ['seed:export-contract-hardening'],
+        'normalizer_cache_hit': True,
         'parallel_review_meta': {
             'selected_mode': 'full',
             'review_mode': 'full',
@@ -39,6 +51,11 @@ async def test_review_requirement_for_mcp_async_exposes_mode_gating_and_reviewer
             'reviewers_used': ['product', 'engineering', 'qa'],
             'reviewers_skipped': [{'reviewer': 'security', 'reason': 'no security-sensitive scope was detected'}],
             'artifact_paths': {'review_result_json': str(review_result_json_path)},
+            'memory_hits': memory_hits,
+            'memory_hit_count': 1,
+            'similar_reviews_referenced': ['seed:export-contract-hardening'],
+            'normalizer_cache_hit': True,
+            'rag_enabled': True,
         },
         'parallel_review': {
             'findings': [
@@ -68,6 +85,10 @@ async def test_review_requirement_for_mcp_async_exposes_mode_gating_and_reviewer
             ],
             'conflicts': [],
             'artifacts': {'review_result_json': str(review_result_json_path)},
+            'memory_hits': memory_hits,
+            'similar_reviews_referenced': ['seed:export-contract-hardening'],
+            'normalizer_cache_hit': True,
+            'rag_enabled': True,
         },
     }
     report_json_path.write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -113,5 +134,10 @@ async def test_review_requirement_for_mcp_async_exposes_mode_gating_and_reviewer
     assert result['gating']['selected_mode'] == 'full'
     assert result['reviewers_used'] == ['product', 'engineering', 'qa']
     assert result['reviewers_skipped'][0]['reviewer'] == 'security'
+    assert result['memory_hits'][0]['reference_id'] == 'seed:export-contract-hardening'
+    assert result['similar_reviews_referenced'] == ['seed:export-contract-hardening']
+    assert result['normalizer_cache_hit'] is True
+    assert result['meta']['memory_hit_count'] == 1
+    assert result['meta']['rag_enabled'] is True
     assert result['meta']['summary']['overall_risk'] == 'medium'
     assert result['report_path'] == str(review_result_json_path)
