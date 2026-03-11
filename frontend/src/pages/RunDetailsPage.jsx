@@ -1,6 +1,7 @@
-import { Link, useParams } from 'react-router-dom';
+锘縤mport { Link, useParams } from 'react-router-dom';
 import ArtifactDownloadPanel from '../components/ArtifactDownloadPanel';
 import ClarificationPanel from '../components/ClarificationPanel';
+import ConflictResolutionPanel from '../components/ConflictResolutionPanel';
 import FindingsPanel from '../components/FindingsPanel';
 import PanelErrorBoundary from '../components/PanelErrorBoundary';
 import ReviewerInsightsPanel from '../components/ReviewerInsightsPanel';
@@ -49,7 +50,7 @@ function RunDetailsPage() {
 
       <main className="workspace-grid workspace-grid-detail">
         <section className="stack">
-          <PanelErrorBoundary panelTitle="运行进度" resetKey={`${runId}:${status}`}>
+          <PanelErrorBoundary panelTitle="杩愯杩涘害" resetKey={`${runId}:${status}`}>
             <RunProgressCard
               runId={runId}
               status={status}
@@ -58,7 +59,7 @@ function RunDetailsPage() {
             />
           </PanelErrorBoundary>
 
-          <PanelErrorBoundary panelTitle="产物下载" resetKey={`${runId}:${runState.downloadFormat}`}>
+          <PanelErrorBoundary panelTitle="浜х墿涓嬭浇" resetKey={`${runId}:${runState.downloadFormat}`}>
             <ArtifactDownloadPanel
               runId={runId}
               status={status}
@@ -71,7 +72,7 @@ function RunDetailsPage() {
         </section>
 
         <section className="stack stack-wide">
-          <PanelErrorBoundary panelTitle="结果总览" resetKey={`${runId}:${runState.resultState}`}>
+          <PanelErrorBoundary panelTitle="缁撴灉鎬昏" resetKey={`${runId}:${runState.resultState}`}>
             <ReviewSummaryPanel
               runId={runId}
               status={status}
@@ -93,11 +94,15 @@ function RunDetailsPage() {
             </PanelErrorBoundary>
           </div>
 
+          <PanelErrorBoundary panelTitle="Conflict Resolution" resetKey={`${runId}:${runState.resultState}:conflicts`}>
+            <ConflictResolutionPanel result={result} />
+          </PanelErrorBoundary>
+
           <div className="panel-grid panel-grid-two-up">
-            <PanelErrorBoundary panelTitle="发现列表" resetKey={`${runId}:${runState.resultState}:findings`}>
+            <PanelErrorBoundary panelTitle="鍙戠幇鍒楄〃" resetKey={`${runId}:${runState.resultState}:findings`}>
               <FindingsPanel result={result} status={status} resultState={runState.resultState} />
             </PanelErrorBoundary>
-            <PanelErrorBoundary panelTitle="风险列表" resetKey={`${runId}:${runState.resultState}:risks`}>
+            <PanelErrorBoundary panelTitle="椋庨櫓鍒楄〃" resetKey={`${runId}:${runState.resultState}:risks`}>
               <RisksPanel result={result} />
             </PanelErrorBoundary>
           </div>
@@ -116,3 +121,4 @@ function RunDetailsPage() {
 }
 
 export default RunDetailsPage;
+
