@@ -197,9 +197,17 @@ def get_review_result_payload(
         report_payload=result if isinstance(result, dict) else None,
     )
     status = _derive_status(result) if isinstance(result, dict) else "completed"
+    gating = _derive_gating(result) if isinstance(result, dict) else {}
+    reviewers_used = _derive_reviewers_used(result) if isinstance(result, dict) else []
+    reviewers_skipped = _derive_reviewers_skipped(result) if isinstance(result, dict) else []
+    mode = _derive_review_mode(result) if isinstance(result, dict) else "quick"
     return {
         "run_id": normalized_run_id,
         "status": status,
+        "mode": mode,
+        "gating": gating,
+        "reviewers_used": reviewers_used,
+        "reviewers_skipped": reviewers_skipped,
         "result": result,
         "artifact_paths": artifact_paths,
     }
@@ -850,6 +858,9 @@ async def review_prd_text_async(
     review_mode_override = overrides.get("review_mode_override")
     if isinstance(review_mode_override, str) and review_mode_override.strip():
         run_review_kwargs["review_mode_override"] = review_mode_override.strip()
+    mode = overrides.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        run_review_kwargs["mode"] = mode.strip()
     run_output = await run_review(**run_review_kwargs)
     if source_context:
         run_output.update(source_context)
@@ -873,7 +884,7 @@ async def review_prd_text_async(
                 "revision_round": int(review_result.get("revision_round", 0) or 0),
                 "requirement_source": "source" if source else "prd_path" if prd_path else "inline_text",
                 "has_source_metadata": bool(source_context),
-                "review_mode": str(review_result.get("review_mode", "single_review") or "single_review"),
+                "review_mode": str(review_result.get("review_mode", review_result.get("mode", "quick")) or "quick"),
                 "parallel_review_enabled": bool(review_result.get("parallel_review_meta") or review_result.get("parallel-review_meta")),
             },
             retry=retry_metadata_for_status(status=review_status, non_blocking=False),
@@ -1359,19 +1370,68 @@ def _derive_review_conflicts(report_payload: dict[str, Any]) -> list[dict[str, A
     return _copy_dict_list(parallel_review.get("conflicts"))
 
 
+def _derive_gating(report_payload: dict[str, Any]) -> dict[str, Any]:
+    gating = report_payload.get("gating")
+    if isinstance(gating, dict):
+        return dict(gating)
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    gating = parallel_review.get("gating")
+    if isinstance(gating, dict):
+        return dict(gating)
+
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
+    gating = parallel_review_meta.get("gating")
+    return dict(gating) if isinstance(gating, dict) else {}
+
+
+def _derive_reviewers_used(report_payload: dict[str, Any]) -> list[str]:
+    direct = report_payload.get("reviewers_used")
+    if isinstance(direct, list):
+        return [str(item) for item in direct if str(item).strip()]
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    direct = parallel_review.get("reviewers_used")
+    if isinstance(direct, list):
+        return [str(item) for item in direct if str(item).strip()]
+
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
+    direct = parallel_review_meta.get("reviewers_used")
+    if isinstance(direct, list):
+        return [str(item) for item in direct if str(item).strip()]
+    return []
+
+
+def _derive_reviewers_skipped(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    direct = report_payload.get("reviewers_skipped")
+    if isinstance(direct, list):
+        return [dict(item) for item in direct if isinstance(item, dict)]
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    direct = parallel_review.get("reviewers_skipped")
+    if isinstance(direct, list):
+        return [dict(item) for item in direct if isinstance(item, dict)]
+
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
+    direct = parallel_review_meta.get("reviewers_skipped")
+    if isinstance(direct, list):
+        return [dict(item) for item in direct if isinstance(item, dict)]
+    return []
+
+
 def _derive_review_mode(report_payload: dict[str, Any]) -> str:
-    review_mode = str(report_payload.get("review_mode", "") or "").strip()
+    review_mode = str(report_payload.get("mode", report_payload.get("review_mode", "")) or "").strip()
     if review_mode:
         return review_mode
 
     parallel_review = _extract_parallel_review_payload(report_payload)
-    review_mode = str(parallel_review.get("review_mode", "") or "").strip()
+    review_mode = str(parallel_review.get("mode", parallel_review.get("review_mode", "")) or "").strip()
     if review_mode:
         return review_mode
 
     parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
     review_mode = str(parallel_review_meta.get("selected_mode", "") or parallel_review_meta.get("review_mode", "") or "").strip()
-    return review_mode or "single_review"
+    return review_mode or "quick"
 
 
 def _derive_review_report_path(summary: ReviewResultSummary, report_payload: dict[str, Any]) -> str:
@@ -1396,6 +1456,10 @@ def _derive_review_report_path(summary: ReviewResultSummary, report_payload: dic
 
 def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str, Any]:
     report_payload = _load_json_object(Path(summary.report_json_path))
+    meta = _extract_parallel_review_meta_from_report(report_payload)
+    gating = _derive_gating(report_payload)
+    reviewers_used = _derive_reviewers_used(report_payload)
+    reviewers_skipped = _derive_reviewers_skipped(report_payload)
     return {
         "review_id": summary.run_id,
         "run_id": summary.run_id,
@@ -1405,6 +1469,18 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
         "conflicts": _derive_review_conflicts(report_payload),
         "report_path": _derive_review_report_path(summary, report_payload),
         "review_mode": _derive_review_mode(report_payload),
+        "mode": _derive_review_mode(report_payload),
+        "gating": gating,
+        "reviewers_used": reviewers_used,
+        "reviewers_skipped": reviewers_skipped,
+        "meta": {
+            "review_mode": _derive_review_mode(report_payload),
+            "gating": gating,
+            "reviewers_used": reviewers_used,
+            "reviewers_skipped": reviewers_skipped,
+            **({"summary": report_payload.get("summary")} if isinstance(report_payload.get("summary"), dict) else {}),
+            **meta,
+        },
     }
 
 
@@ -1431,6 +1507,9 @@ async def _review_summary_for_mcp_async(
     review_mode_override = resolved_options.get("review_mode_override")
     if isinstance(review_mode_override, str) and review_mode_override.strip():
         config_overrides["review_mode_override"] = review_mode_override.strip()
+    mode = resolved_options.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        config_overrides["mode"] = mode.strip()
 
     summary = await review_prd_text_async(
         prd_text=prd_text,

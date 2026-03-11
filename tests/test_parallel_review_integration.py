@@ -23,7 +23,7 @@ def _trace_span(status: str = "ok") -> dict[str, object]:
 
 
 @pytest.mark.asyncio
-async def test_run_review_defaults_to_single_mode_for_simple_prd(monkeypatch, tmp_path):
+async def test_run_review_can_skip_when_prd_is_too_sparse(monkeypatch, tmp_path):
     async def fake_parser(state):
         trace = dict(state.get("trace", {}))
         trace["parser"] = _trace_span()
@@ -78,15 +78,15 @@ async def test_run_review_defaults_to_single_mode_for_simple_prd(monkeypatch, tm
     run_output = await run_review("Simple login PRD", outputs_root=tmp_path)
 
     result = run_output["result"]
-    assert result["review_mode"] == "single_review"
-    assert result["parallel-review_meta"]["selected_mode"] == "single_review"
-    assert result["parallel-review_meta"]["review_mode"] == "single_review"
-    assert result["parallel-review_meta"]["reviewers_completed"] == ["single_reviewer"]
-    assert result["parallel-review_meta"]["reviewers_failed"] == []
+    assert result["review_mode"] == "skip"
+    assert result["parallel-review_meta"]["selected_mode"] == "skip"
+    assert result["parallel-review_meta"]["review_mode"] == "skip"
+    assert result["parallel-review_meta"]["reviewers_completed"] == []
+    assert result["parallel-review_meta"]["manual_review_required"] is True
     report_payload = json.loads((tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8"))
     trace_payload = json.loads((tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8"))
-    assert report_payload["parallel-review_meta"]["selected_mode"] == "single_review"
-    assert trace_payload["parallel-review_meta"]["selected_mode"] == "single_review"
+    assert report_payload["parallel-review_meta"]["selected_mode"] == "skip"
+    assert trace_payload["parallel-review_meta"]["selected_mode"] == "skip"
 
 
 @pytest.mark.asyncio
@@ -120,7 +120,7 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
             "claude_code_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
         }
 
-    async def fake_parallel_review(_prd_text, output_dir, reviewer_config=None):
+    async def fake_parallel_review(_prd_text, output_dir, reviewer_config=None, gating_decision=None):
         return ParallelReviewResult(
             normalized_requirement={"summary": "Parallel export review"},
             reviewer_inputs={"product": "p", "engineering": "e", "qa": "q", "security": "s"},
@@ -138,10 +138,18 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
                 "reviewer_summaries": [{"reviewer": "product", "summary": "product"}],
                 "reviewer_count": 4,
                 "meta": {
-                    "review_mode": "parallel_review",
+                    "review_mode": "full",
+                    "gating": {"selected_mode": "full", "reasons": ["mode=full explicitly requested"], "skipped": False},
+                    "reviewers_used": ["product", "engineering", "qa", "security"],
+                    "reviewers_skipped": [],
                     "reviewers_completed": ["product", "engineering", "qa", "security"],
                     "reviewers_failed": [],
                 },
+                "review_mode": "full",
+                "reviewers_used": ["product", "engineering", "qa", "security"],
+                "reviewers_skipped": [],
+                "gating": {"selected_mode": "full", "reasons": ["mode=full explicitly requested"], "skipped": False},
+                "summary": {"overall_risk": "high", "in_scope": ["Export data"], "out_of_scope": []},
                 "artifacts": {
                     "review_result_json": str(output_dir) + "\\review_result.json",
                     "review_report_md": str(output_dir) + "\\review_report.md",
@@ -176,9 +184,9 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
     )
 
     result = run_output["result"]
-    assert result["review_mode"] == "parallel_review"
-    assert result["parallel-review_meta"]["selected_mode"] == "parallel_review"
-    assert result["parallel-review_meta"]["review_mode"] == "parallel_review"
+    assert result["review_mode"] == "full"
+    assert result["parallel-review_meta"]["selected_mode"] == "full"
+    assert result["parallel-review_meta"]["review_mode"] == "full"
     assert result["parallel-review_meta"]["reviewer_count"] == 4
     assert result["parallel-review_meta"]["reviewers_completed"] == ["product", "engineering", "qa", "security"]
     assert result["parallel-review_meta"]["reviewers_failed"] == []
@@ -187,5 +195,5 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
     assert len(result["review_risk_items"]) == 1
     report_payload = json.loads((tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8"))
     trace_payload = json.loads((tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8"))
-    assert report_payload["parallel-review_meta"]["selected_mode"] == "parallel_review"
-    assert trace_payload["parallel-review_meta"]["selected_mode"] == "parallel_review"
+    assert report_payload["parallel-review_meta"]["selected_mode"] == "full"
+    assert trace_payload["parallel-review_meta"]["selected_mode"] == "full"

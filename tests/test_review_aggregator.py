@@ -4,10 +4,10 @@ from requirement_review_v1.review.aggregator import aggregate_review_results
 from requirement_review_v1.review.reviewer_agents.base import ReviewFinding, ReviewerResult, RiskItem
 
 
-_MANUAL_REVIEW_TEXT = "\u9700\u4eba\u5de5\u8865\u5ba1"
+_MANUAL_REVIEW_TEXT = "Manual review required"
 _MANUAL_REVIEW_MESSAGE = (
-    "\u9700\u4eba\u5de5\u8865\u5ba1\uff1a\u5b58\u5728\u9ad8\u98ce\u9669\u95ee\u9898\uff0c"
-    "\u4e14\u4ee5\u4e0b reviewer \u7f3a\u5931\u6216\u5931\u8d25\uff1aqa (failed: timeout)"
+    "Manual review required: high-risk findings exist while these reviewers were partial or unavailable: "
+    "qa (failed: timeout)"
 )
 
 
@@ -78,14 +78,13 @@ def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path)
     assert aggregated.partial_review is True
     assert aggregated.reviewers_completed == ("product", "security")
     assert aggregated.reviewers_failed == ({"reviewer": "qa", "status": "failed", "reason": "timeout"},)
-    assert aggregated.meta == {
-        "review_mode": "parallel_review",
-        "partial_review": True,
-        "reviewers_completed": ["product", "security"],
-        "reviewers_failed": [{"reviewer": "qa", "status": "failed", "reason": "timeout"}],
-        "manual_review_required": True,
-        "manual_review_message": _MANUAL_REVIEW_MESSAGE,
-    }
+    assert aggregated.meta["review_mode"] == "full"
+    assert aggregated.meta["partial_review"] is True
+    assert aggregated.meta["reviewers_completed"] == ["product", "security"]
+    assert aggregated.meta["reviewers_failed"] == [{"reviewer": "qa", "status": "failed", "reason": "timeout"}]
+    assert aggregated.meta["manual_review_required"] is True
+    assert aggregated.meta["manual_review_message"] == _MANUAL_REVIEW_MESSAGE
+    assert aggregated.meta["gating"]["selected_mode"] == "full"
 
     assert len(aggregated.findings) == 1
     finding = aggregated.findings[0]

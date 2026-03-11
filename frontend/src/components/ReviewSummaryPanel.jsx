@@ -1,9 +1,11 @@
 ﻿import '../styles/panels.css';
 import '../styles/components.css';
-import { deriveModeLabel, deriveSummary } from '../utils/derivers';
+import { deriveGatingInfo, deriveModeLabel, deriveReviewers, deriveSummary } from '../utils/derivers';
 
 function ReviewSummaryPanel({ runId, status, result, statusPayload, resultPayload, resultState, failureMessage, resultError }) {
   const summary = deriveSummary(result, runId, statusPayload, resultPayload);
+  const reviewers = deriveReviewers(result, resultPayload);
+  const gating = deriveGatingInfo(result, resultPayload);
 
   return (
     <section className="panel review-summary-panel">
@@ -51,6 +53,37 @@ function ReviewSummaryPanel({ runId, status, result, statusPayload, resultPayloa
             {summary.chips.map((chip) => (
               <span key={chip} className="inline-meta inline-meta-soft">{chip}</span>
             ))}
+          </div>
+
+          {(gating.skipped || result?.partial_review || result?.manual_review_required || result?.parallel_review?.manual_review_required) && (
+            <div className="feedback-banner feedback-error" aria-live="polite">
+              {result?.manual_review_message || result?.parallel_review?.manual_review_message || 'This run needs partial or manual review follow-up.'}
+            </div>
+          )}
+
+          <div className="panel-grid panel-grid-two-up">
+            <div className="metric-card">
+              <span>Selected reviewers</span>
+              <strong>{reviewers.used.length > 0 ? reviewers.used.join(', ') : 'None'}</strong>
+            </div>
+            <div className="metric-card">
+              <span>Skipped reviewers</span>
+              <strong>
+                {reviewers.skipped.length > 0
+                  ? reviewers.skipped.map((item) => item.reviewer ?? item).join(', ')
+                  : 'None'}
+              </strong>
+            </div>
+          </div>
+
+          <div className="result-lead">
+            <h3>Gating info</h3>
+            <p>Mode decision: {deriveModeLabel({ mode: gating.selectedMode })}</p>
+            <div className="chip-row">
+              {gating.reasons.map((reason) => (
+                <span key={reason} className="inline-meta inline-meta-soft">{reason}</span>
+              ))}
+            </div>
           </div>
         </div>
       ) : (

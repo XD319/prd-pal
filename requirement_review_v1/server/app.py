@@ -132,6 +132,7 @@ class ReviewCreateRequest(BaseModel):
     prd_text: str | None = None
     prd_path: str | None = None
     source: str | None = None
+    mode: Literal["auto", "quick", "full"] | None = None
 
     @model_validator(mode="after")
     def _validate_input(self) -> "ReviewCreateRequest":
@@ -356,10 +357,10 @@ async def _handle_unexpected_error(_: Request, exc: Exception) -> JSONResponse:
 
 def _resolve_review_inputs(payload: ReviewCreateRequest) -> dict[str, str | None]:
     if payload.source and payload.source.strip():
-        return {"prd_text": None, "prd_path": None, "source": payload.source.strip()}
+        return {"prd_text": None, "prd_path": None, "source": payload.source.strip(), "mode": payload.mode}
 
     if payload.prd_text:
-        return {"prd_text": payload.prd_text, "prd_path": None, "source": None}
+        return {"prd_text": payload.prd_text, "prd_path": None, "source": None, "mode": payload.mode}
 
     if not payload.prd_path:
         raise HTTPException(status_code=400, detail="Missing prd_path")
@@ -369,7 +370,7 @@ def _resolve_review_inputs(payload: ReviewCreateRequest) -> dict[str, str | None
         prd_file = Path.cwd() / prd_file
     if not prd_file.exists() or not prd_file.is_file():
         raise HTTPException(status_code=404, detail=f"PRD file not found: {prd_file}")
-    return {"prd_text": None, "prd_path": str(prd_file), "source": None}
+    return {"prd_text": None, "prd_path": str(prd_file), "source": None, "mode": payload.mode}
 
 
 def _apply_progress_event(job: JobRecord, event: str, node_name: str, state: dict[str, Any]) -> None:
@@ -426,6 +427,7 @@ async def _run_job(
     prd_text: str | None = None,
     prd_path: str | None = None,
     source: str | None = None,
+    mode: str | None = None,
 ) -> None:
     job.status = "running"
     job.error = ""
@@ -440,6 +442,7 @@ async def _run_job(
             config_overrides={
                 "outputs_root": OUTPUTS_ROOT,
                 "progress_hook": lambda event, node, state: _apply_progress_event(job, event, node, state),
+                **({"mode": mode} if isinstance(mode, str) and mode.strip() else {}),
             },
         )
         job.status = summary.status
