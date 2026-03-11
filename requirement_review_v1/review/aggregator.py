@@ -105,6 +105,7 @@ class AggregatedReviewArtifacts:
 
 @dataclass(frozen=True, slots=True)
 class AggregatedReview:
+    review_mode: str
     findings: tuple[dict[str, Any], ...]
     risk_items: tuple[dict[str, Any], ...]
     open_questions: tuple[dict[str, Any], ...]
@@ -113,7 +114,11 @@ class AggregatedReview:
     partial_review: bool
     reviewers_completed: tuple[str, ...]
     reviewers_failed: tuple[dict[str, str], ...]
+    reviewers_used: tuple[str, ...]
+    reviewers_skipped: tuple[dict[str, str], ...]
     reviewer_count: int
+    gating: dict[str, Any]
+    summary: dict[str, Any]
     meta: dict[str, Any]
     artifacts: AggregatedReviewArtifacts
 
@@ -121,18 +126,36 @@ class AggregatedReview:
         payload = asdict(self)
         payload["artifacts"] = asdict(self.artifacts)
         payload["meta"] = dict(self.meta)
+        payload["gating"] = dict(self.gating)
+        payload["summary"] = dict(self.summary)
         return payload
 
 
 def aggregate_review_results(
     reviewer_results: Iterable[ReviewerResult],
     output_dir: str | Path,
+    *,
+    selected_mode: str = "full",
+    gating_decision: dict[str, Any] | None = None,
+    gating_reasons: Iterable[str] = (),
+    reviewers_used: Iterable[str] = (),
+    reviewers_skipped: Iterable[dict[str, str]] = (),
+    normalized_requirement: dict[str, Any] | None = None,
 ) -> AggregatedReview:
     results = tuple(reviewer_results)
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    meta = _build_review_meta(results)
+    reviewers_used_list = _merge_unique([], [str(item) for item in reviewers_used])
+    reviewers_skipped_list = [dict(item) for item in reviewers_skipped if isinstance(item, dict)]
+    meta = _build_review_meta(
+        results,
+        selected_mode=selected_mode,
+        gating_decision=gating_decision,
+        gating_reasons=gating_reasons,
+        reviewers_used=reviewers_used_list,
+        reviewers_skipped=reviewers_skipped_list,
+    )
     findings = _aggregate_findings(results)
     risk_items = _aggregate_risks(results)
     open_questions = _aggregate_open_questions(results)
@@ -151,19 +174,36 @@ def aggregate_review_results(
         findings=findings,
         risk_items=risk_items,
     )
+    summary = _build_summary_payload(
+        normalized_requirement=normalized_requirement or {},
+        findings=findings,
+        risk_items=risk_items,
+        reviewers_used=reviewers_used_list,
+        reviewers_skipped=reviewers_skipped_list,
+    )
+    gating_payload = _build_gating_payload(gating_decision, selected_mode, gating_reasons)
     meta = {
         **meta,
         "manual_review_required": bool(manual_review_message),
         "manual_review_message": manual_review_message,
+        "review_mode": selected_mode,
+        "gating": gating_payload,
+        "reviewers_used": reviewers_used_list,
+        "reviewers_skipped": reviewers_skipped_list,
     }
 
     report_payload = {
+        "review_mode": selected_mode,
         "reviewer_count": len(results),
         "partial_review": partial_review,
         "reviewers_completed": reviewers_completed,
         "reviewers_failed": reviewers_failed,
+        "reviewers_used": reviewers_used_list,
+        "reviewers_skipped": reviewers_skipped_list,
         "manual_review_required": bool(manual_review_message),
         "manual_review_message": manual_review_message,
+        "gating": gating_payload,
+        "summary": summary,
         "meta": meta,
         "findings": findings,
         "risk_items": risk_items,
@@ -196,6 +236,7 @@ def aggregate_review_results(
         review_summary_md=str(legacy_summary_path),
     )
     return AggregatedReview(
+        review_mode=selected_mode,
         findings=tuple(findings),
         risk_items=tuple(risk_items),
         open_questions=tuple(open_questions),
@@ -204,13 +245,25 @@ def aggregate_review_results(
         partial_review=partial_review,
         reviewers_completed=tuple(reviewers_completed),
         reviewers_failed=tuple(reviewers_failed),
+        reviewers_used=tuple(reviewers_used_list),
+        reviewers_skipped=tuple(reviewers_skipped_list),
         reviewer_count=len(results),
+        gating=gating_payload,
+        summary=summary,
         meta=meta,
         artifacts=artifacts,
     )
 
 
-def _build_review_meta(results: tuple[ReviewerResult, ...]) -> dict[str, Any]:
+def _build_review_meta(
+    results: tuple[ReviewerResult, ...],
+    *,
+    selected_mode: str,
+    gating_decision: dict[str, Any] | None,
+    gating_reasons: Iterable[str],
+    reviewers_used: list[str],
+    reviewers_skipped: list[dict[str, str]],
+) -> dict[str, Any]:
     reviewers_completed: list[str] = []
     reviewers_failed: list[dict[str, str]] = []
 
@@ -231,10 +284,77 @@ def _build_review_meta(results: tuple[ReviewerResult, ...]) -> dict[str, Any]:
         )
 
     return {
-        "review_mode": "parallel_review",
+        "review_mode": selected_mode,
         "partial_review": bool(reviewers_failed),
         "reviewers_completed": reviewers_completed,
         "reviewers_failed": reviewers_failed,
+        "reviewers_used": reviewers_used,
+        "reviewers_skipped": reviewers_skipped,
+        "gating_reasons": list(gating_reasons),
+        "gating": _build_gating_payload(gating_decision, selected_mode, gating_reasons),
+    }
+
+
+def _build_gating_payload(
+    gating_decision: dict[str, Any] | None,
+    selected_mode: str,
+    gating_reasons: Iterable[str],
+) -> dict[str, Any]:
+    payload = dict(gating_decision) if isinstance(gating_decision, dict) else {}
+    reasons = _merge_unique([], [str(item) for item in gating_reasons])
+    existing_reasons = [str(item) for item in payload.get("reasons", [])] if isinstance(payload.get("reasons"), list) else []
+    payload["reasons"] = _merge_unique(existing_reasons, reasons)
+    payload["selected_mode"] = str(payload.get("selected_mode") or selected_mode)
+    payload["skipped"] = bool(payload.get("skipped", False))
+    return payload
+
+
+def _build_summary_payload(
+    *,
+    normalized_requirement: dict[str, Any],
+    findings: list[dict[str, Any]],
+    risk_items: list[dict[str, Any]],
+    reviewers_used: list[str],
+    reviewers_skipped: list[dict[str, str]],
+) -> dict[str, Any]:
+    severity_pool = [str(item.get("severity", "")).strip().lower() for item in [*findings, *risk_items] if isinstance(item, dict)]
+    if any(level == "high" for level in severity_pool):
+        overall_risk = "high"
+    elif any(level == "medium" for level in severity_pool):
+        overall_risk = "medium"
+    else:
+        overall_risk = "low"
+
+    in_scope = _merge_unique(
+        [],
+        [
+            *[str(item) for item in normalized_requirement.get("in_scope", []) or []],
+            *[str(item) for item in normalized_requirement.get("modules", []) or []],
+            *[str(item) for item in normalized_requirement.get("scenarios", []) or []],
+        ],
+    )
+    if not in_scope:
+        summary_text = str(normalized_requirement.get("summary", "")).strip()
+        if summary_text:
+            in_scope = [summary_text]
+
+    out_of_scope = _merge_unique(
+        [],
+        [
+            *[str(item) for item in normalized_requirement.get("out_of_scope", []) or []],
+            *[
+                f"{str(item.get('reviewer', '')).strip()} reviewer skipped: {str(item.get('reason', '')).strip()}"
+                for item in reviewers_skipped
+                if isinstance(item, dict) and str(item.get("reviewer", "")).strip()
+            ],
+        ],
+    )
+
+    return {
+        "overall_risk": overall_risk,
+        "in_scope": in_scope,
+        "out_of_scope": out_of_scope,
+        "reviewers_used": reviewers_used,
     }
 
 
@@ -631,7 +751,7 @@ def _build_manual_review_message(
         return ""
 
     failed_reviewers = _format_failed_reviewers(reviewers_failed)
-    return f"需人工补审：存在高风险问题，且以下 reviewer 缺失或失败：{failed_reviewers}"
+    return f"Manual review required: high-risk findings exist while these reviewers were partial or unavailable: {failed_reviewers}"
 
 
 def _build_finding_id(category: str, title: str, detail: str) -> str:

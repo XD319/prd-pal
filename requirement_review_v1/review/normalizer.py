@@ -1,4 +1,4 @@
-﻿"""Extract a compact, reviewer-friendly requirement view from raw PRD text."""
+"""Extract a compact, reviewer-friendly requirement view from raw PRD text."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ _BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)\s*$")
 _MODULE_INLINE_RE = re.compile(r"`([A-Za-z0-9_./:-]{2,80})`")
 _SCENARIO_TITLES = ("scenario", "scenarios", "use case", "use cases", "flow", "flows", "journey", "journeys")
 _ACCEPTANCE_TITLES = ("acceptance criteria", "acceptance criterion", "done when")
+_IN_SCOPE_TITLES = ("in scope", "scope")
+_OUT_OF_SCOPE_TITLES = ("out of scope", "non goals", "non-goals", "not in scope")
 _MAX_SUMMARY_CHARS = 280
 
 _ROLE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -51,6 +53,10 @@ class NormalizedRequirement:
     risk_hints: tuple[str, ...] = ()
     modules: tuple[str, ...] = ()
     roles: tuple[str, ...] = ()
+    headings: tuple[str, ...] = ()
+    in_scope: tuple[str, ...] = ()
+    out_of_scope: tuple[str, ...] = ()
+    completeness_signals: tuple[str, ...] = ()
 
     def for_reviewer(self, reviewer: str) -> str:
         return build_reviewer_input(self, reviewer)
@@ -86,6 +92,20 @@ def normalize_requirement(prd_text: str) -> NormalizedRequirement:
     risk_hints = _extract_matching_lines(lines, _RISK_HINT_PATTERNS)
     modules = _extract_modules(text)
     roles = _extract_roles(text)
+    headings = _extract_headings(lines)
+    in_scope = _extract_scope_items(lines, include_titles=_IN_SCOPE_TITLES, exclude_titles=_OUT_OF_SCOPE_TITLES)
+    out_of_scope = _extract_scope_items(lines, include_titles=_OUT_OF_SCOPE_TITLES)
+    completeness_signals = _derive_completeness_signals(
+        summary=summary,
+        scenarios=scenarios,
+        acceptance_criteria=acceptance_criteria,
+        modules=modules,
+        roles=roles,
+        dependency_hints=dependency_hints,
+        headings=headings,
+        in_scope=in_scope,
+        out_of_scope=out_of_scope,
+    )
 
     return NormalizedRequirement(
         source_text=text,
@@ -96,6 +116,10 @@ def normalize_requirement(prd_text: str) -> NormalizedRequirement:
         risk_hints=tuple(risk_hints),
         modules=tuple(modules),
         roles=tuple(roles),
+        headings=tuple(headings),
+        in_scope=tuple(in_scope),
+        out_of_scope=tuple(out_of_scope),
+        completeness_signals=tuple(completeness_signals),
     )
 
 
@@ -128,6 +152,12 @@ def build_reviewer_input(requirement: NormalizedRequirement, reviewer: str) -> s
 
     if normalized_reviewer in {"general", "delivery"} and requirement.roles:
         sections.append(("Roles", requirement.roles))
+
+    if requirement.in_scope:
+        sections.append(("In Scope", requirement.in_scope))
+
+    if requirement.out_of_scope:
+        sections.append(("Out of Scope", requirement.out_of_scope))
 
     rendered_sections: list[str] = []
     for title, body in sections:
@@ -193,6 +223,74 @@ def _extract_roles(text: str) -> list[str]:
         if pattern.search(text):
             roles.append(role_name)
     return roles
+
+
+def _extract_headings(lines: list[str]) -> list[str]:
+    headings: list[str] = []
+    for line in lines:
+        heading_match = _HEADING_RE.match(line)
+        if not heading_match:
+            continue
+        headings.append(_normalize_inline_text(heading_match.group(1)))
+    return _dedupe(headings)
+
+
+def _extract_scope_items(
+    lines: list[str],
+    *,
+    include_titles: tuple[str, ...],
+    exclude_titles: tuple[str, ...] = (),
+) -> list[str]:
+    items: list[str] = []
+    active = False
+    for line in lines:
+        heading_match = _HEADING_RE.match(line)
+        if heading_match:
+            heading = _normalize_inline_text(heading_match.group(1)).lower()
+            active = any(title in heading for title in include_titles) and not any(title in heading for title in exclude_titles)
+            continue
+        if not active:
+            continue
+        bullet_match = _BULLET_RE.match(line)
+        candidate = bullet_match.group(1) if bullet_match else line
+        cleaned = _normalize_inline_text(candidate)
+        if cleaned:
+            items.append(cleaned)
+    return _dedupe(items)
+
+
+def _derive_completeness_signals(
+    *,
+    summary: str,
+    scenarios: list[str],
+    acceptance_criteria: list[str],
+    modules: list[str],
+    roles: list[str],
+    dependency_hints: list[str],
+    headings: list[str],
+    in_scope: list[str],
+    out_of_scope: list[str],
+) -> list[str]:
+    signals: list[str] = []
+    if summary and summary != "Requirement summary unavailable.":
+        signals.append("summary_present")
+    if headings:
+        signals.append("structured_headings_present")
+    if scenarios:
+        signals.append("scenarios_present")
+    if acceptance_criteria:
+        signals.append("acceptance_present")
+    if modules:
+        signals.append("modules_present")
+    if roles:
+        signals.append("roles_present")
+    if dependency_hints:
+        signals.append("dependencies_present")
+    if in_scope:
+        signals.append("in_scope_present")
+    if out_of_scope:
+        signals.append("out_of_scope_present")
+    return signals
 
 
 def _paragraphs_from_lines(lines: list[str]) -> list[str]:

@@ -20,14 +20,42 @@ export function severityRank(value) {
 
 export function deriveModeLabel(result) {
   const meta = result?.['parallel-review_meta'] ?? result?.parallel_review_meta ?? {};
-  const mode = String(result?.review_mode ?? meta.selected_mode ?? meta.review_mode ?? 'single_review');
-  if (mode === 'parallel_review') {
-    return 'Parallel review';
+  const mode = String(result?.mode ?? result?.review_mode ?? meta.selected_mode ?? meta.review_mode ?? 'quick');
+  if (mode === 'full' || mode === 'parallel_review') {
+    return 'Full review';
   }
-  if (mode === 'single_review') {
-    return 'Single review';
+  if (mode === 'quick' || mode === 'single_review') {
+    return 'Quick triage';
+  }
+  if (mode === 'skip') {
+    return 'Manual review';
   }
   return mode.replace(/_/g, ' ');
+}
+
+
+export function deriveReviewers(result, resultPayload) {
+  const directUsed = asArray(resultPayload?.reviewers_used);
+  const directSkipped = asArray(resultPayload?.reviewers_skipped);
+  const meta = result?.['parallel-review_meta'] ?? result?.parallel_review_meta ?? {};
+  const nested = result?.parallel_review ?? {};
+
+  return {
+    used: directUsed.length > 0 ? directUsed : asArray(result?.reviewers_used ?? nested.reviewers_used ?? meta.reviewers_used),
+    skipped: directSkipped.length > 0 ? directSkipped : asArray(result?.reviewers_skipped ?? nested.reviewers_skipped ?? meta.reviewers_skipped),
+  };
+}
+
+export function deriveGatingInfo(result, resultPayload) {
+  const meta = result?.['parallel-review_meta'] ?? result?.parallel_review_meta ?? {};
+  const nested = result?.parallel_review ?? {};
+  const gating = resultPayload?.gating ?? result?.gating ?? nested.gating ?? meta.gating ?? {};
+  const reasons = asArray(gating.reasons).filter(Boolean);
+  return {
+    selectedMode: String(gating.selected_mode ?? resultPayload?.mode ?? result?.mode ?? result?.review_mode ?? meta.selected_mode ?? 'quick'),
+    skipped: Boolean(gating.skipped),
+    reasons,
+  };
 }
 
 export function deriveFindings(result) {
@@ -122,8 +150,11 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
   const findings = deriveFindings(result);
   const risks = deriveRisks(result);
   const questions = deriveOpenQuestions(result);
+  const reviewers = deriveReviewers(result, resultPayload);
+  const gating = deriveGatingInfo(result, resultPayload);
   const metrics = result.metrics ?? {};
   const meta = result['parallel-review_meta'] ?? result.parallel_review_meta ?? {};
+  const summaryMeta = result.summary ?? result.parallel_review?.summary ?? resultPayload?.result?.summary ?? {};
   const artifactCount = Object.keys(resultPayload?.artifact_paths ?? {}).length;
   const narrative =
     meta.manual_review_message ||
@@ -138,6 +169,7 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
       { label: 'High-risk ratio', value: formatPercent(Number(result.high_risk_ratio ?? 0)) },
       { label: 'Findings', value: `${findings.length}` },
       { label: 'Artifacts', value: `${artifactCount}` },
+      { label: 'Overall risk', value: String(summaryMeta.overall_risk ?? 'unknown') },
     ],
     chips: [
       deriveModeLabel(result),
@@ -145,6 +177,8 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
       pluralize(findings.length, 'finding'),
       pluralize(risks.length, 'risk'),
       pluralize(questions.length, 'open question'),
+      reviewers.used.length > 0 ? pluralize(reviewers.used.length, 'reviewer') : '',
+      gating.skipped ? 'Manual follow-up needed' : '',
       statusPayload?.status ? `Status: ${statusPayload.status}` : '',
     ].filter(Boolean),
   };

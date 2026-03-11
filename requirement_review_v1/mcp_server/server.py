@@ -83,6 +83,7 @@ async def review_requirement(
     source: str | None = None,
     prd_text: str | None = None,
     prd_path: str | None = None,
+    mode: Literal["auto", "quick", "full"] | None = None,
     metadata: dict[str, Any] | None = None,
     options: dict[str, Any] | None = None,
     ctx: Context | None = None,
@@ -90,6 +91,8 @@ async def review_requirement(
     """Review-only facade over the review service with a compact approval-loop-style payload."""
     try:
         resolved_options = _merge_tool_options(metadata=metadata, options=options)
+        if mode is not None:
+            resolved_options = {**resolved_options, "mode": mode}
         audited_options = _with_audit_context(options=resolved_options, ctx=ctx, tool_name="review_requirement")
         client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
         return await review_requirement_for_mcp_async(
@@ -577,6 +580,10 @@ def _review_requirement_error_response(code: str, message: str) -> dict[str, Any
         "conflicts": [],
         "report_path": "",
         "review_mode": "",
+        "mode": "",
+        "gating": {},
+        "reviewers_used": [],
+        "reviewers_skipped": [],
         "error": {
             "code": code,
             "message": message,

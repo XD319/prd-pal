@@ -85,6 +85,7 @@ async def run_review(
     outputs_root: str | Path = "outputs",
     progress_hook: ProgressHook | None = None,
     review_mode_override: str | None = None,
+    mode: str | None = None,
 ) -> dict[str, Any]:
     resolved_run_id = run_id or make_run_id()
     run_dir = os.path.join(str(outputs_root), resolved_run_id)
@@ -96,6 +97,8 @@ async def run_review(
     }
     if isinstance(review_mode_override, str) and review_mode_override.strip():
         initial_state["review_mode_override"] = review_mode_override.strip()
+    if isinstance(mode, str) and mode.strip():
+        initial_state["mode"] = mode.strip()
 
     result = await graph.ainvoke(initial_state)
     if not isinstance(result, dict):

@@ -11,10 +11,11 @@ async def test_create_review_keeps_legacy_prd_path_compatible(tmp_path, monkeypa
     prd_file.write_text("# Legacy PRD", encoding="utf-8")
     captured: dict[str, str | None] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None):
+    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
+        captured["mode"] = mode
         job.status = "completed"
 
     monkeypatch.setattr(app_module, "_run_job", fake_run_job)
@@ -30,6 +31,7 @@ async def test_create_review_keeps_legacy_prd_path_compatible(tmp_path, monkeypa
     assert captured["prd_text"] is None
     assert captured["prd_path"] == str(prd_file.resolve())
     assert captured["source"] is None
+    assert captured["mode"] is None
     app_module._jobs.clear()
 
 
@@ -39,10 +41,11 @@ async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, mon
     source_file.write_text("# Source PRD", encoding="utf-8")
     captured: dict[str, str | None] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None):
+    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
+        captured["mode"] = mode
         job.status = "completed"
 
     monkeypatch.setattr(app_module, "_run_job", fake_run_job)
@@ -63,6 +66,7 @@ async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, mon
     assert captured["prd_text"] is None
     assert captured["prd_path"] is None
     assert captured["source"] == str(source_file)
+    assert captured["mode"] is None
     app_module._jobs.clear()
 
 
