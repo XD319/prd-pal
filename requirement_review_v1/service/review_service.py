@@ -1361,6 +1361,38 @@ def _derive_review_risk_items(report_payload: dict[str, Any]) -> list[dict[str, 
     return derived
 
 
+def _derive_review_tool_calls(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    tool_calls = _copy_dict_list(report_payload.get("tool_calls"))
+    if tool_calls:
+        return tool_calls
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    tool_calls = _copy_dict_list(parallel_review.get("tool_calls"))
+    if tool_calls:
+        return tool_calls
+
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
+    return _copy_dict_list(parallel_review_meta.get("tool_calls"))
+
+
+def _derive_reviewer_insights(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    reviewer_summaries = _copy_dict_list(report_payload.get("reviewer_summaries"))
+    if reviewer_summaries:
+        return reviewer_summaries
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    reviewer_summaries = _copy_dict_list(parallel_review.get("reviewer_summaries"))
+    if reviewer_summaries:
+        return reviewer_summaries
+
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
+    reviewer_summaries = _copy_dict_list(parallel_review_meta.get("reviewer_insights"))
+    if reviewer_summaries:
+        return reviewer_summaries
+
+    return []
+
+
 def _derive_review_conflicts(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
     conflicts = _copy_dict_list(report_payload.get("conflicts"))
     if conflicts:
@@ -1467,6 +1499,8 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
         "open_questions": _derive_review_open_questions(report_payload),
         "risk_items": _derive_review_risk_items(report_payload),
         "conflicts": _derive_review_conflicts(report_payload),
+        "tool_calls": _derive_review_tool_calls(report_payload),
+        "reviewer_insights": _derive_reviewer_insights(report_payload),
         "report_path": _derive_review_report_path(summary, report_payload),
         "review_mode": _derive_review_mode(report_payload),
         "mode": _derive_review_mode(report_payload),
@@ -1478,6 +1512,8 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
             "gating": gating,
             "reviewers_used": reviewers_used,
             "reviewers_skipped": reviewers_skipped,
+            "tool_calls": _derive_review_tool_calls(report_payload),
+            "reviewer_insights": _derive_reviewer_insights(report_payload),
             **({"summary": report_payload.get("summary")} if isinstance(report_payload.get("summary"), dict) else {}),
             **meta,
         },

@@ -1,7 +1,7 @@
 import json
 
 from requirement_review_v1.review.aggregator import aggregate_review_results
-from requirement_review_v1.review.reviewer_agents.base import ReviewFinding, ReviewerResult, RiskItem
+from requirement_review_v1.review.reviewer_agents.base import EvidenceItem, ReviewFinding, ReviewerResult, RiskItem, ToolCall
 
 
 _MANUAL_REVIEW_TEXT = "Manual review required"
@@ -22,10 +22,28 @@ def _reviewer_results() -> list[ReviewerResult]:
                     severity="medium",
                     category="security",
                     reviewer="product",
+                    evidence=(
+                        EvidenceItem(
+                            source="risk_catalog",
+                            title="Release gate precedent",
+                            snippet="Similar launches required a formal release gate.",
+                            ref="RC-101",
+                        ),
+                    ),
                 ),
             ),
             open_questions=("Who approves the final release gate?",),
             summary="Product summary.",
+            reviewer_status_detail="Product reviewer completed with one escalation note.",
+            tool_calls=(
+                ToolCall(
+                    tool_name="web.search",
+                    status="degraded",
+                    reviewer="product",
+                    output_summary="No evidence returned.",
+                    degraded_reason="adapter not configured",
+                ),
+            ),
         ),
         ReviewerResult(
             reviewer="security",
@@ -36,6 +54,14 @@ def _reviewer_results() -> list[ReviewerResult]:
                     severity="high",
                     category="security",
                     reviewer="security",
+                    evidence=(
+                        EvidenceItem(
+                            source="risk_catalog",
+                            title="Approval blocker control",
+                            snippet="Sensitive data flows must not ship without approval.",
+                            ref="RC-202",
+                        ),
+                    ),
                 ),
             ),
             open_questions=("Who approves the final release gate?",),
@@ -50,12 +76,26 @@ def _reviewer_results() -> list[ReviewerResult]:
                 ),
             ),
             summary="Security summary.",
+            reviewer_status_detail="Security reviewer completed with approval-gate evidence.",
+            ambiguity_type="missing_security_controls",
+            clarification_question="Which controls and approvals are mandatory before release?",
+            tool_calls=(
+                ToolCall(
+                    tool_name="risk_catalog.search",
+                    status="completed",
+                    reviewer="security",
+                    output_summary="hits=2",
+                    evidence_count=2,
+                ),
+            ),
+            notes=("Local catalog evidence was attached to the shared finding.",),
         ),
         ReviewerResult(
             reviewer="qa",
             summary="QA reviewer timed out.",
             status="failed",
             error_message="timeout",
+            reviewer_status_detail="QA reviewer timed out before evidence collection completed.",
         ),
     ]
 
@@ -85,6 +125,7 @@ def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path)
     assert aggregated.meta["manual_review_required"] is True
     assert aggregated.meta["manual_review_message"] == _MANUAL_REVIEW_MESSAGE
     assert aggregated.meta["gating"]["selected_mode"] == "full"
+    assert len(aggregated.meta["tool_calls"]) == 2
 
     assert len(aggregated.findings) == 1
     finding = aggregated.findings[0]
@@ -95,11 +136,15 @@ def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path)
     assert finding["description"] == "Sensitive flows need a release gate."
     assert finding["suggested_action"] == "Add explicit security, compliance, and release-control expectations to the PRD."
     assert finding["assignee"] == "security"
+    assert [item["ref"] for item in finding["evidence"]] == ["RC-101", "RC-202"]
 
     assert len(aggregated.open_questions) == 1
     assert aggregated.open_questions[0]["reviewers"] == ["product", "security"]
     assert len(aggregated.risk_items) == 1
     assert len(aggregated.conflicts) == 1
+    assert len(aggregated.tool_calls) == 2
+    assert aggregated.reviewer_summaries[1]["status_detail"] == "Security reviewer completed with approval-gate evidence."
+    assert aggregated.reviewer_summaries[1]["clarification_question"] == "Which controls and approvals are mandatory before release?"
     conflict = aggregated.conflicts[0]
     assert conflict["conflict_id"] == aggregated_again.conflicts[0]["conflict_id"]
     assert conflict["type"] == "severity_mismatch"
@@ -124,16 +169,22 @@ def test_aggregate_review_results_writes_new_schema_and_legacy_aliases(tmp_path)
     assert review_result_payload["reviewers_failed"] == [{"reviewer": "qa", "status": "failed", "reason": "timeout"}]
     assert review_result_payload["manual_review_required"] is True
     assert _MANUAL_REVIEW_TEXT in review_result_payload["manual_review_message"]
+    assert review_result_payload["meta"]["tool_calls"][0]["tool_name"] == "web.search"
     assert review_result_payload["findings"][0]["finding_id"] == finding["finding_id"]
+    assert review_result_payload["findings"][0]["evidence"][0]["ref"] == "RC-101"
+    assert review_result_payload["reviewer_summaries"][1]["status_detail"] == "Security reviewer completed with approval-gate evidence."
     assert review_result_payload["conflicts"][0]["conflict_id"] == conflict["conflict_id"]
     assert len(risk_payload["risk_items"]) == 1
     assert len(question_payload["open_questions"]) == 1
     assert "# Review Report" in review_report_text
     assert finding["finding_id"] in review_report_text
+    assert "## Tool Trace" in review_report_text
+    assert "RC-101" in review_report_text
     assert conflict["description"] in review_report_text
     assert _MANUAL_REVIEW_TEXT in review_report_text
     assert "# Review Summary" in summary_text
     assert "Security review gate required" in summary_text
+    assert "Tool Calls: 2" in summary_text
     assert conflict["description"] in summary_text
     assert _MANUAL_REVIEW_TEXT in summary_text
 

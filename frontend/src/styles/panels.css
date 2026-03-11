@@ -349,3 +349,40 @@
     max-width: none;
   }
 }
+
+
+.evidence-panel {
+  margin-top: var(--space-3);
+  border-top: 1px solid rgba(19, 35, 51, 0.08);
+  padding-top: var(--space-3);
+}
+
+.evidence-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.evidence-list,
+.insight-notes {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.evidence-item,
+.trace-card,
+.insight-card {
+  border-radius: var(--radius-sm);
+  background: rgba(19, 35, 51, 0.04);
+  padding: 0.9rem;
+}
+
+.evidence-item p,
+.trace-subtitle {
+  margin: 0.35rem 0 0;
+}
+
+.trace-subtitle {
+  color: var(--text-soft);
+}

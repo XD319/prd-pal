@@ -39,6 +39,23 @@ function FindingsPanel({ result, status, resultState }) {
                 {finding.assignee && <span>Owner: {finding.assignee}</span>}
               </div>
               {finding.action && <div className="subtle-note">Suggested action: {finding.action}</div>}
+              {finding.evidence.length > 0 && (
+                <details className="evidence-panel">
+                  <summary>Evidence ({finding.evidence.length})</summary>
+                  <div className="evidence-list">
+                    {finding.evidence.map((item, index) => (
+                      <div key={`${finding.id}-evidence-${index}`} className="evidence-item">
+                        <strong>{item.title || 'Evidence'}</strong>
+                        <p>{item.snippet || 'No evidence snippet was recorded.'}</p>
+                        <div className="detail-row">
+                          {item.source && <span>{item.source}</span>}
+                          {item.ref && <span>{item.ref}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </article>
           ))}
         </div>
