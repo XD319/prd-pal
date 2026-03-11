@@ -170,6 +170,16 @@ def _route_next(state: ReviewState) -> str:
     return "reporter"
 
 
+
+def _not_needed_clarification() -> dict[str, Any]:
+    return {
+        "triggered": False,
+        "status": "not_needed",
+        "questions": [],
+        "answers_applied": [],
+        "findings_updated": [],
+    }
+
 def _build_async_node(
     node_name: str,
     node_fn: Callable[[ReviewState], Awaitable[ReviewState]],
@@ -283,6 +293,8 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
     update["review_risk_items"] = review_risk_items
     update["review_tool_calls"] = []
     update["reviewer_insights"] = list(meta.get("reviewer_insights", []))
+    update["clarification"] = _not_needed_clarification()
+    update["review_clarification"] = _not_needed_clarification()
     update["parallel_review_meta"] = meta
     return update
 
@@ -358,6 +370,8 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
         "review_risk_items": [],
         "review_tool_calls": [],
         "reviewer_insights": list(meta.get("reviewer_insights", [])),
+        "clarification": _not_needed_clarification(),
+        "review_clarification": _not_needed_clarification(),
         "partial_review": True,
         "parallel_review_meta": meta,
     }
@@ -389,6 +403,7 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     review_risk_items = list(aggregated.get("risk_items", []) or [])
     review_tool_calls = list(aggregated.get("tool_calls", []) or [])
     reviewer_insights = list(aggregated.get("reviewer_summaries", []) or [])
+    clarification = dict(aggregated.get("clarification", {}) or _not_needed_clarification())
     findings = list(aggregated.get("findings", []) or [])
 
     output_chars = len(json.dumps(aggregated, ensure_ascii=False))
@@ -438,6 +453,8 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "review_risk_items": review_risk_items,
         "review_tool_calls": review_tool_calls,
         "reviewer_insights": reviewer_insights,
+        "clarification": clarification,
+        "review_clarification": clarification,
         "partial_review": partial_review,
         "parallel_review_meta": meta,
     }

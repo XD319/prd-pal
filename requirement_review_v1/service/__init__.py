@@ -10,6 +10,8 @@ from .execution_service import (
 )
 from .review_service import (
     ReviewResultSummary,
+    answer_review_clarification,
+    answer_review_clarification_for_mcp,
     get_review_workspace_for_mcp,
     review_prd_for_mcp,
     review_prd_for_mcp_async,
@@ -21,6 +23,8 @@ from .review_service import (
 __all__ = [
     "append_execution_event",
     "ReviewResultSummary",
+    "answer_review_clarification",
+    "answer_review_clarification_for_mcp",
     "get_execution_status_for_mcp",
     "get_review_workspace_for_mcp",
     "get_traceability_for_mcp",
