@@ -1,0 +1,32 @@
+{
+  "records": [
+    {
+      "reference_id": "seed:export-contract-hardening",
+      "source_kind": "seed",
+      "title": "Admin export contract hardening",
+      "summary": "A previous export PRD needed explicit downstream schema ownership, versioning, and rollback notes before release.",
+      "requirement_summary": "Admin CSV export touches analytics and partner ingestion flows.",
+      "finding_excerpt": "Dependency contract missing: downstream consumers could break on schema drift without versioning.",
+      "review_mode": "full",
+      "tags": ["export", "schema", "integration", "rollback"],
+      "metadata": {
+        "seed_type": "high_quality_case",
+        "lesson": "When exports cross team boundaries, capture contract owner, compatibility policy, and rollback path."
+      }
+    },
+    {
+      "reference_id": "seed:privacy-sensitive-workflow",
+      "source_kind": "seed",
+      "title": "Privacy-sensitive workflow release gate",
+      "summary": "A sensitive workflow required QA pass/fail criteria plus security sign-off because customer data moved across services.",
+      "requirement_summary": "Profile sync feature replicated customer fields into an external service.",
+      "finding_excerpt": "Security approval blocker: data handling and audit expectations were underspecified.",
+      "review_mode": "full",
+      "tags": ["privacy", "security", "audit", "external-service"],
+      "metadata": {
+        "seed_type": "high_quality_case",
+        "lesson": "If customer data crosses boundaries, require auditability, ownership, and explicit release approval criteria."
+      }
+    }
+  ]
+}

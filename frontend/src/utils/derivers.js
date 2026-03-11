@@ -1,4 +1,4 @@
-﻿import { excerpt, formatPercent, formatStatusLabel, normalizeText, pluralize } from './formatters';
+import { excerpt, formatPercent, formatStatusLabel, normalizeText, pluralize } from './formatters';
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -172,10 +172,27 @@ export function deriveOpenQuestions(result) {
   }));
 }
 
-export function deriveReviewerInsights(result) {
+
+export function deriveMemoryHits(result, resultPayload) {
+  const meta = deriveParallelMeta(result);
+  const nested = result?.parallel_review ?? {};
+  const source = asArray(resultPayload?.memory_hits ?? result?.memory_hits ?? nested.memory_hits ?? meta.memory_hits);
+  return source.map((item, index) => ({
+    id: item.reference_id ?? `memory-${index}`,
+    sourceKind: item.source_kind ?? 'history',
+    title: item.title ?? `Reference ${index + 1}`,
+    summary: item.summary ?? '',
+    findingExcerpt: item.finding_excerpt ?? '',
+    score: Number(item.score ?? 0),
+    reviewMode: item.review_mode ?? 'quick',
+    tags: asArray(item.tags),
+  }));
+}
+export function deriveReviewerInsights(result, resultPayload) {
   const meta = deriveParallelMeta(result);
   const nested = result?.parallel_review ?? {};
   const source = asArray(result?.reviewer_insights ?? nested.reviewer_summaries ?? meta.reviewer_insights ?? meta.reviewer_notes);
+  const memoryHits = deriveMemoryHits(result, resultPayload);
 
   return source.map((item, index) => ({
     id: `${item.reviewer ?? 'reviewer'}-${index}`,
@@ -186,6 +203,8 @@ export function deriveReviewerInsights(result) {
     ambiguityType: item.ambiguity_type ?? '',
     clarificationQuestion: item.clarification_question ?? '',
     notes: asArray(item.notes),
+    memoryHitCount: memoryHits.length,
+    memoryHits,
   }));
 }
 
@@ -250,6 +269,7 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
   const reviewers = deriveReviewers(result, resultPayload);
   const gating = deriveGatingInfo(result, resultPayload);
   const toolCalls = deriveToolCalls(result);
+  const memoryHits = deriveMemoryHits(result, resultPayload);
   const metrics = result.metrics ?? {};
   const meta = deriveParallelMeta(result);
   const summaryMeta = result.summary ?? result.parallel_review?.summary ?? resultPayload?.result?.summary ?? {};
@@ -269,6 +289,7 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
       { label: 'Artifacts', value: `${artifactCount}` },
       { label: 'Overall risk', value: String(summaryMeta.overall_risk ?? 'unknown') },
       { label: 'Tool calls', value: `${toolCalls.length}` },
+      { label: 'Memory hits', value: `${memoryHits.length}` },
     ],
     chips: [
       deriveModeLabel(result),
@@ -277,12 +298,13 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
       pluralize(risks.length, 'risk'),
       pluralize(questions.length, 'open question'),
       reviewers.used.length > 0 ? pluralize(reviewers.used.length, 'reviewer') : '',
+      memoryHits.length > 0 ? pluralize(memoryHits.length, 'memory hit') : '',
+      resultPayload?.normalizer_cache_hit || meta.normalizer_cache_hit ? 'Normalizer cache hit' : '',
       gating.skipped ? 'Manual follow-up needed' : '',
       statusPayload?.status ? `Status: ${statusPayload.status}` : '',
     ].filter(Boolean),
   };
 }
-
 export function deriveFailureMessage(statusPayload, fallbackMessage = '') {
   return (
     normalizeText(statusPayload?.progress?.error) ||
@@ -329,5 +351,8 @@ export function describeHistoryRun(run) {
     hasResult,
   };
 }
+
+
+
 
 

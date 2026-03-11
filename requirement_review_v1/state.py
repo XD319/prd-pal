@@ -173,6 +173,13 @@ class ReviewState(TypedDict, total=False):
     partial_review: bool
     parallel_review: dict[str, Any]
     parallel_review_meta: dict[str, Any]
+    normalized_requirement: dict[str, Any]
+    memory_hits: list[dict[str, Any]]
+    similar_reviews_referenced: list[str]
+    normalizer_cache_hit: bool
+    rag_enabled: bool
+    memory_config: dict[str, Any]
+    normalizer_cache_config: dict[str, Any]
 
 
 def create_initial_state(requirement_doc: str) -> ReviewState:
@@ -211,4 +218,12 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         partial_review=False,
         parallel_review={},
         parallel_review_meta={},
+        normalized_requirement={},
+        memory_hits=[],
+        similar_reviews_referenced=[],
+        normalizer_cache_hit=False,
+        rag_enabled=False,
+        memory_config={},
+        normalizer_cache_config={},
     )
+

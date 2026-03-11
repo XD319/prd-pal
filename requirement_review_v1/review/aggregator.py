@@ -124,6 +124,10 @@ class AggregatedReview:
     clarification: dict[str, Any]
     summary: dict[str, Any]
     meta: dict[str, Any]
+    memory_hits: tuple[dict[str, Any], ...]
+    similar_reviews_referenced: tuple[str, ...]
+    normalizer_cache_hit: bool
+    rag_enabled: bool
     artifacts: AggregatedReviewArtifacts
 
     def to_dict(self) -> dict[str, Any]:
@@ -145,6 +149,10 @@ class AggregatedReview:
             "clarification": dict(self.clarification),
             "summary": dict(self.summary),
             "meta": dict(self.meta),
+            "memory_hits": list(self.memory_hits),
+            "similar_reviews_referenced": list(self.similar_reviews_referenced),
+            "normalizer_cache_hit": self.normalizer_cache_hit,
+            "rag_enabled": self.rag_enabled,
             "artifacts": asdict(self.artifacts),
         }
 
@@ -159,6 +167,10 @@ def aggregate_review_results(
     reviewers_used: Iterable[str] = (),
     reviewers_skipped: Iterable[dict[str, str]] = (),
     normalized_requirement: dict[str, Any] | None = None,
+    memory_hits: list[dict[str, Any]] | None = None,
+    similar_reviews_referenced: list[str] | None = None,
+    normalizer_cache_hit: bool = False,
+    rag_enabled: bool = False,
 ) -> AggregatedReview:
     results = tuple(reviewer_results)
     target_dir = Path(output_dir)
@@ -166,6 +178,8 @@ def aggregate_review_results(
 
     reviewers_used_list = _merge_unique([], [str(item) for item in reviewers_used])
     reviewers_skipped_list = [dict(item) for item in reviewers_skipped if isinstance(item, dict)]
+    selected_memory_hits = [dict(item) for item in memory_hits or [] if isinstance(item, dict)]
+    referenced_review_ids = [str(item) for item in similar_reviews_referenced or [] if str(item).strip()]
     meta = _build_review_meta(
         results,
         selected_mode=selected_mode,
@@ -221,6 +235,11 @@ def aggregate_review_results(
         "reviewers_skipped": reviewers_skipped_list,
         "tool_calls": tool_calls,
         "reviewer_notes": [item for item in reviewer_summaries if item.get("status_detail") or item.get("notes")],
+        "memory_hits": selected_memory_hits,
+        "memory_hit_count": len(selected_memory_hits),
+        "similar_reviews_referenced": referenced_review_ids,
+        "normalizer_cache_hit": bool(normalizer_cache_hit),
+        "rag_enabled": bool(rag_enabled),
     }
 
     report_payload = {
@@ -243,6 +262,10 @@ def aggregate_review_results(
         "conflicts": conflicts,
         "reviewer_summaries": list(reviewer_summaries),
         "tool_calls": tool_calls,
+        "memory_hits": selected_memory_hits,
+        "similar_reviews_referenced": referenced_review_ids,
+        "normalizer_cache_hit": bool(normalizer_cache_hit),
+        "rag_enabled": bool(rag_enabled),
     }
 
     review_result_path = target_dir / "review_result.json"
@@ -286,6 +309,10 @@ def aggregate_review_results(
         clarification=clarification,
         summary=summary,
         meta=meta,
+        memory_hits=tuple(selected_memory_hits),
+        similar_reviews_referenced=tuple(referenced_review_ids),
+        normalizer_cache_hit=bool(normalizer_cache_hit),
+        rag_enabled=bool(rag_enabled),
         artifacts=artifacts,
     )
 
@@ -1210,4 +1237,5 @@ def _sort_severities(values: set[str]) -> list[str]:
 def _max_severity(left: str, right: str) -> str:
     order = {"low": 0, "medium": 1, "high": 2}
     return left if order.get(left, 1) >= order.get(right, 1) else right
+
 

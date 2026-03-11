@@ -1,11 +1,13 @@
-﻿import '../styles/panels.css';
+import '../styles/panels.css';
 import '../styles/components.css';
-import { deriveGatingInfo, deriveModeLabel, deriveReviewers, deriveSummary } from '../utils/derivers';
+import { deriveGatingInfo, deriveMemoryHits, deriveModeLabel, deriveReviewers, deriveSummary } from '../utils/derivers';
 
 function ReviewSummaryPanel({ runId, status, result, statusPayload, resultPayload, resultState, failureMessage, resultError }) {
   const summary = deriveSummary(result, runId, statusPayload, resultPayload);
   const reviewers = deriveReviewers(result, resultPayload);
   const gating = deriveGatingInfo(result, resultPayload);
+  const memoryHits = result ? deriveMemoryHits(result, resultPayload) : [];
+  const similarReferences = resultPayload?.similar_reviews_referenced ?? result?.similar_reviews_referenced ?? [];
 
   return (
     <section className="panel review-summary-panel">
@@ -75,6 +77,39 @@ function ReviewSummaryPanel({ runId, status, result, statusPayload, resultPayloa
               </strong>
             </div>
           </div>
+
+          <div className="panel-grid panel-grid-two-up">
+            <div className="metric-card">
+              <span>Memory references</span>
+              <strong>{memoryHits.length}</strong>
+            </div>
+            <div className="metric-card">
+              <span>Referenced IDs</span>
+              <strong>{similarReferences.length > 0 ? similarReferences.join(', ') : 'None'}</strong>
+            </div>
+          </div>
+
+          {memoryHits.length > 0 && (
+            <details className="metric-card">
+              <summary>View memory references</summary>
+              <div className="list-stack" style={{ marginTop: '1rem' }}>
+                {memoryHits.map((hit) => (
+                  <article key={hit.id} className="finding-card insight-card">
+                    <div className="finding-header">
+                      <h4>{hit.title}</h4>
+                      <span className="inline-meta inline-meta-soft">{hit.sourceKind}</span>
+                    </div>
+                    {hit.summary && <p>{hit.summary}</p>}
+                    {hit.findingExcerpt && <div className="subtle-note">{hit.findingExcerpt}</div>}
+                    <div className="detail-row">
+                      <span>Score: {hit.score.toFixed(2)}</span>
+                      <span>Mode: {hit.reviewMode}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </details>
+          )}
 
           <div className="result-lead">
             <h3>Gating info</h3>
