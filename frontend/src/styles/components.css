@@ -449,3 +449,18 @@
     display: none;
   }
 }
+
+
+.status-timeout,
+.status-error,
+.status-failed {
+  background: var(--status-failed-bg);
+  color: var(--status-failed-text);
+}
+
+.status-skipped,
+.status-degraded,
+.status-unknown {
+  background: var(--status-queued-bg);
+  color: var(--status-queued-text);
+}

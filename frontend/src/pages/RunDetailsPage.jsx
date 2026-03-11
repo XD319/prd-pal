@@ -1,11 +1,13 @@
-ï»¿import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import ArtifactDownloadPanel from '../components/ArtifactDownloadPanel';
 import FindingsPanel from '../components/FindingsPanel';
 import OpenQuestionsPanel from '../components/OpenQuestionsPanel';
 import PanelErrorBoundary from '../components/PanelErrorBoundary';
+import ReviewerInsightsPanel from '../components/ReviewerInsightsPanel';
 import ReviewSummaryPanel from '../components/ReviewSummaryPanel';
 import RisksPanel from '../components/RisksPanel';
 import RunProgressCard from '../components/RunProgressCard';
+import ToolTracePanel from '../components/ToolTracePanel';
 import useReviewRun from '../hooks/useReviewRun';
 
 function RunDetailsPage() {
@@ -47,7 +49,7 @@ function RunDetailsPage() {
 
       <main className="workspace-grid workspace-grid-detail">
         <section className="stack">
-          <PanelErrorBoundary panelTitle="è¿è¡Œè¿›åº¦" resetKey={`${runId}:${status}`}>
+          <PanelErrorBoundary panelTitle="ÔËÐÐ½ø¶È" resetKey={`${runId}:${status}`}>
             <RunProgressCard
               runId={runId}
               status={status}
@@ -56,7 +58,7 @@ function RunDetailsPage() {
             />
           </PanelErrorBoundary>
 
-          <PanelErrorBoundary panelTitle="äº§ç‰©ä¸‹è½½" resetKey={`${runId}:${runState.downloadFormat}`}>
+          <PanelErrorBoundary panelTitle="²úÎïÏÂÔØ" resetKey={`${runId}:${runState.downloadFormat}`}>
             <ArtifactDownloadPanel
               runId={runId}
               status={status}
@@ -69,7 +71,7 @@ function RunDetailsPage() {
         </section>
 
         <section className="stack stack-wide">
-          <PanelErrorBoundary panelTitle="ç»“æžœæ€»è§ˆ" resetKey={`${runId}:${runState.resultState}`}>
+          <PanelErrorBoundary panelTitle="½á¹û×ÜÀÀ" resetKey={`${runId}:${runState.resultState}`}>
             <ReviewSummaryPanel
               runId={runId}
               status={status}
@@ -83,15 +85,24 @@ function RunDetailsPage() {
           </PanelErrorBoundary>
 
           <div className="panel-grid panel-grid-two-up">
-            <PanelErrorBoundary panelTitle="å‘çŽ°åˆ—è¡¨" resetKey={`${runId}:${runState.resultState}:findings`}>
+            <PanelErrorBoundary panelTitle="Reviewer Insights" resetKey={`${runId}:${runState.resultState}:reviewer-insights`}>
+              <ReviewerInsightsPanel result={result} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary panelTitle="Tool Trace" resetKey={`${runId}:${runState.resultState}:tool-trace`}>
+              <ToolTracePanel result={result} />
+            </PanelErrorBoundary>
+          </div>
+
+          <div className="panel-grid panel-grid-two-up">
+            <PanelErrorBoundary panelTitle="·¢ÏÖÁÐ±í" resetKey={`${runId}:${runState.resultState}:findings`}>
               <FindingsPanel result={result} status={status} resultState={runState.resultState} />
             </PanelErrorBoundary>
-            <PanelErrorBoundary panelTitle="é£Žé™©åˆ—è¡¨" resetKey={`${runId}:${runState.resultState}:risks`}>
+            <PanelErrorBoundary panelTitle="·çÏÕÁÐ±í" resetKey={`${runId}:${runState.resultState}:risks`}>
               <RisksPanel result={result} />
             </PanelErrorBoundary>
           </div>
 
-          <PanelErrorBoundary panelTitle="å¼€æ”¾é—®é¢˜" resetKey={`${runId}:${runState.resultState}:questions`}>
+          <PanelErrorBoundary panelTitle="¿ª·ÅÎÊÌâ" resetKey={`${runId}:${runState.resultState}:questions`}>
             <OpenQuestionsPanel result={result} />
           </PanelErrorBoundary>
         </section>

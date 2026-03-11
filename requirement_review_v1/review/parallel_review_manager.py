@@ -196,7 +196,11 @@ def _partial_reviewer_result(reviewer: str, *, status: str, reason: str) -> Revi
         findings=(),
         open_questions=(),
         risk_items=(),
+        evidence=(),
+        tool_calls=(),
         summary=f"{reviewer.title()} reviewer {status}: {normalized_reason}.",
         status=status,
         error_message=normalized_reason,
+        reviewer_status_detail=f"{reviewer.title()} reviewer ended with status '{status}'. Reason: {normalized_reason}.",
+        notes=(f"Reviewer {status}: {normalized_reason}",),
     )

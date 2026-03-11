@@ -1,9 +1,39 @@
-﻿"""Shared result models for heuristic reviewer agents."""
+"""Shared result models for heuristic reviewer agents."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceItem:
+    source: str
+    title: str
+    snippet: str = ""
+    ref: str = ""
+    score: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    tool_name: str
+    status: str
+    reviewer: str = ""
+    query: str = ""
+    input_summary: str = ""
+    output_summary: str = ""
+    evidence_count: int = 0
+    error_message: str = ""
+    degraded_reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,9 +46,12 @@ class ReviewFinding:
     reviewer: str = ""
     suggested_action: str = ""
     assignee: str = ""
+    evidence: tuple[EvidenceItem, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload["evidence"] = [item.to_dict() for item in self.evidence]
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,9 +73,15 @@ class ReviewerResult:
     findings: tuple[ReviewFinding, ...] = ()
     open_questions: tuple[str, ...] = ()
     risk_items: tuple[RiskItem, ...] = ()
+    evidence: tuple[EvidenceItem, ...] = ()
+    tool_calls: tuple[ToolCall, ...] = ()
     summary: str = ""
     status: str = "completed"
     error_message: str = ""
+    ambiguity_type: str = ""
+    clarification_question: str = ""
+    reviewer_status_detail: str = ""
+    notes: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,9 +89,15 @@ class ReviewerResult:
             "findings": [item.to_dict() for item in self.findings],
             "open_questions": list(self.open_questions),
             "risk_items": [item.to_dict() for item in self.risk_items],
+            "evidence": [item.to_dict() for item in self.evidence],
+            "tool_calls": [item.to_dict() for item in self.tool_calls],
             "summary": self.summary,
             "status": self.status,
             "error_message": self.error_message,
+            "ambiguity_type": self.ambiguity_type,
+            "clarification_question": self.clarification_question,
+            "reviewer_status_detail": self.reviewer_status_detail,
+            "notes": list(self.notes),
         }
 
 

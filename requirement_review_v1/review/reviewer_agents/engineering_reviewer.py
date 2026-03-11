@@ -1,4 +1,4 @@
-﻿"""Engineering-focused heuristic reviewer."""
+"""Engineering-focused heuristic reviewer."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 
 from ..normalizer import NormalizedRequirement
 from .base import ReviewFinding, ReviewerConfig, ReviewerResult, RiskItem, limit_items
+from .tooling import get_reviewer_toolbox
 
 
 async def review(requirement: NormalizedRequirement, config: ReviewerConfig | None = None) -> ReviewerResult:
@@ -13,6 +14,11 @@ async def review(requirement: NormalizedRequirement, config: ReviewerConfig | No
     findings: list[ReviewFinding] = []
     risks: list[RiskItem] = []
     open_questions: list[str] = []
+
+    query = " ".join([requirement.summary, *requirement.modules[:4], *requirement.dependency_hints[:4]]).strip()
+    tool_result = get_reviewer_toolbox().local_risk_catalog.run(reviewer="engineering", query=query)
+    evidence = tool_result.evidence
+    tool_calls = (tool_result.tool_call,) if tool_result.tool_call else ()
 
     if requirement.dependency_hints and not requirement.modules:
         findings.append(
@@ -22,6 +28,7 @@ async def review(requirement: NormalizedRequirement, config: ReviewerConfig | No
                 severity="medium",
                 category="architecture",
                 reviewer="engineering",
+                evidence=evidence[:2],
             )
         )
 
@@ -40,11 +47,23 @@ async def review(requirement: NormalizedRequirement, config: ReviewerConfig | No
     if requirement.roles and len(requirement.roles) >= 4:
         open_questions.append("Which engineering team owns each module and integration boundary?")
 
+    ambiguity_type = "missing_implementation_boundaries" if requirement.dependency_hints and not requirement.modules else ""
+    clarification_question = "Which modules, service boundaries, and owners are impacted by this requirement?" if ambiguity_type else ""
+    reviewer_status_detail = (
+        f"Engineering review completed with {len(findings)} findings, {len(risks)} risks, and {len(evidence)} evidence hits."
+    )
+
     await asyncio.sleep(0)
     return ReviewerResult(
         reviewer="engineering",
         findings=limit_items(findings, resolved.top_n_findings),
         open_questions=limit_items(open_questions, resolved.top_n_questions),
         risk_items=limit_items(risks, resolved.top_n_risks),
+        evidence=evidence,
+        tool_calls=tool_calls,
         summary="Engineering review completed against module and dependency complexity.",
+        ambiguity_type=ambiguity_type,
+        clarification_question=clarification_question,
+        reviewer_status_detail=reviewer_status_detail,
+        notes=("Evidence prioritized from local risk catalog for dependency and architecture signals.",),
     )

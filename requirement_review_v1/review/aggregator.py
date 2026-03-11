@@ -110,7 +110,8 @@ class AggregatedReview:
     risk_items: tuple[dict[str, Any], ...]
     open_questions: tuple[dict[str, Any], ...]
     conflicts: tuple[dict[str, Any], ...]
-    reviewer_summaries: tuple[dict[str, str], ...]
+    reviewer_summaries: tuple[dict[str, Any], ...]
+    tool_calls: tuple[dict[str, Any], ...]
     partial_review: bool
     reviewers_completed: tuple[str, ...]
     reviewers_failed: tuple[dict[str, str], ...]
@@ -123,12 +124,25 @@ class AggregatedReview:
     artifacts: AggregatedReviewArtifacts
 
     def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload["artifacts"] = asdict(self.artifacts)
-        payload["meta"] = dict(self.meta)
-        payload["gating"] = dict(self.gating)
-        payload["summary"] = dict(self.summary)
-        return payload
+        return {
+            "review_mode": self.review_mode,
+            "findings": list(self.findings),
+            "risk_items": list(self.risk_items),
+            "open_questions": list(self.open_questions),
+            "conflicts": list(self.conflicts),
+            "reviewer_summaries": list(self.reviewer_summaries),
+            "tool_calls": list(self.tool_calls),
+            "partial_review": self.partial_review,
+            "reviewers_completed": list(self.reviewers_completed),
+            "reviewers_failed": list(self.reviewers_failed),
+            "reviewers_used": list(self.reviewers_used),
+            "reviewers_skipped": list(self.reviewers_skipped),
+            "reviewer_count": self.reviewer_count,
+            "gating": dict(self.gating),
+            "summary": dict(self.summary),
+            "meta": dict(self.meta),
+            "artifacts": asdict(self.artifacts),
+        }
 
 
 def aggregate_review_results(
@@ -160,10 +174,19 @@ def aggregate_review_results(
     risk_items = _aggregate_risks(results)
     open_questions = _aggregate_open_questions(results)
     conflicts = _detect_conflicts(results)
+    tool_calls = _aggregate_tool_calls(results)
     reviewer_summaries = tuple(
-        {"reviewer": result.reviewer, "summary": result.summary}
+        {
+            "reviewer": result.reviewer,
+            "summary": result.summary,
+            "status": str(result.status or "completed").strip().lower() or "completed",
+            "status_detail": str(result.reviewer_status_detail or "").strip(),
+            "ambiguity_type": str(result.ambiguity_type or "").strip(),
+            "clarification_question": str(result.clarification_question or "").strip(),
+            "notes": list(result.notes),
+        }
         for result in results
-        if result.summary
+        if result.summary or result.reviewer_status_detail or result.notes
     )
     partial_review = bool(meta.get("partial_review", False))
     reviewers_completed = list(meta.get("reviewers_completed", []) or [])
@@ -190,6 +213,8 @@ def aggregate_review_results(
         "gating": gating_payload,
         "reviewers_used": reviewers_used_list,
         "reviewers_skipped": reviewers_skipped_list,
+        "tool_calls": tool_calls,
+        "reviewer_notes": [item for item in reviewer_summaries if item.get("status_detail") or item.get("notes")],
     }
 
     report_payload = {
@@ -210,6 +235,7 @@ def aggregate_review_results(
         "open_questions": open_questions,
         "conflicts": conflicts,
         "reviewer_summaries": list(reviewer_summaries),
+        "tool_calls": tool_calls,
     }
 
     review_result_path = target_dir / "review_result.json"
@@ -242,6 +268,7 @@ def aggregate_review_results(
         open_questions=tuple(open_questions),
         conflicts=tuple(conflicts),
         reviewer_summaries=reviewer_summaries,
+        tool_calls=tuple(tool_calls),
         partial_review=partial_review,
         reviewers_completed=tuple(reviewers_completed),
         reviewers_failed=tuple(reviewers_failed),
@@ -380,12 +407,14 @@ def _aggregate_findings(results: tuple[ReviewerResult, ...]) -> list[dict[str, A
                     "assignee": str(finding.assignee or "").strip() or default_assignee,
                     "reviewers": [],
                     "requirement_refs": [],
+                    "evidence": [],
                 },
             )
             bucket["severity"] = _max_severity(bucket["severity"], normalize_severity(finding.severity))
             bucket["reviewers"] = _merge_unique(bucket["reviewers"], [source_reviewer])
             bucket["requirement_refs"] = _merge_unique(bucket["requirement_refs"], list(finding.requirement_refs))
             incoming_action = str(finding.suggested_action or "").strip() or default_suggested_action
+            bucket["evidence"] = _merge_evidence(bucket.get("evidence", []), [item.to_dict() for item in finding.evidence])
             if len(incoming_action) > len(str(bucket.get("suggested_action", ""))):
                 bucket["suggested_action"] = incoming_action
             if not str(bucket.get("assignee", "")).strip():
@@ -393,6 +422,16 @@ def _aggregate_findings(results: tuple[ReviewerResult, ...]) -> list[dict[str, A
             if not str(bucket.get("source_reviewer", "")).strip():
                 bucket["source_reviewer"] = source_reviewer
     return list(merged.values())
+
+
+def _aggregate_tool_calls(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
+    tool_calls: list[dict[str, Any]] = []
+    for result in results:
+        for tool_call in result.tool_calls:
+            payload = tool_call.to_dict()
+            payload["reviewer"] = payload.get("reviewer") or result.reviewer
+            tool_calls.append(payload)
+    return tool_calls
 
 
 def _aggregate_risks(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
@@ -558,6 +597,7 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
     open_questions = report_payload.get("open_questions", []) if isinstance(report_payload.get("open_questions"), list) else []
     conflicts = report_payload.get("conflicts", []) if isinstance(report_payload.get("conflicts"), list) else []
     summaries = report_payload.get("reviewer_summaries", []) if isinstance(report_payload.get("reviewer_summaries"), list) else []
+    tool_calls = report_payload.get("tool_calls", []) if isinstance(report_payload.get("tool_calls"), list) else []
     meta = report_payload.get("meta", {}) if isinstance(report_payload.get("meta"), dict) else {}
 
     completed = ", ".join(meta.get("reviewers_completed", []) or []) or "none"
@@ -576,6 +616,7 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
         f"- Risk Items: {len(risk_items)}",
         f"- Open Questions: {len(open_questions)}",
         f"- Conflicts: {len(conflicts)}",
+        f"- Tool Calls: {len(tool_calls)}",
     ]
     if manual_review_message:
         lines.extend([
@@ -606,8 +647,19 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
     ])
     lines.extend(
         _bullet_lines(
-            [f"{item['reviewer']}: {item['summary']}" for item in summaries if item.get("summary")],
+            [_format_reviewer_note(item) for item in summaries if _format_reviewer_note(item)],
             "No reviewer notes.",
+        )
+    )
+    lines.extend([
+        "",
+        "## Tool Trace",
+        "",
+    ])
+    lines.extend(
+        _bullet_lines(
+            [_format_tool_call_line(item) for item in tool_calls],
+            "No tool calls.",
         )
     )
     if conflicts:
@@ -631,6 +683,7 @@ def _render_summary(report_payload: dict[str, Any]) -> str:
     open_questions = report_payload.get("open_questions", []) if isinstance(report_payload.get("open_questions"), list) else []
     conflicts = report_payload.get("conflicts", []) if isinstance(report_payload.get("conflicts"), list) else []
     summaries = report_payload.get("reviewer_summaries", []) if isinstance(report_payload.get("reviewer_summaries"), list) else []
+    tool_calls = report_payload.get("tool_calls", []) if isinstance(report_payload.get("tool_calls"), list) else []
     meta = report_payload.get("meta", {}) if isinstance(report_payload.get("meta"), dict) else {}
 
     manual_review_message = str(meta.get("manual_review_message", "") or "").strip()
@@ -644,6 +697,7 @@ def _render_summary(report_payload: dict[str, Any]) -> str:
         f"- Risk Items: {len(risk_items)}",
         f"- Open Questions: {len(open_questions)}",
         f"- Conflicts: {len(conflicts)}",
+        f"- Tool Calls: {len(tool_calls)}",
     ]
     if manual_review_message:
         lines.extend([
@@ -674,8 +728,19 @@ def _render_summary(report_payload: dict[str, Any]) -> str:
     ])
     lines.extend(
         _bullet_lines(
-            [f"{item['reviewer']}: {item['summary']}" for item in summaries if item.get("summary")],
+            [_format_reviewer_note(item) for item in summaries if _format_reviewer_note(item)],
             "No reviewer notes.",
+        )
+    )
+    lines.extend([
+        "",
+        "## Tool Trace",
+        "",
+    ])
+    lines.extend(
+        _bullet_lines(
+            [_format_tool_call_line(item) for item in tool_calls],
+            "No tool calls.",
         )
     )
     if conflicts:
@@ -710,6 +775,9 @@ def _finding_lines(items: list[dict[str, Any]]) -> list[str]:
                 f"  - Assignee: {item.get('assignee', '') or source_reviewer}",
             ]
         )
+        evidence_items = item.get('evidence', []) if isinstance(item.get('evidence'), list) else []
+        if evidence_items:
+            lines.append(f"  - Evidence: {', '.join(_format_evidence_label(evidence) for evidence in evidence_items)}")
     return lines
 
 
@@ -892,6 +960,51 @@ def _format_conflict_line(item: dict[str, Any]) -> str:
     return "Conflict requires manual resolution."
 
 
+def _format_reviewer_note(item: dict[str, Any]) -> str:
+    reviewer = str(item.get("reviewer", "") or "unknown").strip()
+    summary = str(item.get("summary", "") or "").strip()
+    status = str(item.get("status", "completed") or "completed").strip()
+    status_detail = str(item.get("status_detail", "") or "").strip()
+    clarification = str(item.get("clarification_question", "") or "").strip()
+    ambiguity_type = str(item.get("ambiguity_type", "") or "").strip()
+    notes = [str(note).strip() for note in item.get("notes", []) if str(note).strip()] if isinstance(item.get("notes"), list) else []
+    parts = [f"{reviewer} [{status}]"]
+    if summary:
+        parts.append(summary)
+    if status_detail:
+        parts.append(status_detail)
+    if ambiguity_type:
+        parts.append(f"ambiguity={ambiguity_type}")
+    if clarification:
+        parts.append(f"clarify: {clarification}")
+    if notes:
+        parts.append(f"notes: {' | '.join(notes)}")
+    return "; ".join(parts)
+
+
+def _format_tool_call_line(item: dict[str, Any]) -> str:
+    reviewer = str(item.get("reviewer", "") or "unknown").strip()
+    tool_name = str(item.get("tool_name", "tool") or "tool").strip()
+    status = str(item.get("status", "unknown") or "unknown").strip()
+    output_summary = str(item.get("output_summary", "") or "").strip()
+    degraded_reason = str(item.get("degraded_reason", "") or "").strip()
+    if degraded_reason:
+        output_summary = f"{output_summary} ({degraded_reason})".strip()
+    return f"{reviewer} -> {tool_name} [{status}] {output_summary}".strip()
+
+
+def _format_evidence_label(item: dict[str, Any]) -> str:
+    title = str(item.get("title", "evidence") or "evidence").strip()
+    source = str(item.get("source", "") or "").strip()
+    ref = str(item.get("ref", "") or "").strip()
+    parts = [title]
+    if source:
+        parts.append(source)
+    if ref:
+        parts.append(ref)
+    return " / ".join(parts)
+
+
 def _format_reviewer_list(items: Any) -> str:
     if not isinstance(items, list) or not items:
         return ""
@@ -939,6 +1052,26 @@ def _merge_unique(existing: list[str], incoming: list[str]) -> list[str]:
             continue
         seen.add(value)
         merged.append(value)
+    return merged
+
+
+def _merge_evidence(existing: list[dict[str, Any]], incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in [*existing, *incoming]:
+        if not isinstance(item, dict):
+            continue
+        key = "|".join(
+            [
+                str(item.get("source", "") or ""),
+                str(item.get("ref", "") or ""),
+                str(item.get("title", "") or ""),
+            ]
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(dict(item))
     return merged
 
 

@@ -168,6 +168,8 @@ class ReviewState(TypedDict, total=False):
     review_mode: str
     review_open_questions: list[dict[str, Any]]
     review_risk_items: list[dict[str, Any]]
+    review_tool_calls: list[dict[str, Any]]
+    reviewer_insights: list[dict[str, Any]]
     partial_review: bool
     parallel_review: dict[str, Any]
     parallel_review_meta: dict[str, Any]
@@ -204,6 +206,8 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         review_mode="quick",
         review_open_questions=[],
         review_risk_items=[],
+        review_tool_calls=[],
+        reviewer_insights=[],
         partial_review=False,
         parallel_review={},
         parallel_review_meta={},

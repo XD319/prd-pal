@@ -18,8 +18,12 @@ export function severityRank(value) {
   return 0;
 }
 
+function deriveParallelMeta(result) {
+  return result?.['parallel-review_meta'] ?? result?.parallel_review_meta ?? {};
+}
+
 export function deriveModeLabel(result) {
-  const meta = result?.['parallel-review_meta'] ?? result?.parallel_review_meta ?? {};
+  const meta = deriveParallelMeta(result);
   const mode = String(result?.mode ?? result?.review_mode ?? meta.selected_mode ?? meta.review_mode ?? 'quick');
   if (mode === 'full' || mode === 'parallel_review') {
     return 'Full review';
@@ -33,11 +37,10 @@ export function deriveModeLabel(result) {
   return mode.replace(/_/g, ' ');
 }
 
-
 export function deriveReviewers(result, resultPayload) {
   const directUsed = asArray(resultPayload?.reviewers_used);
   const directSkipped = asArray(resultPayload?.reviewers_skipped);
-  const meta = result?.['parallel-review_meta'] ?? result?.parallel_review_meta ?? {};
+  const meta = deriveParallelMeta(result);
   const nested = result?.parallel_review ?? {};
 
   return {
@@ -47,7 +50,7 @@ export function deriveReviewers(result, resultPayload) {
 }
 
 export function deriveGatingInfo(result, resultPayload) {
-  const meta = result?.['parallel-review_meta'] ?? result?.parallel_review_meta ?? {};
+  const meta = deriveParallelMeta(result);
   const nested = result?.parallel_review ?? {};
   const gating = resultPayload?.gating ?? result?.gating ?? nested.gating ?? meta.gating ?? {};
   const reasons = asArray(gating.reasons).filter(Boolean);
@@ -71,6 +74,7 @@ export function deriveFindings(result) {
         reviewers: asArray(item.reviewers),
         assignee: item.assignee ?? '',
         action: item.suggested_action ?? '',
+        evidence: asArray(item.evidence),
       }))
       .sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
   }
@@ -95,6 +99,7 @@ export function deriveFindings(result) {
         reviewers: ['single_reviewer'],
         assignee: '',
         action: item.suggestions ?? '',
+        evidence: [],
       };
     })
     .sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
@@ -136,6 +141,42 @@ export function deriveOpenQuestions(result) {
   }));
 }
 
+export function deriveReviewerInsights(result) {
+  const meta = deriveParallelMeta(result);
+  const nested = result?.parallel_review ?? {};
+  const source = asArray(result?.reviewer_insights ?? nested.reviewer_summaries ?? meta.reviewer_insights ?? meta.reviewer_notes);
+
+  return source.map((item, index) => ({
+    id: `${item.reviewer ?? 'reviewer'}-${index}`,
+    reviewer: item.reviewer ?? `Reviewer ${index + 1}`,
+    status: String(item.status ?? 'completed').toLowerCase(),
+    summary: item.summary ?? '',
+    statusDetail: item.status_detail ?? '',
+    ambiguityType: item.ambiguity_type ?? '',
+    clarificationQuestion: item.clarification_question ?? '',
+    notes: asArray(item.notes),
+  }));
+}
+
+export function deriveToolCalls(result) {
+  const meta = deriveParallelMeta(result);
+  const nested = result?.parallel_review ?? {};
+  const source = asArray(result?.review_tool_calls ?? nested.tool_calls ?? meta.tool_calls);
+
+  return source.map((item, index) => ({
+    id: `${item.reviewer ?? 'tool'}-${item.tool_name ?? 'call'}-${index}`,
+    reviewer: item.reviewer ?? 'unknown',
+    toolName: item.tool_name ?? 'tool',
+    status: String(item.status ?? 'unknown').toLowerCase(),
+    query: item.query ?? '',
+    inputSummary: item.input_summary ?? '',
+    outputSummary: item.output_summary ?? '',
+    evidenceCount: Number(item.evidence_count ?? 0),
+    degradedReason: item.degraded_reason ?? '',
+    errorMessage: item.error_message ?? '',
+  }));
+}
+
 export function deriveSummary(result, runId, statusPayload, resultPayload) {
   if (!result) {
     return {
@@ -152,8 +193,9 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
   const questions = deriveOpenQuestions(result);
   const reviewers = deriveReviewers(result, resultPayload);
   const gating = deriveGatingInfo(result, resultPayload);
+  const toolCalls = deriveToolCalls(result);
   const metrics = result.metrics ?? {};
-  const meta = result['parallel-review_meta'] ?? result.parallel_review_meta ?? {};
+  const meta = deriveParallelMeta(result);
   const summaryMeta = result.summary ?? result.parallel_review?.summary ?? resultPayload?.result?.summary ?? {};
   const artifactCount = Object.keys(resultPayload?.artifact_paths ?? {}).length;
   const narrative =
@@ -170,6 +212,7 @@ export function deriveSummary(result, runId, statusPayload, resultPayload) {
       { label: 'Findings', value: `${findings.length}` },
       { label: 'Artifacts', value: `${artifactCount}` },
       { label: 'Overall risk', value: String(summaryMeta.overall_risk ?? 'unknown') },
+      { label: 'Tool calls', value: `${toolCalls.length}` },
     ],
     chips: [
       deriveModeLabel(result),
@@ -230,4 +273,3 @@ export function describeHistoryRun(run) {
     hasResult,
   };
 }
-

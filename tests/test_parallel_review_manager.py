@@ -5,7 +5,7 @@ import pytest
 
 from requirement_review_v1.review import parallel_review_manager as manager
 from requirement_review_v1.review.parallel_review_manager import run_parallel_review_async
-from requirement_review_v1.review.reviewer_agents.base import ReviewerResult, RiskItem
+from requirement_review_v1.review.reviewer_agents.base import EvidenceItem, ReviewerResult, RiskItem, ToolCall
 
 
 _MANUAL_REVIEW_TEXT = 'Manual review required'
@@ -52,17 +52,25 @@ Allow admin users to export recruiter profiles to a CSV file. This touches FE, B
     assert aggregated['summary']['overall_risk'] in {'low', 'medium', 'high'}
     assert isinstance(aggregated['summary']['in_scope'], list)
     assert isinstance(aggregated['summary']['out_of_scope'], list)
+    assert isinstance(aggregated['tool_calls'], list)
+    assert isinstance(aggregated['reviewer_summaries'], list)
 
     review_result = json.loads((tmp_path / 'review_result.json').read_text(encoding='utf-8'))
     assert review_result['review_mode'] == 'full'
     assert review_result['meta']['reviewers_used'] == ['product', 'engineering', 'qa', 'security']
     assert 'gating' in review_result['meta']
+    assert 'tool_calls' in review_result['meta']
+    assert 'reviewer_summaries' in review_result
 
 
 @pytest.mark.asyncio
 async def test_parallel_review_manager_skips_irrelevant_reviewers_and_handles_partial_failures(monkeypatch, tmp_path):
     async def fake_product(_requirement, config=None):
-        return ReviewerResult(reviewer='product', summary='Product completed.')
+        return ReviewerResult(
+            reviewer='product',
+            summary='Product completed.',
+            reviewer_status_detail='Product reviewer completed cleanly.',
+        )
 
     async def slow_engineering(_requirement, config=None):
         await asyncio.sleep(0.05)
@@ -74,6 +82,7 @@ async def test_parallel_review_manager_skips_irrelevant_reviewers_and_handles_pa
     async def fake_security(_requirement, config=None):
         return ReviewerResult(
             reviewer='security',
+            findings=(),
             risk_items=(
                 RiskItem(
                     title='Security gate required',
@@ -84,7 +93,25 @@ async def test_parallel_review_manager_skips_irrelevant_reviewers_and_handles_pa
                     reviewer='security',
                 ),
             ),
+            evidence=(
+                EvidenceItem(
+                    source='risk_catalog',
+                    title='Sensitive export release gate',
+                    snippet='Sensitive export flows require approval before release.',
+                    ref='RC-900',
+                ),
+            ),
+            tool_calls=(
+                ToolCall(
+                    tool_name='risk_catalog.search',
+                    status='completed',
+                    reviewer='security',
+                    output_summary='hits=1',
+                    evidence_count=1,
+                ),
+            ),
             summary='Security completed.',
+            reviewer_status_detail='Security reviewer completed with evidence.',
         )
 
     monkeypatch.setattr(
@@ -109,6 +136,7 @@ async def test_parallel_review_manager_skips_irrelevant_reviewers_and_handles_pa
     assert reviewer_results['security']['status'] == 'completed'
     assert reviewer_results['engineering']['status'] == 'timeout'
     assert reviewer_results['qa']['status'] == 'error'
+    assert reviewer_results['engineering']['reviewer_status_detail'].startswith('Engineering reviewer ended with status')
 
     aggregated = result.aggregated
     assert aggregated['partial_review'] is True
@@ -116,11 +144,16 @@ async def test_parallel_review_manager_skips_irrelevant_reviewers_and_handles_pa
     assert aggregated['meta']['manual_review_required'] is True
     assert _MANUAL_REVIEW_TEXT in aggregated['meta']['manual_review_message']
     assert list(aggregated['reviewers_used']) == ['product', 'engineering', 'qa', 'security']
+    assert aggregated['tool_calls'][0]['tool_name'] == 'risk_catalog.search'
+    assert aggregated['findings'] == []
+    assert aggregated['risk_items'][0]['title'] == 'Security gate required'
+    assert aggregated['reviewer_summaries'][0]['status_detail'] == 'Product reviewer completed cleanly.'
 
     summary_text = (tmp_path / 'review_summary.md').read_text(encoding='utf-8')
     report_text = (tmp_path / 'review_report.md').read_text(encoding='utf-8')
     assert _MANUAL_REVIEW_TEXT in summary_text
     assert _MANUAL_REVIEW_TEXT in report_text
+    assert 'Tool Trace' in report_text
 
 
 @pytest.mark.asyncio

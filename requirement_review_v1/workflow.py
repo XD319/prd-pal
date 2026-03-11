@@ -262,6 +262,18 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
         "input_token_estimate": _estimate_tokens(int(reviewer_trace.get("input_chars", 0) or 0)),
         "output_token_estimate": _estimate_tokens(int(reviewer_trace.get("output_chars", 0) or 0)),
         "duration_ms": int(reviewer_trace.get("duration_ms", 0) or 0),
+        "tool_calls": [],
+        "reviewer_insights": [
+            {
+                "reviewer": "single_reviewer",
+                "status": "completed",
+                "summary": "Single reviewer completed quick triage.",
+                "status_detail": "Quick review path does not emit structured reviewer evidence.",
+                "ambiguity_type": "",
+                "clarification_question": "",
+                "notes": [],
+            }
+        ],
     }
     trace[_PARALLEL_REVIEW_META_KEY] = meta
     update["trace"] = trace
@@ -269,6 +281,8 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
     update["review_mode"] = selected_mode
     update["review_open_questions"] = review_open_questions
     update["review_risk_items"] = review_risk_items
+    update["review_tool_calls"] = []
+    update["reviewer_insights"] = list(meta.get("reviewer_insights", []))
     update["parallel_review_meta"] = meta
     return update
 
@@ -303,6 +317,18 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
         "input_token_estimate": _estimate_tokens(len(str(state.get("requirement_doc", "") or ""))),
         "output_token_estimate": _estimate_tokens(len(message)),
         "duration_ms": 0,
+        "tool_calls": [],
+        "reviewer_insights": [
+            {
+                "reviewer": "manual",
+                "status": "skipped",
+                "summary": message,
+                "status_detail": "Automated reviewer skipped because the requirement was too sparse.",
+                "ambiguity_type": "insufficient_requirement_context",
+                "clarification_question": "Can you provide scope, scenarios, acceptance criteria, and impacted systems?",
+                "notes": [],
+            }
+        ],
     }
     trace[_PARALLEL_REVIEW_META_KEY] = meta
     return {
@@ -320,6 +346,8 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
             "risk_items": [],
             "open_questions": [],
             "conflicts": [],
+            "reviewer_summaries": [meta["reviewer_insights"][0]],
+            "tool_calls": [],
             "reviewers_used": [],
             "reviewers_skipped": [],
             "manual_review_required": True,
@@ -328,6 +356,8 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
         },
         "review_open_questions": [{"question": "Provide a fuller requirement with scope, scenarios, and acceptance criteria.", "reviewers": ["manual"]}],
         "review_risk_items": [],
+        "review_tool_calls": [],
+        "reviewer_insights": list(meta.get("reviewer_insights", [])),
         "partial_review": True,
         "parallel_review_meta": meta,
     }
@@ -357,6 +387,8 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     plan_review = _build_parallel_plan_review(aggregated)
     review_open_questions = list(aggregated.get("open_questions", []) or [])
     review_risk_items = list(aggregated.get("risk_items", []) or [])
+    review_tool_calls = list(aggregated.get("tool_calls", []) or [])
+    reviewer_insights = list(aggregated.get("reviewer_summaries", []) or [])
     findings = list(aggregated.get("findings", []) or [])
 
     output_chars = len(json.dumps(aggregated, ensure_ascii=False))
@@ -389,6 +421,8 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "output_token_estimate": _estimate_tokens(output_chars),
         "duration_ms": round((perf_counter() - started) * 1000),
         "artifact_paths": dict((aggregated.get("artifacts") or {})),
+        "tool_calls": list(aggregated.get("tool_calls", [])),
+        "reviewer_insights": list(aggregated.get("reviewer_summaries", [])),
     }
     trace[_PARALLEL_REVIEW_META_KEY] = meta
 
@@ -402,6 +436,8 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "parallel_review": aggregated,
         "review_open_questions": review_open_questions,
         "review_risk_items": review_risk_items,
+        "review_tool_calls": review_tool_calls,
+        "reviewer_insights": reviewer_insights,
         "partial_review": partial_review,
         "parallel_review_meta": meta,
     }
