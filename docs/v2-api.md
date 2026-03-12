@@ -72,8 +72,21 @@ Request body accepts:
 - `source`
 - `prd_text`
 - `prd_path`
+- `mode`
+- `smart_llm`
+- `fast_llm`
+- `strategic_llm`
+- `temperature`
+- `reasoning_effort`
+- `llm_kwargs`
 
 `source` is the preferred forward-looking input. It accepts local files, public text URLs, and authenticated Feishu/Lark sources. `prd_text` and `prd_path` remain supported for compatibility.
+
+Model override notes:
+
+- These LLM fields are optional and apply only to the submitted run.
+- Use the existing `<provider>:<model>` format, for example `openai:gpt-5-nano` or `deepseek:deepseek-chat`.
+- This makes it easy to keep the service default on OpenAI while temporarily testing Chinese output quality with DeepSeek.
 
 Example with API key:
 
@@ -91,6 +104,15 @@ curl -X POST "http://127.0.0.1:8000/api/review" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer shared-env-token" \
   -d "{\"source\":\"docs/sample_prd.md\"}"
+```
+
+Example with a temporary DeepSeek override:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/review" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: local-dev-secret" \
+  -d "{\"source\":\"docs/sample_prd.md\",\"smart_llm\":\"deepseek:deepseek-chat\"}"
 ```
 
 Response:
@@ -225,3 +247,4 @@ These endpoints help inspect prompt/template metadata and audit events, but they
 The current FastAPI app does not expose approval or execution-orchestration endpoints directly.
 
 Those retained orchestration capabilities are currently emphasized through the MCP layer rather than the HTTP layer.
+

@@ -38,6 +38,7 @@ from requirement_review_v1.packs import (
 )
 from requirement_review_v1.packs.approval import build_approval_record
 from requirement_review_v1.run_review import run_review
+from review_runtime.config.config import runtime_config_overrides
 from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 from requirement_review_v1.workspace import ReviewWorkspaceRepository
 
@@ -125,6 +126,29 @@ _REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {
     "open_questions_json": "open_questions.json",
     "review_summary_md": "review_summary.md",
 }
+
+_LLM_OVERRIDE_OPTION_KEYS: dict[str, str] = {
+    "fast_llm": "FAST_LLM",
+    "smart_llm": "SMART_LLM",
+    "strategic_llm": "STRATEGIC_LLM",
+    "temperature": "TEMPERATURE",
+    "llm_kwargs": "LLM_KWARGS",
+    "reasoning_effort": "REASONING_EFFORT",
+}
+
+
+def _resolve_llm_config_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(overrides, dict):
+        return {}
+
+    resolved: dict[str, Any] = {}
+    for option_key, runtime_key in _LLM_OVERRIDE_OPTION_KEYS.items():
+        if option_key in overrides and overrides.get(option_key) is not None:
+            resolved[runtime_key] = overrides.get(option_key)
+            continue
+        if runtime_key in overrides and overrides.get(runtime_key) is not None:
+            resolved[runtime_key] = overrides.get(runtime_key)
+    return resolved
 
 
 def _resolve_review_result_artifact_paths(
@@ -282,13 +306,19 @@ def _derive_status(result: dict[str, Any]) -> str:
     trace = result.get("trace", {})
     if not isinstance(trace, dict):
         return "completed"
+
+    reporter_span = trace.get("reporter") if isinstance(trace.get("reporter"), dict) else {}
+    reporter_status = str(reporter_span.get("status", "") or "").strip().lower()
+    if reporter_status in {"ok", "success", "completed", "partial_success", "skipped"}:
+        return "completed"
+
     for span in trace.values():
         if not isinstance(span, dict):
             continue
         if span.get("non_blocking") is True:
             continue
-        status = str(span.get("status", "") or "").lower()
-        if status and status not in ("ok", "success", "completed"):
+        status = str(span.get("status", "") or "").strip().lower()
+        if status in {"error", "failed"}:
             return "failed"
     return "completed"
 
@@ -876,7 +906,10 @@ async def review_prd_text_async(
         run_review_kwargs["review_memory_seeds_dir"] = overrides.get("review_memory_seeds_dir")
     if "normalizer_cache_path" in overrides:
         run_review_kwargs["normalizer_cache_path"] = overrides.get("normalizer_cache_path")
-    run_output = await run_review(**run_review_kwargs)
+
+    llm_runtime_overrides = _resolve_llm_config_overrides(overrides)
+    with runtime_config_overrides(llm_runtime_overrides):
+        run_output = await run_review(**run_review_kwargs)
     if source_context:
         run_output.update(source_context)
         result = run_output.get("result")
@@ -905,7 +938,24 @@ async def review_prd_text_async(
             retry=retry_metadata_for_status(status=review_status, non_blocking=False),
         )
 
-    build_delivery_handoff_outputs(run_output, audit_context=audit_context)
+    if progress_hook is not None:
+        progress_hook("start", "finalize_artifacts", run_output.get("result", {}))
+
+    try:
+        build_delivery_handoff_outputs(run_output, audit_context=audit_context)
+    except Exception as exc:
+        if progress_hook is not None:
+            progress_hook("end", "finalize_artifacts", {
+                "trace": {"finalize_artifacts": {"status": "error"}},
+                "error": str(exc),
+            })
+        raise
+    else:
+        if progress_hook is not None:
+            progress_hook("end", "finalize_artifacts", {
+                "trace": {"finalize_artifacts": {"status": "ok"}},
+            })
+
     return _build_summary(run_output)
 
 
@@ -1750,7 +1800,7 @@ async def _review_summary_for_mcp_async(
     mode = resolved_options.get("mode")
     if isinstance(mode, str) and mode.strip():
         config_overrides["mode"] = mode.strip()
-    for option_key in ("review_memory_path", "review_memory_enabled", "review_memory_seeds_dir", "normalizer_cache_path"):
+    for option_key in ("review_memory_path", "review_memory_enabled", "review_memory_seeds_dir", "normalizer_cache_path", "fast_llm", "smart_llm", "strategic_llm", "temperature", "llm_kwargs", "reasoning_effort", "FAST_LLM", "SMART_LLM", "STRATEGIC_LLM", "TEMPERATURE", "LLM_KWARGS", "REASONING_EFFORT"):
         if option_key in resolved_options:
             config_overrides[option_key] = resolved_options.get(option_key)
 
@@ -1843,6 +1893,8 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
+
+
 
 
 

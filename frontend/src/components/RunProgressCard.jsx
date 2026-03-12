@@ -1,13 +1,18 @@
 ﻿import '../styles/panels.css';
 import '../styles/components.css';
-import { deriveNodes } from '../utils/derivers';
+import { deriveNodes, formatNodeLabel } from '../utils/derivers';
 import { formatDateTime, formatPercentFromWhole, formatStatusLabel, pluralize } from '../utils/formatters';
 
-function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
+function RunProgressCard({ runId, status, statusPayload, failureMessage, loadState }) {
   const progress = statusPayload?.progress ?? {};
   const nodes = deriveNodes(progress);
-  const statusLabel = formatStatusLabel(status);
+  const isInitialLoading = Boolean(runId) && loadState === 'loading' && !statusPayload;
+  const displayStatus = isInitialLoading ? 'loading' : status;
+  const statusLabel = isInitialLoading ? 'Loading' : formatStatusLabel(status);
+  const percentLabel = statusPayload ? formatPercentFromWhole(progress.percent ?? 0) : '--';
   const currentNodeName = String(progress.current_node ?? '');
+  const currentNodeLabel = statusPayload ? (formatNodeLabel(progress.current_node) || 'Waiting for next stage') : 'Fetching live status';
+  const updatedLabel = statusPayload ? formatDateTime(progress.updated_at) : '--';
 
   return (
     <section className="panel run-progress-card">
@@ -16,7 +21,7 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
           <p className="section-kicker">Pipeline Status</p>
           <h2>Run progress</h2>
         </div>
-        <span className={`status-badge status-${status}`}>{statusLabel}</span>
+        <span className={`status-badge status-${displayStatus}`}>{statusLabel}</span>
       </div>
 
       {!runId ? (
@@ -24,6 +29,15 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
           <div className="empty-orb" />
           <h3>No run in focus</h3>
           <p>Submit a PRD or pick a recent run to inspect progress and result details here.</p>
+        </div>
+      ) : isInitialLoading ? (
+        <div className="loading-state empty-state-compact">
+          <div className="empty-orb" />
+          <div className="empty-grid" />
+          <div>
+            <h3>Fetching live run status</h3>
+            <p>The review has been submitted. We are loading the latest pipeline progress now.</p>
+          </div>
         </div>
       ) : (
         <div className="status-stack">
@@ -36,15 +50,15 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
             </div>
             <div>
               <span>Percent complete</span>
-              <strong>{formatPercentFromWhole(progress.percent ?? 0)}</strong>
+              <strong>{percentLabel}</strong>
             </div>
             <div>
               <span>Current node</span>
-              <strong>{progress.current_node || 'Waiting for next stage'}</strong>
+              <strong>{currentNodeLabel}</strong>
             </div>
             <div>
               <span>Updated</span>
-              <strong>{formatDateTime(progress.updated_at)}</strong>
+              <strong>{updatedLabel}</strong>
             </div>
           </div>
 
@@ -65,7 +79,7 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
                     const normalizedStatus = String(node.status ?? 'pending');
                     const isCurrent =
                       normalizedStatus === 'running' ||
-                      (normalizedStatus !== 'completed' && currentNodeName && node.name === currentNodeName);
+                      (normalizedStatus !== 'completed' && currentNodeName && node.id === currentNodeName);
                     const stepClassName = [
                       'stepper-step',
                       `stepper-step-${normalizedStatus}`,
@@ -77,7 +91,7 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
 
                     return (
                       <div
-                        key={node.name}
+                        key={node.id}
                         className={stepClassName}
                         aria-current={isCurrent ? 'step' : undefined}
                       >
@@ -97,7 +111,7 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage }) {
 
               <div className="node-list">
                 {nodes.map((node) => (
-                  <article key={node.name} className={`node-card node-${node.status}`}>
+                  <article key={node.id} className={`node-card node-${node.status}`}>
                     <div className="node-header">
                       <strong>{node.name}</strong>
                       <span className={`node-pill node-pill-${node.status}`}>{node.status}</span>

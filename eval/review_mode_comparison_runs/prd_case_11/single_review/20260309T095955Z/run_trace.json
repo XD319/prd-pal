@@ -1,0 +1,505 @@
+{
+  "parser": {
+    "start": "2026-03-09T09:59:55.759346+00:00",
+    "end": "2026-03-09T10:00:00.421225+00:00",
+    "duration_ms": 4661,
+    "model": "gpt-4.1",
+    "status": "error",
+    "input_chars": 1826,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "structured call failed: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}",
+    "template_id": "review.parser",
+    "template_type": "review_prompt",
+    "template_version": "v1.1",
+    "template_description": "Default parser prompt for decomposing a requirement document into atomic items.",
+    "prompt_version": "v1.1",
+    "structured_mode": "fallback"
+  },
+  "planner_risk_parallel": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "status": "ok",
+    "round": 0,
+    "branches": [
+      "planner",
+      "risk"
+    ],
+    "fan_out": "parser->planner+risk",
+    "end": "2026-03-09T10:00:00.421225+00:00",
+    "join_node": "review_join",
+    "fan_in": "planner+risk->reviewer",
+    "planner_ready": true,
+    "risk_ready": true,
+    "validation_errors": [],
+    "parallel_wall_time_ms": 0,
+    "sum_step_time_ms": 0,
+    "overlap_ms": 0,
+    "saved_ms": 0,
+    "speedup_ratio": 1.0,
+    "parallelized": true
+  },
+  "planner": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "end": "2026-03-09T10:00:00.421225+00:00",
+    "duration_ms": 0,
+    "model": "none",
+    "status": "error",
+    "input_chars": 0,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "parsed_items is empty - nothing to plan"
+  },
+  "risk_catalog.search": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "end": "2026-03-09T10:00:00.421225+00:00",
+    "duration_ms": 0,
+    "model": "none",
+    "status": "ok",
+    "input_chars": 119,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "",
+    "cache_hit": true,
+    "cache_key_hash": "9542313636c93aee0cde44742240118804ea20095600b346c51247c171b8fe80",
+    "ttl_sec": 300,
+    "subflow_id": "risk_analysis.v1",
+    "node_path": "risk_analysis.evidence.tool"
+  },
+  "risk_analysis.evidence": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "end": "2026-03-09T10:00:00.421225+00:00",
+    "duration_ms": 0,
+    "model": "unknown",
+    "status": "ok",
+    "input_chars": 72,
+    "output_chars": 1086,
+    "raw_output_path": "",
+    "error_message": "",
+    "subflow_id": "risk_analysis.v1",
+    "node_path": "risk_analysis.evidence",
+    "risk_catalog_tool_enabled": true,
+    "risk_catalog_tool_top_k": 5,
+    "risk_catalog_tool_status": "ok",
+    "risk_catalog_tool_duration_ms": 0,
+    "risk_catalog_hits": 5,
+    "risk_catalog_top_ids": [
+      "RC-005",
+      "RC-013",
+      "RC-003",
+      "RC-002",
+      "RC-022"
+    ]
+  },
+  "risk_analysis.generate": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "end": "2026-03-09T10:00:00.421225+00:00",
+    "duration_ms": 0,
+    "model": "unknown",
+    "status": "error",
+    "input_chars": 136,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "structured_requirements is empty - nothing to assess",
+    "subflow_id": "risk_analysis.v1",
+    "node_path": "risk_analysis.generate",
+    "template_id": "review.risk",
+    "template_type": "review_prompt",
+    "template_version": "v1.1",
+    "template_description": "Risk analysis prompt for delivery-quality and schedule risks.",
+    "prompt_version": "v1.1"
+  },
+  "risk": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "end": "2026-03-09T10:00:00.421225+00:00",
+    "duration_ms": 0,
+    "model": "none",
+    "status": "error",
+    "input_chars": 136,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "structured_requirements is empty - nothing to assess",
+    "subflow_id": "risk_analysis.v1",
+    "node_path": "risk",
+    "template_id": "review.risk",
+    "template_type": "review_prompt",
+    "template_version": "v1.1",
+    "template_description": "Risk analysis prompt for delivery-quality and schedule risks.",
+    "prompt_version": "v1.1",
+    "risk_catalog_tool_enabled": true,
+    "risk_catalog_tool_top_k": 5,
+    "risk_catalog_tool_status": "ok",
+    "risk_catalog_tool_duration_ms": 0,
+    "risk_catalog_hits": 5,
+    "risk_catalog_top_ids": [
+      "RC-005",
+      "RC-013",
+      "RC-003",
+      "RC-002",
+      "RC-022"
+    ],
+    "structured_mode": "not_run",
+    "evidence_summary": {
+      "query": "requirements:\n\ntasks: \nowners: \nmilestones: \ntotal_days: , buffer_days: ",
+      "tool_status": "ok",
+      "hit_count": 5,
+      "top_ids": [
+        "RC-005",
+        "RC-013",
+        "RC-003",
+        "RC-002",
+        "RC-022"
+      ],
+      "snippets": [
+        "Milestone delivery criteria contain tasks still blocked by upstream work.",
+        "Some requirements have no mapped tasks, leading to hidden scope and missed outcomes."
+      ]
+    },
+    "tool_actions": [
+      {
+        "tool_name": "risk_catalog.search",
+        "status": "ok",
+        "input_summary": "requirements:\n\ntasks: \nowners: \nmilestones: \ntotal_days: , buffer_days: ",
+        "output_summary": "hits=5, ids=RC-005,RC-013,RC-003,RC-002,RC-022",
+        "duration_ms": 0,
+        "cache_hit": true,
+        "node_path": "risk_analysis.evidence.tool",
+        "subflow_id": "risk_analysis.v1"
+      }
+    ]
+  },
+  "implementation.plan": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "end": "2026-03-09T10:00:04.865778+00:00",
+    "duration_ms": 4444,
+    "model": "none",
+    "status": "error",
+    "input_chars": 52,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "structured call failed: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}",
+    "template_id": "review.delivery_planning.implementation",
+    "template_type": "review_prompt",
+    "template_version": "v1",
+    "template_description": "Prompt for deriving implementation guidance from reviewed requirements, tasks, and risks.",
+    "prompt_version": "v1",
+    "cache_hit": false,
+    "cache_key_hash": "7e5a764a6cb5a6a301ae594659a8e1b65200af47c49ef50feccf5252152c9ea6",
+    "ttl_sec": 300
+  },
+  "test.plan.generate": {
+    "start": "2026-03-09T10:00:04.865778+00:00",
+    "end": "2026-03-09T10:00:09.335971+00:00",
+    "duration_ms": 4470,
+    "model": "none",
+    "status": "error",
+    "input_chars": 52,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "structured call failed: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}",
+    "template_id": "review.delivery_planning.test_plan",
+    "template_type": "review_prompt",
+    "template_version": "v1",
+    "template_description": "Prompt for generating focused execution-time test planning guidance.",
+    "prompt_version": "v1",
+    "cache_hit": false,
+    "cache_key_hash": "94b71322e337abbd4b2eff0baafc0f7b98a33fd2503bf381fcb5d2d10ee4c15a",
+    "ttl_sec": 300
+  },
+  "codex.prompt.generate": {
+    "start": "2026-03-09T10:00:09.335971+00:00",
+    "end": "2026-03-09T10:00:13.781601+00:00",
+    "duration_ms": 4445,
+    "model": "none",
+    "status": "error",
+    "input_chars": 198,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "structured call failed: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}",
+    "template_id": "review.delivery_planning.codex_prompt",
+    "template_type": "review_prompt",
+    "template_version": "v1",
+    "template_description": "Prompt for generating the Codex execution handoff payload.",
+    "prompt_version": "v1",
+    "cache_hit": false,
+    "cache_key_hash": "f72fa8012630377b7fc56bb487e8b0973a32efe06124490d22459755f1e7e967",
+    "ttl_sec": 300
+  },
+  "claude_code.prompt.generate": {
+    "start": "2026-03-09T10:00:13.781601+00:00",
+    "end": "2026-03-09T10:00:18.275597+00:00",
+    "duration_ms": 4493,
+    "model": "none",
+    "status": "error",
+    "input_chars": 198,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "structured call failed: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}",
+    "template_id": "review.delivery_planning.claude_code_prompt",
+    "template_type": "review_prompt",
+    "template_version": "v1",
+    "template_description": "Prompt for generating the Claude Code execution handoff payload.",
+    "prompt_version": "v1",
+    "cache_hit": false,
+    "cache_key_hash": "e2512b02927a9e920f286e8511779f220963e5efa018d9008f0b73b16dda1487",
+    "ttl_sec": 300
+  },
+  "delivery_planning": {
+    "start": "2026-03-09T10:00:00.421225+00:00",
+    "end": "2026-03-09T10:00:18.275597+00:00",
+    "duration_ms": 17854,
+    "model": "none",
+    "status": "ok",
+    "input_chars": 65,
+    "output_chars": 427,
+    "raw_output_path": "",
+    "error_message": "",
+    "implementation_skill": "implementation.plan",
+    "test_plan_skill": "test.plan.generate",
+    "codex_prompt_skill": "codex.prompt.generate",
+    "claude_code_prompt_skill": "claude_code.prompt.generate",
+    "degraded_skills": [
+      "implementation.plan",
+      "test.plan.generate",
+      "codex.prompt.generate",
+      "claude_code.prompt.generate"
+    ]
+  },
+  "reviewer": {
+    "start": "2026-03-09T10:00:18.275597+00:00",
+    "end": "2026-03-09T10:00:18.275597+00:00",
+    "duration_ms": 0,
+    "model": "none",
+    "status": "error",
+    "input_chars": 0,
+    "output_chars": 0,
+    "raw_output_path": "",
+    "error_message": "parsed_items is empty - nothing to review"
+  },
+  "parallel-review_meta": {
+    "default_mode": "single_review",
+    "selected_mode": "single_review",
+    "review_mode_override": "single_review",
+    "parallel_triggered": false,
+    "reviewer_strategy": "single_reviewer",
+    "review_mode": "single_review",
+    "partial_review": false,
+    "manual_review_required": false,
+    "manual_review_message": "",
+    "gating_decision": {
+      "mode": "single_review",
+      "complexity_score": 1,
+      "reasons": [
+        "length_chars=1826 exceeds 1800"
+      ],
+      "length_chars": 1826,
+      "module_count": 0,
+      "role_count": 2,
+      "risk_keyword_hits": 1,
+      "cross_system_hits": 0
+    },
+    "reviewer_count": 1,
+    "reviewers_completed": [
+      "single_reviewer"
+    ],
+    "reviewers_failed": [],
+    "finding_count": 0,
+    "open_questions_count": 0,
+    "risk_items_count": 0,
+    "input_token_estimate": 0,
+    "output_token_estimate": 0,
+    "duration_ms": 0
+  },
+  "routing_rounds": [
+    {
+      "round": 0,
+      "ratio": 0.0,
+      "reason": "finish: high_risk_ratio=0.000 <= 0.40",
+      "decision": "reporter"
+    }
+  ],
+  "router": {
+    "round": 0,
+    "ratio": 0.0,
+    "reason": "finish: high_risk_ratio=0.000 <= 0.40",
+    "decision": "reporter"
+  },
+  "reporter": {
+    "start": "2026-03-09T10:00:18.275597+00:00",
+    "end": "2026-03-09T10:00:18.275597+00:00",
+    "duration_ms": 0,
+    "model": "none",
+    "status": "ok",
+    "input_chars": 1094,
+    "output_chars": 1367,
+    "raw_output_path": "",
+    "error_message": ""
+  },
+  "pack_builder": {
+    "start": "2026-03-09T10:00:18.275597+00:00",
+    "end": "2026-03-09T10:00:18.291221+00:00",
+    "duration_ms": 3,
+    "status": "ok",
+    "input_chars": 17665,
+    "output_chars": 2273,
+    "model": "none",
+    "prompt_version": "handoff_pack_v1",
+    "raw_output_path": "",
+    "error_message": "",
+    "non_blocking": true,
+    "retry": {
+      "retryable": false,
+      "state": "not_needed",
+      "attempt": 1,
+      "max_attempts": 3,
+      "strategy": "manual",
+      "backoff_seconds": 0,
+      "last_error": "",
+      "recommended_action": "none"
+    },
+    "packs": {
+      "implementation_pack": {
+        "status": "ok",
+        "duration_ms": 1,
+        "output_path": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\implementation_pack.json",
+        "error_message": "",
+        "retry": {
+          "retryable": false,
+          "state": "not_needed",
+          "attempt": 1,
+          "max_attempts": 3,
+          "strategy": "manual",
+          "backoff_seconds": 0,
+          "last_error": "",
+          "recommended_action": "none"
+        }
+      },
+      "test_pack": {
+        "status": "ok",
+        "duration_ms": 1,
+        "output_path": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\test_pack.json",
+        "error_message": "",
+        "retry": {
+          "retryable": false,
+          "state": "not_needed",
+          "attempt": 1,
+          "max_attempts": 3,
+          "strategy": "manual",
+          "backoff_seconds": 0,
+          "last_error": "",
+          "recommended_action": "none"
+        }
+      },
+      "execution_pack": {
+        "status": "ok",
+        "duration_ms": 1,
+        "output_path": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\execution_pack.json",
+        "error_message": "",
+        "retry": {
+          "retryable": false,
+          "state": "not_needed",
+          "attempt": 1,
+          "max_attempts": 3,
+          "strategy": "manual",
+          "backoff_seconds": 0,
+          "last_error": "",
+          "recommended_action": "none"
+        }
+      }
+    }
+  },
+  "handoff_renderer": {
+    "start": "2026-03-09T10:00:18.291221+00:00",
+    "end": "2026-03-09T10:00:18.291221+00:00",
+    "duration_ms": 1,
+    "status": "ok",
+    "template_version": "handoff_markdown_v1",
+    "templates": {
+      "codex_prompt": {
+        "template_id": "adapter.codex.handoff_markdown",
+        "template_type": "adapter_prompt",
+        "template_version": "handoff_markdown_v1",
+        "template_description": "Markdown handoff template tailored for Codex execution requests."
+      },
+      "claude_code_prompt": {
+        "template_id": "adapter.claude_code.handoff_markdown",
+        "template_type": "adapter_prompt",
+        "template_version": "handoff_markdown_v1",
+        "template_description": "Markdown handoff template tailored for Claude Code validation requests."
+      }
+    },
+    "output_paths": {
+      "codex_prompt": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\codex_prompt.md",
+      "claude_code_prompt": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\claude_code_prompt.md"
+    },
+    "error_message": "",
+    "non_blocking": true,
+    "retry": {
+      "retryable": false,
+      "state": "not_needed",
+      "attempt": 1,
+      "max_attempts": 3,
+      "strategy": "manual",
+      "backoff_seconds": 0,
+      "last_error": "",
+      "recommended_action": "none"
+    }
+  },
+  "bundle_builder": {
+    "start": "2026-03-09T10:00:18.291221+00:00",
+    "end": "2026-03-09T10:00:18.291221+00:00",
+    "duration_ms": 4,
+    "status": "ok",
+    "error_message": "",
+    "non_blocking": true,
+    "retry": {
+      "retryable": false,
+      "state": "not_needed",
+      "attempt": 1,
+      "max_attempts": 3,
+      "strategy": "manual",
+      "backoff_seconds": 0,
+      "last_error": "",
+      "recommended_action": "none"
+    },
+    "output_paths": {
+      "prd_review_report": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\prd_review_report.md",
+      "open_questions": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\open_questions.md",
+      "scope_boundary": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\scope_boundary.md",
+      "tech_design_draft": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\tech_design_draft.md",
+      "test_checklist": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\test_checklist.md",
+      "delivery_bundle": "eval\\review_mode_comparison_runs\\prd_case_11\\single_review\\20260309T095955Z\\delivery_bundle.json"
+    },
+    "artifact_templates": {
+      "prd_review_report": {
+        "template_id": "delivery_artifact.prd_review_report",
+        "template_type": "delivery_artifact_template",
+        "template_version": "v1",
+        "template_description": "Markdown artifact template for the top-level PRD review report handoff file."
+      },
+      "open_questions": {
+        "template_id": "delivery_artifact.open_questions",
+        "template_type": "delivery_artifact_template",
+        "template_version": "v1",
+        "template_description": "Markdown artifact template for open requirement questions and ambiguities."
+      },
+      "scope_boundary": {
+        "template_id": "delivery_artifact.scope_boundary",
+        "template_type": "delivery_artifact_template",
+        "template_version": "v1",
+        "template_description": "Markdown artifact template that records in-scope and out-of-scope delivery boundaries."
+      },
+      "tech_design_draft": {
+        "template_id": "delivery_artifact.tech_design_draft",
+        "template_type": "delivery_artifact_template",
+        "template_version": "v1",
+        "template_description": "Markdown artifact template for the generated technical design draft."
+      },
+      "test_checklist": {
+        "template_id": "delivery_artifact.test_checklist",
+        "template_type": "delivery_artifact_template",
+        "template_version": "v1",
+        "template_description": "Markdown artifact template for execution-time test and review checks."
+      }
+    }
+  }
+}

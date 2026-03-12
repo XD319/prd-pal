@@ -1,0 +1,24 @@
+{
+  "risk_items": [
+    {
+      "title": "Regression scope may be underestimated",
+      "detail": "Risk-related scenarios imply extra negative-path and regression testing.",
+      "severity": "medium",
+      "category": "quality",
+      "mitigation": "Add explicit failure-path, rollback, and regression checks to the acceptance criteria.",
+      "reviewers": [
+        "qa"
+      ]
+    },
+    {
+      "title": "Security review gate required",
+      "detail": "Sensitive flows or data handling are implied and should be reviewed before release approval.",
+      "severity": "high",
+      "category": "security",
+      "mitigation": "Add logging, access control, data handling, and rollback expectations to the PRD.",
+      "reviewers": [
+        "security"
+      ]
+    }
+  ]
+}

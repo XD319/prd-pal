@@ -4,6 +4,28 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+const RUN_NODE_ORDER = [
+  'parser',
+  'parallel_start',
+  'planner',
+  'risk',
+  'review_join',
+  'delivery_planning',
+  'reviewer',
+  'route_decider',
+  'clarify',
+  'reporter',
+  'finalize_artifacts',
+];
+
+export function formatNodeLabel(value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  return normalized.replace(/_/g, ' ');
+}
+
 export function severityRank(value) {
   const normalized = String(value ?? '').toLowerCase();
   if (normalized === 'high') {
@@ -322,15 +344,22 @@ export function deriveNodes(progress) {
 
   return Object.entries(nodes)
     .map(([name, node]) => ({
-      name,
+      id: name,
+      name: formatNodeLabel(name),
       status: node?.status ?? 'pending',
       runs: node?.runs ?? 0,
       lastStart: node?.last_start ?? '',
       lastEnd: node?.last_end ?? '',
     }))
     .sort((left, right) => {
-      const order = ['running', 'failed', 'completed', 'pending'];
-      return order.indexOf(left.status) - order.indexOf(right.status);
+      const leftIndex = RUN_NODE_ORDER.indexOf(left.id);
+      const rightIndex = RUN_NODE_ORDER.indexOf(right.id);
+      const resolvedLeft = leftIndex === -1 ? RUN_NODE_ORDER.length : leftIndex;
+      const resolvedRight = rightIndex === -1 ? RUN_NODE_ORDER.length : rightIndex;
+      if (resolvedLeft !== resolvedRight) {
+        return resolvedLeft - resolvedRight;
+      }
+      return left.name.localeCompare(right.name);
     });
 }
 

@@ -1,0 +1,116 @@
+{
+  "bundle_id": "bundle-20260309T100018Z",
+  "bundle_version": "1.0",
+  "created_at": "2026-03-09T10:00:41.047810+00:00",
+  "status": "draft",
+  "source_run_id": "20260309T100018Z",
+  "artifacts": {
+    "prd_review_report": {
+      "artifact_type": "prd_review_report",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\prd_review_report.md",
+      "content_hash": "189fa794adcdb4525b50613d2d92c17bcc956062d4bc77f02feed5e6e3ecf3d5",
+      "generated_at": "2026-03-09T10:00:41.047810+00:00"
+    },
+    "open_questions": {
+      "artifact_type": "open_questions",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\open_questions.md",
+      "content_hash": "95d21a65dabb321e2cd395789478cfb4fbbdf0abc05af6c01bf8fb1b786e6db6",
+      "generated_at": "2026-03-09T10:00:41.047810+00:00"
+    },
+    "scope_boundary": {
+      "artifact_type": "scope_boundary",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\scope_boundary.md",
+      "content_hash": "0db4728921ff013bfdc9dfcf95e18b111ab09672ddc9af2cd30bc901392af391",
+      "generated_at": "2026-03-09T10:00:41.047810+00:00"
+    },
+    "tech_design_draft": {
+      "artifact_type": "tech_design_draft",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\tech_design_draft.md",
+      "content_hash": "1264b589f6fd235d7dc5559bee8dfcce60f0c35e962bd61e7820c7376f2eb0eb",
+      "generated_at": "2026-03-09T10:00:41.047810+00:00"
+    },
+    "test_checklist": {
+      "artifact_type": "test_checklist",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\test_checklist.md",
+      "content_hash": "ab0d430dee4c1c99909b106cb0edb147ede14b6e17c15ae09d74644502dd0070",
+      "generated_at": "2026-03-09T10:00:41.047810+00:00"
+    },
+    "implementation_pack": {
+      "artifact_type": "implementation_pack",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\implementation_pack.json",
+      "content_hash": "",
+      "generated_at": ""
+    },
+    "test_pack": {
+      "artifact_type": "test_pack",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\test_pack.json",
+      "content_hash": "",
+      "generated_at": ""
+    },
+    "execution_pack": {
+      "artifact_type": "execution_pack",
+      "path": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\execution_pack.json",
+      "content_hash": "",
+      "generated_at": ""
+    }
+  },
+  "approval_history": [],
+  "metadata": {
+    "source_report_paths": {
+      "report_md": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\report.md",
+      "report_json": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\report.json",
+      "run_trace": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\run_trace.json",
+      "implementation_pack": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\implementation_pack.json",
+      "test_pack": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\test_pack.json",
+      "execution_pack": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\execution_pack.json",
+      "codex_prompt": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\codex_prompt.md",
+      "claude_code_prompt": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\claude_code_prompt.md"
+    },
+    "generated_from": "review_service",
+    "parallel-review_meta": {
+      "default_mode": "single_review",
+      "selected_mode": "parallel_review",
+      "review_mode_override": "parallel_review",
+      "parallel_triggered": true,
+      "reviewer_strategy": "asyncio.gather",
+      "review_mode": "parallel_review",
+      "partial_review": false,
+      "manual_review_required": false,
+      "manual_review_message": "",
+      "gating_decision": {
+        "mode": "single_review",
+        "complexity_score": 1,
+        "reasons": [
+          "length_chars=1826 exceeds 1800"
+        ],
+        "length_chars": 1826,
+        "module_count": 0,
+        "role_count": 2,
+        "risk_keyword_hits": 1,
+        "cross_system_hits": 0
+      },
+      "reviewer_count": 4,
+      "reviewers_completed": [
+        "product",
+        "engineering",
+        "qa",
+        "security"
+      ],
+      "reviewers_failed": [],
+      "finding_count": 1,
+      "open_questions_count": 0,
+      "risk_items_count": 2,
+      "input_token_estimate": 456,
+      "output_token_estimate": 696,
+      "duration_ms": 13,
+      "artifact_paths": {
+        "review_result_json": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\review_result.json",
+        "review_report_md": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\review_report.md",
+        "risk_items_json": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\risk_items.json",
+        "open_questions_json": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\open_questions.json",
+        "review_report_json": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\review_report.json",
+        "review_summary_md": "eval\\review_mode_comparison_runs\\prd_case_11\\parallel_review\\20260309T100018Z\\review_summary.md"
+      }
+    }
+  }
+}

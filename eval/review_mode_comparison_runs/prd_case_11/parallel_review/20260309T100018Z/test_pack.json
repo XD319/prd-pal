@@ -1,0 +1,19 @@
+{
+  "pack_type": "test_pack",
+  "pack_version": "1.0",
+  "task_id": "handoff-task",
+  "title": "Test Pack",
+  "summary": "Multi-skill handoff pack",
+  "test_scope": [],
+  "edge_cases": [],
+  "acceptance_criteria": [],
+  "agent_handoff": {
+    "primary_agent": "claude_code",
+    "supporting_agents": [
+      "codex"
+    ],
+    "goals": [],
+    "expected_output": "",
+    "notes": []
+  }
+}

@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
+﻿import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import {
   answerReviewClarification,
   downloadReportArtifact,
@@ -23,7 +23,24 @@ const initialRunState = {
   clarificationState: 'idle',
   loadState: 'idle',
   loadError: '',
+  loadRetryEligible: false,
 };
+
+function shouldRetryStatusLoad(error) {
+  if (!error) {
+    return false;
+  }
+
+  if (error.name === 'TimeoutError') {
+    return true;
+  }
+
+  if (typeof error.status !== 'number') {
+    return true;
+  }
+
+  return error.status >= 500;
+}
 
 function useReviewRun(runId) {
   const { showToast } = useToast();
@@ -48,6 +65,7 @@ function useReviewRun(runId) {
       ...current,
       loadState: silent && current.statusPayload ? current.loadState : 'loading',
       loadError: '',
+      loadRetryEligible: false,
     }));
 
     try {
@@ -64,9 +82,10 @@ function useReviewRun(runId) {
             statusPayload,
             loadState: 'ready',
             loadError: '',
+            loadRetryEligible: false,
             failureMessage: statusPayload.status === 'failed'
               ? deriveFailureMessage(statusPayload, current.failureMessage)
-              : current.failureMessage,
+              : '',
           };
         });
       });
@@ -88,6 +107,7 @@ function useReviewRun(runId) {
           ...current,
           loadState: current.statusPayload ? 'ready' : 'error',
           loadError: message,
+          loadRetryEligible: !current.statusPayload && shouldRetryStatusLoad(error),
           failureMessage: current.failureMessage || message,
         };
       });
@@ -212,6 +232,20 @@ function useReviewRun(runId) {
       window.clearTimeout(handle);
     };
   }, [runId, status, refreshStatus]);
+
+  useEffect(() => {
+    if (!runId || runState.statusPayload || runState.loadState !== 'error' || !runState.loadRetryEligible) {
+      return undefined;
+    }
+
+    const handle = window.setTimeout(() => {
+      void refreshStatus({ silent: true });
+    }, pollIntervalMs);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [runId, runState.statusPayload, runState.loadState, runState.loadRetryEligible, refreshStatus]);
 
   useEffect(() => {
     if (!runId || status !== 'completed' || runState.resultPayload || runState.resultState === 'loading') {
