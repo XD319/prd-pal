@@ -17,6 +17,9 @@
   - [Q7. 为什么缓存放在 SkillExecutor，而不是 agent 内部？TTL 缓存边界是什么？](#q7)
   - [Q8. reusable subflow / subgraph 的价值是什么？](#q8)
   - [Q9. 并行化是如何实现的？为什么选择 planner 和 risk 并行？如何避免 state 冲突？](#q9)
+  - [Q14. 为什么要做 review gating，在 quick / full / skip 之间动态切换？](#q14)
+  - [Q15. 多角色并行评审为什么不是“多跑几个 reviewer”这么简单？](#q15)
+  - [Q16. reviewer 之间出现分歧时，冲突检测、仲裁和人工介入怎么设计？](#q16)
 - [第四部分：生产化与平台化](#sec-production)
   - [Q10. FastAPI async service 和 MCP server 分别解决什么问题？](#q10)
   - [Q11. 为什么 trace / eval / tests 在这套系统里是核心能力，而不是附属功能？](#q11)
@@ -36,42 +39,42 @@
 <a id="sec-changelog"></a>
 ## 变更说明
 
-- 本版以最新简历文件 `docs/resume_project_description_ai_backend.md` 为基线，对齐 Version B / Version C 的表达重点。
-- `resume_project_description_ai_backend_v3.md` 仓库中不存在，因此本版使用当前最新简历描述作为 v3 简历来源。
-- 在 `docs/interview-prep-v2.1.md` 的基础上，补强了 v3 核心主题：Skill Registry / SkillExecutor、TTL cache、reusable subflow、planner/risk 并行、runtime metrics、Architecture Evolution。
+- 本版改为对齐 `大模型应用项目经历.docx` 中的主表述，重点覆盖「系统编排 / 条件路由 / 多角色协作 / 路由与回环」，并补充校准「结构化输出与降级」这条高频追问。
+- 重新核对仓库当前实现后，确认 `review/gating.py`、`review/parallel_review_manager.py`、`review/aggregator.py`、`reviewer_agents/delivery_reviewer.py` 等模块已经支持新的面试叙事。
+- 对已有题目做了定向优化：Q1 补入 quick/full/skip 主链路，Q3 补入 Clarification 与冲突仲裁的边界。
+- 新增高频题：Q14 review gating、Q15 多角色并行评审与动态 reviewer 选择、Q16 冲突检测 / 仲裁 / 人工介入。
 - 题目结构统一为：问题、简要回答、技术要点、Follow-ups、Trade-offs、System Variants、Pitfalls，便于直接背诵或面试展开。
 
 <a id="sec-resume-priority"></a>
 ## 简历重点题速查
 
-- 简历 Version B #1「LangGraph 多智能体工作流 + 澄清路由」：优先准备 [Q1](#q1)、[Q2](#q2)、[Q3](#q3)、[Q9](#q9)、[AE-1](#qae-1)
-- 简历 Version B #2「Structured Outputs + schema validation + fallback」：优先准备 [Q4](#q4)、[Q12](#q12)
-- 简历 Version B #3「skill / evidence retrieval / subflow / parallel / TTL cache」：优先准备 [Q5](#q5)、[Q6](#q6)、[Q7](#q7)、[Q8](#q8)、[Q9](#q9)、[PE-2](#qpe-2)、[PE-3](#qpe-3)、[PE-4](#qpe-4)
-- 简历 Version B #4「FastAPI async service + MCP + trace / eval / tests」：优先准备 [Q10](#q10)、[Q11](#q11)、[Q12](#q12)、[Q13](#q13)、[PE-1](#qpe-1)、[PE-4](#qpe-4)、[AE-2](#qae-2)
-
-- 简历 Version C #1「StateGraph 多智能体编排」：优先准备 [Q1](#q1)、[Q2](#q2)
-- 简历 Version C #2「结构化调用链路」：优先准备 [Q4](#q4)、[Q12](#q12)
-- 简历 Version C #3「risk-driven routing loop」：优先准备 [Q3](#q3)、[AE-1](#qae-1)
-- 简历 Version C #4「Skill Registry / SkillExecutor / TTL cache」：优先准备 [Q5](#q5)、[Q6](#q6)、[Q7](#q7)、[Q13](#q13)、[PE-3](#qpe-3)、[PE-4](#qpe-4)
-- 简历 Version C #5「reusable subflow / parallelization / runtime metrics」：优先准备 [Q8](#q8)、[Q9](#q9)、[Q11](#q11)、[PE-2](#qpe-2)、[PE-4](#qpe-4)
-- 简历 Version C #6「FastAPI + MCP 平台化」：优先准备 [Q10](#q10)、[AE-2](#qae-2)
-- 简历 Version C #7「trace / eval / tests」：优先准备 [Q11](#q11)、[Q12](#q12)、[PE-1](#qpe-1)、[AE-3](#qae-3)
+- 项目经历 Bullet 1「系统编排」：优先准备 [Q1](#q1)、[Q2](#q2)、[Q14](#q14)、[Q15](#q15)、[AE-1](#qae-1)
+- 项目经历 Bullet 2「条件路由」：优先准备 [Q14](#q14)、[Q3](#q3)、[Q12](#q12)
+- 项目经历 Bullet 3「多角色协作」：优先准备 [Q15](#q15)、[Q16](#q16)、[Q11](#q11)、[Q13](#q13)
+- 项目经历 Bullet 4「路由与回环」：优先准备 [Q3](#q3)、[Q16](#q16)、[Q12](#q12)、[AE-1](#qae-1)
+- 补充表述「结构化输出与降级」：优先准备 [Q4](#q4)、[Q12](#q12)
 
 提示  
-- 如果只按一页简历的 `Version B` 准备，至少把 [Q1](#q1)、[Q4](#q4)、[Q6](#q6)、[Q7](#q7)、[Q9](#q9)、[Q10](#q10)、[Q11](#q11) 练熟。
-- 如果面试更偏系统设计 / AI 后端，再重点补 [PE-2](#qpe-2)、[PE-3](#qpe-3)、[PE-4](#qpe-4)、[AE-1](#qae-1)、[AE-2](#qae-2)、[AE-3](#qae-3)。
+- 如果只按这版四条主 bullet 准备，至少把 [Q1](#q1)、[Q14](#q14)、[Q15](#q15)、[Q3](#q3)、[Q16](#q16)、[Q4](#q4) 练熟。
+- 如果面试更偏 AI 后端 / 平台工程，再重点补 [Q11](#q11)、[Q12](#q12)、[Q13](#q13)、[PE-2](#qpe-2)、[AE-1](#qae-1)。
 
 <a id="sec-resume-sync"></a>
 ## 简历覆盖映射
 
-- Resume Version B #1 / Version C #1 / #3：Q1、Q2、Q3、Q9、AE-1
-- Resume Version B #2 / Version C #2：Q4、Q12
-- Resume Version B #3 / Version C #4 / #5：Q5、Q6、Q7、Q8、Q9、PE-2、PE-3、PE-4
-- Resume Version B #4 / Version C #6 / #7：Q10、Q11、Q12、Q13、PE-1、PE-4、AE-2
+- 系统编排：Q1、Q2、Q14、Q15、AE-1
+- 条件路由：Q14、Q3、Q12
+- 多角色协作：Q15、Q16、Q11、Q13
+- 路由与回环：Q3、Q16、Q12、AE-1
+- 结构化输出与降级：Q4、Q12
 
 <a id="sec-new-index"></a>
 ## 新增题目索引
 
+- 重构增强：Q1 系统主链路补入 review gating、parallel review、aggregation
+- 重构增强：Q3 补入 Clarification loop 与 conflict arbitration 的边界
+- 新增：Q14 为什么要做 review gating / quick-full-skip 切换
+- 新增：Q15 多角色并行评审、动态 reviewer 选择、partial review 容错
+- 新增：Q16 冲突检测、仲裁与人工介入
 - 新增：Q6 Skill Registry / SkillExecutor 的设计动机
 - 新增：Q7 缓存为什么放在 SkillExecutor、TTL 边界、cache key 设计
 - 新增：Q8 reusable subflow / subgraph 的价值
@@ -91,19 +94,20 @@
 
 <a id="q1"></a>
 ### Q1. 系统整体架构是什么？数据如何流动？
-【Resume Highlight】Version B #1，Version B #4；Version C #1，#6，#7
+【Resume Highlight】系统编排；条件路由
 
 问题  
 请从入口、编排、执行、产物四层说明系统主链路。
 
 简要回答  
-系统是“FastAPI/MCP 入口 + LangGraph 编排 + 多 Agent/Skill 执行 + artifacts/trace/eval”四层结构。请求进入 service 层后触发 `workflow.py` 中的状态图，主链路经历 parser、planner、risk、reviewer、route_decider、reporter，最终落盘报告、状态快照和执行追踪，并由 eval/tests 校验关键约束。
+系统现在可以概括为“FastAPI/MCP/CLI 入口 + LangGraph 主图 + review gating / reviewer strategy + artifacts/trace/eval”四层结构。请求进入 service 层后由 `workflow.py` 驱动：parser 先抽取结构化需求，reviewer 节点再基于 normalizer + gating 在 `quick / full / skip` 之间切换；`full` 模式下进入 Product / Engineering / QA / Security 并行评审与聚合，之后由 `route_decider` 判断是否进入 Clarification 回环，最终 reporter 与 artifact refresh 统一产出报告、评审结果和运行追踪。
 
 技术要点  
-- 编排入口：`requirement_review_v1/workflow.py`
-- 共享状态与并行 merge：`requirement_review_v1/state.py`
+- 编排入口与模式分流：`requirement_review_v1/workflow.py`
+- gating / requirement normalization：`requirement_review_v1/review/gating.py`、`requirement_review_v1/review/normalizer.py`
+- 多 reviewer 并行与聚合：`requirement_review_v1/review/parallel_review_manager.py`、`requirement_review_v1/review/aggregator.py`
 - 运行与落盘：`requirement_review_v1/run_review.py`、`requirement_review_v1/service/review_service.py`
-- 服务入口：`requirement_review_v1/server/app.py`、`requirement_review_v1/mcp_server/server.py`
+- 服务入口与结果读取：`requirement_review_v1/server/app.py`、`requirement_review_v1/mcp_server/server.py`
 - 观测与质量：`requirement_review_v1/utils/trace.py`、`eval/run_eval.py`、`tests/`
 
 Follow-ups
@@ -176,7 +180,7 @@ Pitfalls
 
 <a id="q3"></a>
 ### Q3. clarify loop / routing loop 为什么单独设计成工作流控制层？
-【Resume Highlight】Version B #1；Version C #3
+【Resume Highlight】路由与回环；条件路由
 
 问题  
 为什么不把澄清逻辑写死在 parser 或 reviewer 里面，而要做 `route_decider` + `clarify`？
@@ -195,12 +199,17 @@ Follow-ups
   简要回答  
   因为 Reviewer 看到的是“解析结果 + 规划结果”的综合质量，更适合作为是否需要澄清的全局信号。
   技术要点  
-  `reviewer_agent.py` 产出风险相关结果，`workflow.py` 统一读取并决定下一跳。
+  `workflow.py` 基于 reviewer / parallel review 聚合后的结果计算 `high_risk_ratio`，再统一决定是否进入下一轮 clarify。
 - F2. 为什么一定要限制最大轮次？
   简要回答  
   Agent 工作流需要确定的停止条件，否则在高歧义输入下容易无限循环并拉高成本。
   技术要点  
   `_MAX_REVISION_ROUNDS = 2`，并在 `tests/test_routing_loop.py` 中验证上限行为。
+- F3. Clarification loop 和 reviewer 冲突仲裁有什么区别？
+  简要回答  
+  Clarification loop 解决的是“输入信息不够，需不需要回到需求补充后重跑”；冲突仲裁解决的是“不同 reviewer 已经给出结论，但彼此不一致时怎么决策”。前者发生在 workflow control，后者发生在 review aggregation / delivery arbitration 层。
+  技术要点  
+  `requirement_review_v1/workflow.py` 负责 `routing_reason` 与 `revision_round`；`requirement_review_v1/review/aggregator.py`、`requirement_review_v1/review/reviewer_agents/delivery_reviewer.py` 负责 conflict detection、resolution 和 `needs_human`。
 
 Trade-offs
 - T1. 把 loop 放在工作流层会不会让流程更复杂？
@@ -221,7 +230,7 @@ Pitfalls
 
 <a id="q4"></a>
 ### Q4. Structured Outputs + schema validation + fallback 是怎么协同的？
-【Resume Highlight】Version B #2；Version C #2
+【Resume Highlight】结构化输出与降级
 
 问题  
 如果面试官问“你怎么保证 LLM 输出能进后端系统”，该怎么回答？
@@ -474,6 +483,148 @@ Pitfalls
 - 只说“用了并行，速度更快”，不解释为什么选择这两个节点。
 - 忽略 `merge_state_dicts`，这是并行 state 安全的关键落点。
 
+<a id="q14"></a>
+### Q14. 为什么要做 review gating，在 quick / full / skip 之间动态切换？
+【Resume Highlight】条件路由；系统编排
+
+问题  
+为什么不让所有 PRD 都直接走 full review，而要先做一层 gating？
+
+简要回答  
+因为输入质量和复杂度差异非常大。把所有 PRD 都送进 full review，会让低信息密度需求浪费算力，也会让简单需求被重链路噪声淹没。gating 先用长度、完整度、风险关键词、跨系统信号、模块数和角色数判断复杂度：信息太 sparse 就 skip 并转人工补充，结构完整但风险较低就走 quick triage，高风险或跨系统需求再触发 full 并行评审。这样成本、时延和评审覆盖率能更平衡。
+
+技术要点  
+- gating 规则与阈值：`requirement_review_v1/review/gating.py`
+- 结构化信号抽取：`requirement_review_v1/review/normalizer.py`
+- 主图中的模式切换：`requirement_review_v1/workflow.py`
+- gating 回归：`tests/test_gating.py`
+- API / report 对外暴露 gating 信息：`tests/test_server_app_review_result.py`
+
+Follow-ups
+- F1. skip 为什么不是“直接失败”，而是转 manual review？
+  简要回答  
+  因为稀薄输入不代表任务无效，只代表自动评审证据不足。系统会稳定返回 `manual_review_required` 和补充问题，让上层能继续引导用户补全，而不是把控制流打断。
+  技术要点  
+  `_build_skip_reviewer_response()` 会返回 `selected_mode=skip`、`manual_review_required=True` 和 clarification question。
+- F2. quick 和 full 的工程差别是什么？
+  简要回答  
+  quick 走单 reviewer 的低成本 triage，full 才会触发四角色并行评审、聚合、冲突检测和更完整的 artifacts，所以 gating 本质上是在做 reviewer strategy 选择，不只是节省 token。
+  技术要点  
+  `workflow.py` 中 `decision.selected_mode` 分流到 `_run_single_reviewer()` 或 `_run_parallel_reviewer()`。
+- F3. 如果面试官质疑“规则式 gating 会不会误判”，怎么回答？
+  简要回答  
+  会有误判空间，所以系统保留 `mode=auto/quick/full` 明确 override，并把 gating reasons 透出到 report/API，保证这层决策可解释、可覆盖测试、也可被人工纠偏。
+  技术要点  
+  `ReviewModeDecision`、`requested_mode`、`gating.reasons`
+
+Trade-offs
+- T1. gating 会不会把本来该深审的需求错分到 quick？
+  简要回答  
+  会有这个风险，所以阈值设计偏保守，只要命中高风险关键词或跨系统信号就倾向 full，而且保留 override 和 trace 作为纠偏机制。
+
+System Variants
+- S1. 如果以后想把 gating 做成模型路由，而不是规则路由，哪些边界最好保留？
+  简要回答  
+  保留 `ReviewModeDecision` 这个契约即可；底层可以从规则切到模型，但 `selected_mode / reasons / skipped` 这些对外语义最好不变。
+
+Pitfalls
+- 只说“为了省成本”，没说明它同时在解决输入稀疏、低复杂度需求噪声和 reviewer strategy 选择问题。
+- 忽略 `skip` 不是报错，而是稳定返回人工补审信号。
+
+<a id="q15"></a>
+### Q15. 多角色并行评审为什么不是“多跑几个 reviewer”这么简单？
+【Resume Highlight】多角色协作；系统编排
+
+问题  
+为什么要拆 Product / Engineering / QA / Security 四个 reviewer？又为什么不固定每次都跑满四个？
+
+简要回答  
+因为这四个 reviewer 对应的是不同的评审维度：Product 看 scope / acceptance，Engineering 看模块与依赖，QA 看可测性与回归路径，Security 看敏感数据、合规和 release gate。真正的关键不只是“并行跑四个”，而是先把 PRD 标准化，再根据场景动态选择 `reviewers_used / reviewers_skipped`，并给每个 reviewer 喂有针对性的 reviewer input。这样既能提升复杂需求的覆盖面，也能避免无关 reviewer 带来的时延和噪声。
+
+技术要点  
+- reviewer 选择与超时容错：`requirement_review_v1/review/parallel_review_manager.py`
+- reviewer 视角切片：`requirement_review_v1/review/normalizer.py`
+- 四个 reviewer 实现：`requirement_review_v1/review/reviewer_agents/*.py`
+- 并行评审回归：`tests/test_parallel_review_manager.py`
+
+Follow-ups
+- F1. 为什么 security reviewer 有时会被跳过？
+  简要回答  
+  因为不是每个 PRD 都有敏感数据、合规或 release-control 信号。动态跳过能降低误报和延迟，同时 `reviewers_skipped` 会被显式写进结果，避免“没跑过但别人以为跑过”。
+  技术要点  
+  `_SECURITY_SIGNAL_RE`、`reviewers_skipped`、`tests/test_parallel_review_manager.py`
+- F2. reviewer 为什么还要做独立 timeout 和 partial review？
+  简要回答  
+  因为多 reviewer 并行最大的风险不是慢，而是一个 reviewer 超时拖垮整轮评审。当前设计允许单 reviewer timeout/error 时返回 partial result，同时打上 `manual_review_required`，保证主链路可用。
+  技术要点  
+  `_run_reviewer_with_resilience()`、`_partial_reviewer_result()`、`partial_review`
+- F3. reviewer input 为什么不能直接共享同一份全文 PRD？
+  简要回答  
+  因为不同角色关心的信号不一样。统一喂全文容易让 reviewer 输出重叠、噪声增加、角色边界变弱；按视角切片更容易把结果解释成“这是哪一类评审发现的问题”。
+  技术要点  
+  `normalized.for_reviewer("general" / "architecture" / "qa" / "security")`
+
+Trade-offs
+- T1. 多角色并行会不会让系统变重？
+  简要回答  
+  会增加 orchestration 和聚合复杂度，但这是用工程复杂度换覆盖率与可解释性的典型取舍；动态 reviewer 选择和 partial review 正是在控制这部分成本。
+
+System Variants
+- S1. 如果以后要扩 reviewer 角色，最重要的边界是什么？
+  简要回答  
+  先保留 `select_reviewers()`、`ReviewerResult` 和聚合器契约，再扩新角色；不要直接把新逻辑塞进已有 reviewer 的 Prompt 里。
+
+Pitfalls
+- 把“多角色协作”讲成单纯的 `asyncio.gather`。
+- 忽略 `reviewers_used / reviewers_skipped / reviewer_inputs`，这些才是动态 reviewer 选择真正落地的证据。
+
+<a id="q16"></a>
+### Q16. reviewer 之间出现分歧时，冲突检测、仲裁和人工介入怎么设计？
+【Resume Highlight】多角色协作；路由与回环
+
+问题  
+如果 Product 觉得可以上线、Security 觉得必须加 release gate，或者 Product 认为验收标准完整、QA 觉得还不可测，你会怎么让系统处理这种分歧？
+
+简要回答  
+我会把“发现分歧”和“决定怎么办”拆成两层。先在 aggregation 层把 findings / risks / open_questions 做去重和语义对齐，再做 conflict detection；随后由 delivery reviewer 规则给出 resolution，判断这是可以保守自动仲裁的冲突，还是必须 `needs_human` / `requires_manual_resolution` 的冲突。这样既能保留 reviewer 原始观点，也能给下游一个可执行的决策，而不是把分歧直接吞掉。
+
+技术要点  
+- 冲突检测与聚合：`requirement_review_v1/review/aggregator.py`
+- 仲裁规则：`requirement_review_v1/review/reviewer_agents/delivery_reviewer.py`
+- report 中的冲突与人工补审标记：`requirement_review_v1/review/aggregator.py`
+- 回归：`tests/test_review_aggregator.py`、`tests/test_delivery_reviewer.py`
+
+Follow-ups
+- F1. 什么冲突适合自动仲裁，什么更适合人工介入？
+  简要回答  
+  像 `severity_mismatch` 这类“结论相近但标签不一致”的冲突，适合按保守策略自动仲裁；像 `scope_inclusion_vs_dependency_blocker`、`acceptance_complete_vs_testability_gap` 这类跨角色实质分歧，更适合转人工确认。
+  技术要点  
+  `severity_mismatch`、`scope_inclusion_vs_dependency_blocker`、`acceptance_complete_vs_testability_gap`
+- F2. `manual_review_required` 和 Clarification loop 有什么区别？
+  简要回答  
+  Clarification loop 是“信息不够，回去补需求再跑”；manual review 是“信息已经有了，但 reviewer 结论冲突或部分 reviewer 不可用，需要人工决策”。一个是补输入，一个是裁决输出。
+  技术要点  
+  `workflow.py` 里的 `routing_reason / revision_round` 对应 clarify；`aggregator.py` 里的 `manual_review_required / manual_review_message` 对应人工补审。
+- F3. 为什么要把仲裁结果也写进 report 和 summary？
+  简要回答  
+  因为冲突本身就是下游决策的重要上下文。只给一个最终结论，面试官或真实用户都会继续追问“为什么这样判、谁不同意、有没有 unresolved conflict”。
+  技术要点  
+  `conflicts`、`resolution.decided_by`、`review_summary.md`、`review_report.md`
+
+Trade-offs
+- T1. 仲裁规则会不会过于武断？
+  简要回答  
+  会，所以当前规则只覆盖一小批高频、可解释的冲突类型，并把 unresolved 或高不确定性情况继续抬给人工，而不是追求全自动闭环。
+
+System Variants
+- S1. 如果以后要把 delivery reviewer 从规则升级为 LLM 裁决，最该保留什么？
+  简要回答  
+  保留 conflict contract 和 output schema，让“检测层”和“裁决层”继续分离；否则很容易把冲突证据和裁决理由一起做成黑箱。
+
+Pitfalls
+- 把 conflict arbitration 和 clarification loop 混为一谈。
+- 只说“聚合一下结果”，不说明 `requires_manual_resolution`、`needs_human` 和 resolution recommendation。
+
 <a id="sec-production"></a>
 ## 第四部分：生产化与平台化
 
@@ -566,7 +717,7 @@ Pitfalls
 
 <a id="q12"></a>
 ### Q12. 结构化输出异常、工具降级、路由异常时怎么排查？
-【Resume Highlight】Version B #2，Version B #4；Version C #2，#3，#7
+【Resume Highlight】结构化输出与降级；条件路由；路由与回环
 
 问题  
 如果线上出现“报告不完整 / 风险为空 / 路由异常”，你会怎么查？
