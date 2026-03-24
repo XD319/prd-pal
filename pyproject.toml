@@ -8,7 +8,7 @@ version = "0.6.0"
 description = "LangGraph-based requirement review, delivery planning, and coding-agent handoff system"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [
   { name = "Project Maintainers" }
 ]
@@ -33,6 +33,9 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 include = ["requirement_review_v1*", "review_runtime*"]
+
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

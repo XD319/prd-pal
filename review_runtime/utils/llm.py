@@ -1,4 +1,9 @@
-"""Shared LLM helpers for the requirement review workflow."""
+"""Small helper layer for request-time chat model invocation.
+
+Modified from GPT Researcher: https://github.com/assafelovic/gpt-researcher
+Original license: Apache-2.0
+This file has been adapted for this repository's review runtime.
+"""
 
 from __future__ import annotations
 
@@ -13,10 +18,38 @@ from review_runtime.llm_provider.generic.base import (
 )
 
 
-def get_llm(llm_provider: str, **kwargs):
+def get_llm(llm_provider: str, **kwargs: Any):
     from review_runtime.llm_provider import GenericLLMProvider
 
     return GenericLLMProvider.from_provider(llm_provider, **kwargs)
+
+
+def _build_provider_kwargs(
+    *,
+    model: str,
+    temperature: float | None,
+    max_tokens: int | None,
+    llm_provider: str | None,
+    llm_kwargs: dict[str, Any] | None,
+    reasoning_effort: str | None,
+) -> dict[str, Any]:
+    provider_kwargs: dict[str, Any] = {"model": model}
+    if llm_kwargs:
+        provider_kwargs.update(llm_kwargs)
+
+    if model in SUPPORT_REASONING_EFFORT_MODELS and reasoning_effort is not None:
+        provider_kwargs["reasoning_effort"] = reasoning_effort
+
+    if model not in NO_SUPPORT_TEMPERATURE_MODELS:
+        provider_kwargs["temperature"] = temperature
+        provider_kwargs["max_tokens"] = max_tokens
+
+    if llm_provider == "openai":
+        base_url = os.environ.get("OPENAI_BASE_URL")
+        if base_url:
+            provider_kwargs["openai_api_base"] = base_url
+
+    return provider_kwargs
 
 
 async def create_chat_completion(
@@ -29,35 +62,25 @@ async def create_chat_completion(
     websocket: Any | None = None,
     llm_kwargs: dict[str, Any] | None = None,
     reasoning_effort: str | None = ReasoningEfforts.Medium.value,
-    **kwargs,
+    **kwargs: Any,
 ) -> str:
-    if model is None:
+    if not model:
         raise ValueError("Model cannot be None")
     if max_tokens is not None and max_tokens > 32001:
         raise ValueError(f"Max tokens cannot be more than 32,000, but got {max_tokens}")
 
-    provider_kwargs: dict[str, Any] = {"model": model}
-    if llm_kwargs:
-        provider_kwargs.update(llm_kwargs)
-
-    if model in SUPPORT_REASONING_EFFORT_MODELS:
-        provider_kwargs["reasoning_effort"] = reasoning_effort
-
-    if model not in NO_SUPPORT_TEMPERATURE_MODELS:
-        provider_kwargs["temperature"] = temperature
-        provider_kwargs["max_tokens"] = max_tokens
-    else:
-        provider_kwargs["temperature"] = None
-        provider_kwargs["max_tokens"] = None
-
-    if llm_provider == "openai":
-        base_url = os.environ.get("OPENAI_BASE_URL")
-        if base_url:
-            provider_kwargs["openai_api_base"] = base_url
+    provider_kwargs = _build_provider_kwargs(
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        llm_provider=llm_provider,
+        llm_kwargs=llm_kwargs,
+        reasoning_effort=reasoning_effort,
+    )
 
     provider = get_llm(llm_provider, **provider_kwargs)
-    for _ in range(10):
+    try:
         return await provider.get_chat_response(messages, stream, websocket, **kwargs)
-
-    logging.error("Failed to get response from %s API", llm_provider)
-    raise RuntimeError(f"Failed to get response from {llm_provider} API")
+    except Exception as exc:
+        logging.error("Failed to get response from %s API: %s", llm_provider, exc)
+        raise RuntimeError(f"Failed to get response from {llm_provider} API") from exc
