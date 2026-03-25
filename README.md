@@ -50,6 +50,14 @@ The review flow is usable today, but this package should not yet be treated as a
 pip install -e .
 ```
 
+## Quick Start
+
+Use Docker to build and start the backend plus the production frontend bundle:
+
+```bash
+docker-compose up --build
+```
+
 ## Usage
 
 ### CLI
