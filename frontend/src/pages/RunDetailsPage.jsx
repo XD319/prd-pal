@@ -1,4 +1,5 @@
-﻿import { Link, useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import ArtifactDownloadPanel from '../components/ArtifactDownloadPanel';
 import ClarificationPanel from '../components/ClarificationPanel';
 import ConflictResolutionPanel from '../components/ConflictResolutionPanel';
@@ -10,10 +11,20 @@ import RisksPanel from '../components/RisksPanel';
 import RunProgressCard from '../components/RunProgressCard';
 import ToolTracePanel from '../components/ToolTracePanel';
 import useReviewRun from '../hooks/useReviewRun';
+import useReviewRunSSE from '../hooks/useReviewRunSSE';
 
 function RunDetailsPage() {
   const { runId = '' } = useParams();
-  const { runState, status, result, refreshStatus, downloadArtifact, submitClarification } = useReviewRun(runId);
+  const sseRun = useReviewRunSSE(runId, { fallbackToPolling: true });
+  const { runState, status, result, refreshStatus, downloadArtifact, submitClarification } = useReviewRun(runId, {
+    externalStatusPayload: sseRun.statusPayload,
+    externalLoadError: sseRun.error,
+    disableStatusPolling: true,
+  });
+
+  useEffect(() => () => {
+    sseRun.closeConnection();
+  }, [sseRun.closeConnection]);
 
   return (
     <>
@@ -54,9 +65,11 @@ function RunDetailsPage() {
             <RunProgressCard
               runId={runId}
               status={status}
-              statusPayload={runState.statusPayload}
-              failureMessage={runState.failureMessage}
-              loadState={runState.loadState}
+              statusPayload={sseRun.statusPayload ?? runState.statusPayload}
+              failureMessage={runState.failureMessage || sseRun.error}
+              loadState={sseRun.loadState === 'loading' ? sseRun.loadState : runState.loadState}
+              isConnected={sseRun.isConnected}
+              isPolling={sseRun.isPolling}
             />
           </PanelErrorBoundary>
 
@@ -65,7 +78,7 @@ function RunDetailsPage() {
               runId={runId}
               status={status}
               resultPayload={runState.resultPayload}
-              statusPayload={runState.statusPayload}
+              statusPayload={sseRun.statusPayload ?? runState.statusPayload}
               downloadFormat={runState.downloadFormat}
               onDownload={downloadArtifact}
             />
@@ -78,7 +91,7 @@ function RunDetailsPage() {
               runId={runId}
               status={status}
               result={result}
-              statusPayload={runState.statusPayload}
+              statusPayload={sseRun.statusPayload ?? runState.statusPayload}
               resultPayload={runState.resultPayload}
               resultState={runState.resultState}
               failureMessage={runState.failureMessage}
