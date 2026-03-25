@@ -7,12 +7,14 @@ class ErrorBoundary extends Component {
     super(props);
     this.state = {
       hasError: false,
+      error: null,
     };
   }
 
-  static getDerivedStateFromError() {
+  static getDerivedStateFromError(error) {
     return {
       hasError: true,
+      error,
     };
   }
 
@@ -26,6 +28,7 @@ class ErrorBoundary extends Component {
     if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
       this.setState({
         hasError: false,
+        error: null,
       });
     }
   }
@@ -33,6 +36,7 @@ class ErrorBoundary extends Component {
   handleRetry = () => {
     this.setState({
       hasError: false,
+      error: null,
     });
   };
 
@@ -43,10 +47,26 @@ class ErrorBoundary extends Component {
       if (typeof fallback === 'function') {
         return fallback({
           retry: this.handleRetry,
+          error: this.state.error,
         });
       }
 
-      return fallback ?? null;
+      if (fallback) {
+        return fallback;
+      }
+
+      return (
+        <section className="panel panel-error-state" role="alert">
+          <div className="empty-state empty-state-compact">
+            <div className="empty-grid" />
+            <h3>Something went wrong</h3>
+            <p>{this.state.error?.message || 'An unexpected error occurred.'}</p>
+            <button type="button" className="secondary-button" onClick={this.handleRetry}>
+              Retry
+            </button>
+          </div>
+        </section>
+      );
     }
 
     return children;

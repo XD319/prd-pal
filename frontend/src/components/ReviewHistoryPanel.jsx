@@ -156,6 +156,16 @@ function ReviewHistoryPanel({ history, activeRunId, onRefresh, onOpenRun }) {
 
           {totalPages > 1 && (
             <nav className="pagination-nav" aria-label="Review history pages">
+              <button
+                type="button"
+                className="pagination-button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={currentPage === 1}
+                aria-label="Go to previous history page"
+              >
+                Previous
+              </button>
+
               {Array.from({ length: totalPages }, (_, index) => {
                 const nextPage = index + 1;
                 return (
@@ -171,6 +181,16 @@ function ReviewHistoryPanel({ history, activeRunId, onRefresh, onOpenRun }) {
                   </button>
                 );
               })}
+
+              <button
+                type="button"
+                className="pagination-button"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={currentPage === totalPages}
+                aria-label="Go to next history page"
+              >
+                Next
+              </button>
             </nav>
           )}
         </div>
