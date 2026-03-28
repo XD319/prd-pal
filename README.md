@@ -31,9 +31,19 @@ The review flow is usable today, but this package should not yet be treated as a
 - `prd_text`, `prd_path`, and local `.md` / `.txt` files remain the primary ingestion path.
 - `URLConnector` supports public `http/https` text pages.
 - `FeishuConnector` supports authenticated `feishu://...` inputs and recognized Feishu/Lark document URLs for supported `wiki`, `docx`, and legacy `docs` sources.
+- `NotionConnector` supports authenticated `notion://page/...` inputs and recognized Notion page URLs, returning normalized Markdown content from the Notion API.
 - Configure Feishu access with `MARRDP_FEISHU_APP_ID`, `MARRDP_FEISHU_APP_SECRET`, and optional `MARRDP_FEISHU_OPEN_BASE_URL`.
+- Configure Notion access with `MARRDP_NOTION_TOKEN`, and optionally override `MARRDP_NOTION_API_BASE_URL` plus `MARRDP_NOTION_API_VERSION`.
 - Controlled Feishu fetch failures are surfaced explicitly as authentication, permission, not-found, or unsupported-document-type errors in the API and MCP layers.
+- Controlled Notion fetch failures are surfaced explicitly as authentication, permission, not-found, rate-limit, or network errors in the API and MCP layers.
 - Local-file and public-URL ingestion behavior is unchanged.
+
+## Source Support
+
+- Local files: supported
+- Public URLs: supported
+- Feishu/Lark: supported
+- Notion: supported
 
 ## Repository Layout
 

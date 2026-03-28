@@ -1,32 +1,26 @@
-from dotenv import load_dotenv
 import logging
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+from requirement_review_v1.utils.logging import build_formatter, setup_logging
+
+load_dotenv()
 
 # Create logs directory if it doesn't exist
 logs_dir = Path("logs")
 logs_dir.mkdir(exist_ok=True)
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        # File handler for general application logs
-        logging.FileHandler('logs/app.log'),
-        # Stream handler for console output
-        logging.StreamHandler()
-    ]
-)
+setup_logging()
 
-# Suppress verbose fontTools logging
-logging.getLogger('fontTools').setLevel(logging.WARNING)
-logging.getLogger('fontTools.subset').setLevel(logging.WARNING)
-logging.getLogger('fontTools.ttLib').setLevel(logging.WARNING)
+file_handler = logging.FileHandler(logs_dir / "app.log", encoding="utf-8")
+file_handler.setLevel(getattr(logging, os.getenv("LOG_LEVEL", "INFO").strip().upper(), logging.INFO))
+file_handler.setFormatter(build_formatter(os.getenv("LOG_FORMAT", "human")))
+logging.getLogger().addHandler(file_handler)
 
 # Create logger instance
 logger = logging.getLogger(__name__)
-
-load_dotenv()
 
 from requirement_review_v1.server.app import app
 

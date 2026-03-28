@@ -5,6 +5,8 @@ import json
 import os
 import threading
 import time
+import uuid
+from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -14,12 +16,13 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, model_validator
 
 from requirement_review_v1.monitoring import query_audit_events
 from requirement_review_v1.run_review import make_run_id
+from requirement_review_v1.server.sse import ProgressBroadcaster
 from requirement_review_v1.service.review_service import (
     ReviewArtifactNotFoundError,
     ReviewResultNotReadyError,
@@ -32,6 +35,7 @@ from requirement_review_v1.service.review_service import (
 )
 from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 from requirement_review_v1.templates import TemplateRegistryError, list_template_records
+from requirement_review_v1.utils.logging import get_logger
 
 OUTPUTS_ROOT = Path("outputs")
 FRONTEND_DIST_ROOT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -80,6 +84,7 @@ _API_RATE_LIMIT_WINDOW_SEC_ENV = "MARRDP_API_RATE_LIMIT_WINDOW_SEC"
 _FALSE_VALUES = {"0", "false", "no", "off"}
 _submission_rate_limits: dict[str, deque[float]] = defaultdict(deque)
 _submission_rate_limit_lock = threading.Lock()
+log = get_logger("server.http")
 
 
 @dataclass(frozen=True)
@@ -235,7 +240,13 @@ class JobRecord:
         }
 
 
-app = FastAPI(title="Requirement Review V2 API", version="2.0")
+@asynccontextmanager
+async def _app_lifespan(_: FastAPI):
+    load_dotenv()
+    yield
+
+
+app = FastAPI(title="Requirement Review V2 API", version="2.0", lifespan=_app_lifespan)
 _jobs: dict[str, JobRecord] = {}
 _jobs_lock = asyncio.Lock()
 
@@ -337,6 +348,40 @@ def _rate_limit_identity(request: Request) -> str:
     return f"ip:{client_host}"
 
 
+def _client_ip(request: Request) -> str:
+    forwarded_for = str(request.headers.get("x-forwarded-for", "") or "").strip()
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    if request.client is not None and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _should_skip_request_logging(path: str) -> bool:
+    normalized = str(path or "").strip()
+    if normalized == "/health":
+        return True
+    if normalized.startswith(("/static/", "/assets/")):
+        return True
+    return normalized.endswith(
+        (
+            ".js",
+            ".css",
+            ".map",
+            ".ico",
+            ".svg",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".webp",
+            ".woff",
+            ".woff2",
+            ".ttf",
+        )
+    )
+
+
 def _enforce_submission_rate_limit(request: Request, settings: ApiSecuritySettings) -> JSONResponse | None:
     if request.method.upper() != "POST" or request.url.path != "/api/review":
         return None
@@ -369,6 +414,36 @@ def _enforce_submission_rate_limit(request: Request, settings: ApiSecuritySettin
 def _reset_submission_rate_limits() -> None:
     with _submission_rate_limit_lock:
         _submission_rate_limits.clear()
+
+
+@app.middleware("http")
+async def _request_logging_middleware(request: Request, call_next):
+    path = request.url.path
+    if _should_skip_request_logging(path):
+        return await call_next(request)
+
+    trace_id = uuid.uuid4().hex
+    started = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        status_code = response.status_code if response is not None else 500
+        log.info(
+            "request completed",
+            extra={
+                "trace_id": trace_id,
+                "method": request.method,
+                "path": path,
+                "status_code": status_code,
+                "duration_ms": duration_ms,
+                "client_ip": _client_ip(request),
+            },
+        )
+        if response is not None:
+            response.headers["X-Trace-ID"] = trace_id
 
 
 @app.middleware("http")
@@ -537,6 +612,35 @@ def _progress_percent_from_nodes(nodes: dict[str, Any] | None, *, status: str) -
     if status == "completed":
         return 100
     return percent
+
+
+def _terminal_sse_payload(run_id: str, status: str, timestamp: str, *, error: str = "") -> dict[str, Any]:
+    payload = {
+        "node": "run",
+        "status": str(status or "").strip(),
+        "timestamp": str(timestamp or "").strip() or datetime.now(timezone.utc).isoformat(),
+        "run_id": run_id,
+        "terminal": True,
+    }
+    if error:
+        payload["error"] = error
+    return payload
+
+
+def _terminal_payload_for_job(job: JobRecord) -> dict[str, Any] | None:
+    if job.status not in {"completed", "failed"}:
+        return None
+    return _terminal_sse_payload(job.run_id, job.status, job.updated_at, error=job.error)
+
+
+def _terminal_payload_for_run_dir(run_id: str, run_dir: Path) -> dict[str, Any] | None:
+    persisted = _persisted_status_payload(run_id, run_dir)
+    status = str(persisted.get("status", "") or "").strip()
+    if status not in {"completed", "failed"}:
+        return None
+    progress = persisted.get("progress", {}) if isinstance(persisted.get("progress"), dict) else {}
+    error = str(progress.get("error", "") or "")
+    return _terminal_sse_payload(run_id, status, str(persisted.get("updated_at", "") or ""), error=error)
 
 
 def _job_status_payload(job: JobRecord) -> dict[str, Any]:
@@ -780,11 +884,11 @@ async def _run_job(
     finally:
         job.updated_at = datetime.now(timezone.utc).isoformat()
         _persist_job_snapshot(job)
-
-
-@app.on_event("startup")
-async def _load_env() -> None:
-    load_dotenv()
+        ProgressBroadcaster().publish(
+            job.run_id,
+            "run_status",
+            _terminal_sse_payload(job.run_id, job.status, job.updated_at, error=job.error),
+        )
 
 
 @app.get("/api/templates")
@@ -884,6 +988,39 @@ async def get_review_status(run_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
 
     return _persisted_status_payload(run_id, run_dir)
+
+
+@app.get("/api/review/{run_id}/progress/stream")
+async def stream_review_progress(run_id: str) -> StreamingResponse:
+    async with _jobs_lock:
+        job = _jobs.get(run_id)
+
+    run_dir = OUTPUTS_ROOT / run_id
+    if job is None and not run_dir.exists():
+        raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
+
+    broadcaster = ProgressBroadcaster()
+
+    async def event_stream():
+        terminal_payload = _terminal_payload_for_job(job) if job is not None else None
+        if terminal_payload is None and job is None and run_dir.exists():
+            terminal_payload = _terminal_payload_for_run_dir(run_id, run_dir)
+        if terminal_payload is not None:
+            yield broadcaster.encode_event(terminal_payload)
+            return
+
+        async for event in broadcaster.subscribe(run_id):
+            yield event
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/review/{run_id}/clarification")

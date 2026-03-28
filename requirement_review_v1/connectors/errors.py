@@ -19,6 +19,7 @@ class ConnectorErrorCode(str, Enum):
     invalid_source = "invalid_source"
     unsupported_source = "unsupported_source"
     network_unavailable = "network_unavailable"
+    rate_limited = "rate_limited"
 
 
 class ConnectorErrorPayload(AgentSchemaModel):
@@ -97,6 +98,13 @@ class ConnectorNetworkError(ConnectorErrorMixin, ConnectionError):
     """Raised when a connector cannot reach a source or required dependency."""
 
     error_code = ConnectorErrorCode.network_unavailable
+    retryable = True
+
+
+class ConnectorRateLimitError(ConnectorNetworkError):
+    """Raised when a remote source rejects a request due to rate limiting."""
+
+    error_code = ConnectorErrorCode.rate_limited
     retryable = True
 
 

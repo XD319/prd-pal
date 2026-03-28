@@ -298,6 +298,49 @@
   gap: 0.95rem;
 }
 
+.run-progress-header-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.connection-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(19, 35, 51, 0.1);
+  color: var(--text-soft);
+  background: rgba(246, 242, 234, 0.72);
+}
+
+.connection-pill-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0.24rem rgba(19, 35, 51, 0.08);
+}
+
+.connection-pill-live {
+  color: var(--status-completed);
+  border-color: rgba(73, 185, 139, 0.25);
+  background: rgba(73, 185, 139, 0.1);
+}
+
+.connection-pill-polling {
+  color: var(--text-soft);
+  border-color: rgba(19, 35, 51, 0.12);
+  background: rgba(19, 35, 51, 0.06);
+}
+
 .stepper-header {
   display: flex;
   align-items: center;
