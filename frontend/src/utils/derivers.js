@@ -61,6 +61,29 @@ export function deriveGatingInfo(result, resultPayload) {
   };
 }
 
+
+export function deriveClarification(result) {
+  const nested = result?.parallel_review ?? {};
+  const clarification = result?.review_clarification ?? result?.clarification ?? nested.clarification ?? {};
+  const questions = asArray(clarification.questions).map((item, index) => ({
+    id: item.id ?? `clarify-${index}`,
+    question: item.question ?? `Clarification ${index + 1}`,
+    reviewer: item.reviewer ?? '',
+    ambiguityType: item.ambiguity_type ?? '',
+    findingIds: asArray(item.finding_ids),
+  }));
+  const answersApplied = asArray(clarification.answers_applied);
+  const findingsUpdated = asArray(clarification.findings_updated);
+
+  return {
+    triggered: Boolean(clarification.triggered),
+    status: String(clarification.status ?? (questions.length > 0 ? 'pending' : 'not_needed')),
+    questions,
+    answersApplied,
+    findingsUpdated,
+  };
+}
+
 export function deriveFindings(result) {
   const parallelFindings = asArray(result?.parallel_review?.findings);
   if (parallelFindings.length > 0) {
@@ -70,6 +93,10 @@ export function deriveFindings(result) {
         title: item.title ?? `Finding ${index + 1}`,
         detail: item.detail ?? item.description ?? item.summary ?? 'No detail provided.',
         severity: String(item.severity ?? 'medium').toLowerCase(),
+        originalSeverity: String(item.original_severity ?? item.severity ?? 'medium').toLowerCase(),
+        clarificationApplied: Boolean(item.clarification_applied),
+        userClarification: item.user_clarification ?? '',
+        ambiguityType: item.ambiguity_type ?? '',
         category: item.category ?? 'review',
         reviewers: asArray(item.reviewers),
         assignee: item.assignee ?? '',
@@ -95,6 +122,10 @@ export function deriveFindings(result) {
             ? issues.join(' ')
             : item.suggestions || 'The reviewer did not flag any blocking issues.',
         severity,
+        originalSeverity: severity,
+        clarificationApplied: false,
+        userClarification: '',
+        ambiguityType: '',
         category: 'review_quality',
         reviewers: ['single_reviewer'],
         assignee: '',

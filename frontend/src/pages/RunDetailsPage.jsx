@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import ArtifactDownloadPanel from '../components/ArtifactDownloadPanel';
+import ClarificationPanel from '../components/ClarificationPanel';
 import FindingsPanel from '../components/FindingsPanel';
-import OpenQuestionsPanel from '../components/OpenQuestionsPanel';
 import PanelErrorBoundary from '../components/PanelErrorBoundary';
 import ReviewerInsightsPanel from '../components/ReviewerInsightsPanel';
 import ReviewSummaryPanel from '../components/ReviewSummaryPanel';
@@ -12,7 +12,7 @@ import useReviewRun from '../hooks/useReviewRun';
 
 function RunDetailsPage() {
   const { runId = '' } = useParams();
-  const { runState, status, result, refreshStatus, downloadArtifact } = useReviewRun(runId);
+  const { runState, status, result, refreshStatus, downloadArtifact, submitClarification } = useReviewRun(runId);
 
   return (
     <>
@@ -102,8 +102,12 @@ function RunDetailsPage() {
             </PanelErrorBoundary>
           </div>
 
-          <PanelErrorBoundary panelTitle="开放问题" resetKey={`${runId}:${runState.resultState}:questions`}>
-            <OpenQuestionsPanel result={result} />
+          <PanelErrorBoundary panelTitle="Clarification Panel" resetKey={`${runId}:${runState.resultState}:questions`}>
+            <ClarificationPanel
+              result={result}
+              onSubmit={submitClarification}
+              isSubmitting={runState.clarificationState === 'submitting'}
+            />
           </PanelErrorBoundary>
         </section>
       </main>

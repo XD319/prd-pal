@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from .clarification_gate import build_clarification_payload
 from .reviewer_agents.base import ReviewFinding, ReviewerResult, normalize_severity
 
 _SEMANTIC_SIGNAL_PATTERNS: dict[str, tuple[str, ...]] = {
@@ -119,6 +120,7 @@ class AggregatedReview:
     reviewers_skipped: tuple[dict[str, str], ...]
     reviewer_count: int
     gating: dict[str, Any]
+    clarification: dict[str, Any]
     summary: dict[str, Any]
     meta: dict[str, Any]
     artifacts: AggregatedReviewArtifacts
@@ -139,6 +141,7 @@ class AggregatedReview:
             "reviewers_skipped": list(self.reviewers_skipped),
             "reviewer_count": self.reviewer_count,
             "gating": dict(self.gating),
+            "clarification": dict(self.clarification),
             "summary": dict(self.summary),
             "meta": dict(self.meta),
             "artifacts": asdict(self.artifacts),
@@ -188,6 +191,8 @@ def aggregate_review_results(
         for result in results
         if result.summary or result.reviewer_status_detail or result.notes
     )
+    findings = _apply_clarification_metadata(findings, list(reviewer_summaries))
+    clarification = build_clarification_payload(findings, list(reviewer_summaries))
     partial_review = bool(meta.get("partial_review", False))
     reviewers_completed = list(meta.get("reviewers_completed", []) or [])
     reviewers_failed = list(meta.get("reviewers_failed", []) or [])
@@ -228,6 +233,7 @@ def aggregate_review_results(
         "manual_review_required": bool(manual_review_message),
         "manual_review_message": manual_review_message,
         "gating": gating_payload,
+        "clarification": clarification,
         "summary": summary,
         "meta": meta,
         "findings": findings,
@@ -276,6 +282,7 @@ def aggregate_review_results(
         reviewers_skipped=tuple(reviewers_skipped_list),
         reviewer_count=len(results),
         gating=gating_payload,
+        clarification=clarification,
         summary=summary,
         meta=meta,
         artifacts=artifacts,
@@ -408,6 +415,10 @@ def _aggregate_findings(results: tuple[ReviewerResult, ...]) -> list[dict[str, A
                     "reviewers": [],
                     "requirement_refs": [],
                     "evidence": [],
+                    "ambiguity_type": "",
+                    "clarification_applied": False,
+                    "original_severity": "",
+                    "user_clarification": "",
                 },
             )
             bucket["severity"] = _max_severity(bucket["severity"], normalize_severity(finding.severity))
@@ -423,6 +434,38 @@ def _aggregate_findings(results: tuple[ReviewerResult, ...]) -> list[dict[str, A
                 bucket["source_reviewer"] = source_reviewer
     return list(merged.values())
 
+
+
+def _apply_clarification_metadata(
+    findings: list[dict[str, Any]],
+    reviewer_summaries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    updated_findings: list[dict[str, Any]] = []
+    for finding in findings:
+        updated = dict(finding)
+        updated.setdefault("ambiguity_type", "")
+        updated.setdefault("clarification_applied", False)
+        updated.setdefault("original_severity", "")
+        updated.setdefault("user_clarification", "")
+        updated_findings.append(updated)
+
+    for summary in reviewer_summaries:
+        reviewer = str(summary.get("reviewer", "") or "").strip().lower()
+        ambiguity_type = str(summary.get("ambiguity_type", "") or "").strip()
+        clarification_question = str(summary.get("clarification_question", "") or "").strip()
+        if not reviewer or not ambiguity_type or not clarification_question:
+            continue
+        for finding in updated_findings:
+            severity = str(finding.get("severity", "") or "").strip().lower()
+            source_reviewer = str(finding.get("source_reviewer", "") or "").strip().lower()
+            reviewers = {
+                str(item).strip().lower()
+                for item in finding.get("reviewers", [])
+                if str(item).strip()
+            }
+            if severity == "high" and (reviewer == source_reviewer or reviewer in reviewers):
+                finding["ambiguity_type"] = "unanswerable"
+    return updated_findings
 
 def _aggregate_tool_calls(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
     tool_calls: list[dict[str, Any]] = []

@@ -37,7 +37,14 @@ function FindingsPanel({ result, status, resultState }) {
                 {finding.category && <span>{finding.category}</span>}
                 {finding.reviewers.length > 0 && <span>{joinList(finding.reviewers)}</span>}
                 {finding.assignee && <span>Owner: {finding.assignee}</span>}
+                {finding.clarificationApplied && <span>Clarification updated</span>}
               </div>
+              {finding.clarificationApplied && (
+                <div className="subtle-note">
+                  Clarification applied: {finding.originalSeverity} to {finding.severity}.
+                </div>
+              )}
+              {finding.userClarification && <div className="subtle-note">User clarification: {finding.userClarification}</div>}
               {finding.action && <div className="subtle-note">Suggested action: {finding.action}</div>}
               {finding.evidence.length > 0 && (
                 <details className="evidence-panel">

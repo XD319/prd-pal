@@ -1,5 +1,6 @@
-﻿import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import {
+  answerReviewClarification,
   downloadReportArtifact,
   fetchReviewResult,
   fetchReviewStatus,
@@ -19,6 +20,7 @@ const initialRunState = {
   failureMessage: '',
   resultError: '',
   downloadFormat: '',
+  clarificationState: 'idle',
   loadState: 'idle',
   loadError: '',
 };
@@ -92,13 +94,13 @@ function useReviewRun(runId) {
     }
   }, [runId, showToast]);
 
-  const fetchCompletedResult = useCallback(async () => {
+  const fetchCompletedResult = useCallback(async ({ force = false } = {}) => {
     if (!runId) {
       return;
     }
 
     setRunState((current) => {
-      if (current.resultState === 'ready' || current.resultState === 'loading') {
+      if (!force && (current.resultState === 'ready' || current.resultState === 'loading')) {
         return current;
       }
 
@@ -144,6 +146,41 @@ function useReviewRun(runId) {
       });
     }
   }, [runId]);
+
+  const submitClarification = useCallback(async (answers) => {
+    if (!runId) {
+      return;
+    }
+
+    setRunState((current) => ({
+      ...current,
+      clarificationState: 'submitting',
+    }));
+
+    try {
+      const resultPayload = await answerReviewClarification(runId, { answers });
+      startTransition(() => {
+        setRunState((current) => ({
+          ...current,
+          resultPayload,
+          resultState: 'ready',
+          resultError: '',
+          clarificationState: 'ready',
+        }));
+      });
+      showToast(`Clarification applied for run ${runId}.`, 'success');
+      void refreshStatus({ silent: true });
+    } catch (error) {
+      const message = formatApiError(error, 'Clarification answers could not be applied.');
+      setRunState((current) => ({
+        ...current,
+        clarificationState: 'error',
+        failureMessage: current.failureMessage || message,
+        resultError: current.resultError || message,
+      }));
+      showToast(message, 'error');
+    }
+  }, [runId, refreshStatus, showToast]);
 
   useEffect(() => {
     setRunState({
@@ -241,6 +278,7 @@ function useReviewRun(runId) {
     result,
     refreshStatus,
     downloadArtifact,
+    submitClarification,
   };
 }
 

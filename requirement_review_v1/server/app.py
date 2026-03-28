@@ -23,6 +23,7 @@ from requirement_review_v1.service.review_service import (
     ReviewArtifactNotFoundError,
     ReviewResultNotReadyError,
     ReviewRunNotFoundError,
+    answer_review_clarification,
     classify_review_input_error,
     get_review_artifact_preview_payload,
     get_review_result_payload,
@@ -145,6 +146,15 @@ class ReviewCreateRequest(BaseModel):
         if has_text == has_path:
             raise ValueError("Provide source, or exactly one of prd_text or prd_path.")
         return self
+
+
+class ClarificationAnswerItem(BaseModel):
+    question_id: str
+    answer: str
+
+
+class ClarificationAnswerRequest(BaseModel):
+    answers: list[ClarificationAnswerItem]
 
 
 @dataclass
@@ -585,6 +595,31 @@ async def get_review_status(run_id: str) -> dict[str, Any]:
             "run_trace": str(run_dir / "run_trace.json"),
         },
     }
+
+
+@app.post("/api/review/{run_id}/clarification")
+async def submit_review_clarification(run_id: str, payload: ClarificationAnswerRequest) -> dict[str, Any]:
+    try:
+        return answer_review_clarification(
+            run_id=run_id,
+            answers=[item.model_dump(mode="python") for item in payload.answers],
+            outputs_root=OUTPUTS_ROOT,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc)},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "clarification_unavailable", "message": str(exc), "run_id": run_id},
+        ) from exc
+    except TypeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_clarification_payload", "message": str(exc), "run_id": run_id},
+        ) from exc
 
 
 @app.get("/api/review/{run_id}/result")
