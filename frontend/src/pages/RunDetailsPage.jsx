@@ -87,7 +87,7 @@ function RunDetailsPage() {
 
           <div className="panel-grid panel-grid-two-up">
             <PanelErrorBoundary panelTitle="Reviewer Insights" resetKey={`${runId}:${runState.resultState}:reviewer-insights`}>
-              <ReviewerInsightsPanel result={result} />
+              <ReviewerInsightsPanel result={result} resultPayload={runState.resultPayload} />
             </PanelErrorBoundary>
             <PanelErrorBoundary panelTitle="Tool Trace" resetKey={`${runId}:${runState.resultState}:tool-trace`}>
               <ToolTracePanel result={result} />
@@ -121,4 +121,3 @@ function RunDetailsPage() {
 }
 
 export default RunDetailsPage;
-

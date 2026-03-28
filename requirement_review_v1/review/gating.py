@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .normalizer import normalize_requirement
+from .normalizer import NormalizedRequirement, normalize_requirement
 
 ReviewMode = Literal["auto", "quick", "full"]
 SelectedMode = Literal["quick", "full", "skip"]
@@ -92,11 +92,12 @@ def decide_review_mode(
     config: GatingConfig | None = None,
     *,
     requested_mode: ReviewMode = "auto",
+    normalized_requirement: NormalizedRequirement | None = None,
 ) -> ReviewModeDecision:
     """Choose review depth based on size, structure, risk, and cross-system signals."""
 
     resolved_config = config or GatingConfig()
-    normalized = normalize_requirement(prd_text)
+    normalized = normalized_requirement or normalize_requirement(prd_text)
     text = normalized.source_text
 
     length_chars = len(text)

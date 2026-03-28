@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable, Mapping
 
 from .aggregator import aggregate_review_results
 from .gating import ReviewModeDecision
+from .memory_store import MemoryHit
 from .normalizer import NormalizedRequirement, build_reviewer_inputs, normalize_requirement
 from .reviewer_agents import ReviewerConfig, ReviewerResult, review_engineering, review_product, review_qa, review_security
 
@@ -46,6 +47,10 @@ def run_parallel_review(
     reviewer_config: ReviewerConfig | None = None,
     reviewer_timeouts: Mapping[str, float] | None = None,
     gating_decision: ReviewModeDecision | None = None,
+    normalized_requirement: NormalizedRequirement | None = None,
+    memory_hits: list[MemoryHit] | None = None,
+    normalizer_cache_hit: bool = False,
+    rag_enabled: bool = False,
 ) -> ParallelReviewResult:
     return asyncio.run(
         run_parallel_review_async(
@@ -54,6 +59,10 @@ def run_parallel_review(
             reviewer_config=reviewer_config,
             reviewer_timeouts=reviewer_timeouts,
             gating_decision=gating_decision,
+            normalized_requirement=normalized_requirement,
+            memory_hits=memory_hits,
+            normalizer_cache_hit=normalizer_cache_hit,
+            rag_enabled=rag_enabled,
         )
     )
 
@@ -65,8 +74,13 @@ async def run_parallel_review_async(
     reviewer_config: ReviewerConfig | None = None,
     reviewer_timeouts: Mapping[str, float] | None = None,
     gating_decision: ReviewModeDecision | None = None,
+    normalized_requirement: NormalizedRequirement | None = None,
+    memory_hits: list[MemoryHit] | None = None,
+    normalizer_cache_hit: bool = False,
+    rag_enabled: bool = False,
 ) -> ParallelReviewResult:
-    normalized = normalize_requirement(prd_text)
+    normalized = normalized_requirement or normalize_requirement(prd_text)
+    selected_memory_hits = list(memory_hits or [])
     selection = select_reviewers(normalized)
     reviewer_inputs = {
         "product": normalized.for_reviewer("general"),
@@ -95,6 +109,10 @@ async def run_parallel_review_async(
         reviewers_used=selection.reviewers_used,
         reviewers_skipped=selection.reviewers_skipped,
         normalized_requirement=_normalized_requirement_dict(normalized),
+        memory_hits=[item.to_dict() for item in selected_memory_hits],
+        similar_reviews_referenced=[item.reference_id for item in selected_memory_hits],
+        normalizer_cache_hit=normalizer_cache_hit,
+        rag_enabled=rag_enabled,
     )
     return ParallelReviewResult(
         normalized_requirement=_normalized_requirement_dict(normalized),

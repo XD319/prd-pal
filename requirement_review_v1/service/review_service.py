@@ -1,4 +1,4 @@
-﻿"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
+"""Reusable review service API for CLI/FastAPI/MCP entrypoints."""
 
 from __future__ import annotations
 
@@ -868,6 +868,14 @@ async def review_prd_text_async(
     mode = overrides.get("mode")
     if isinstance(mode, str) and mode.strip():
         run_review_kwargs["mode"] = mode.strip()
+    if "review_memory_path" in overrides:
+        run_review_kwargs["review_memory_path"] = overrides.get("review_memory_path")
+    if "review_memory_enabled" in overrides:
+        run_review_kwargs["review_memory_enabled"] = overrides.get("review_memory_enabled")
+    if "review_memory_seeds_dir" in overrides:
+        run_review_kwargs["review_memory_seeds_dir"] = overrides.get("review_memory_seeds_dir")
+    if "normalizer_cache_path" in overrides:
+        run_review_kwargs["normalizer_cache_path"] = overrides.get("normalizer_cache_path")
     run_output = await run_review(**run_review_kwargs)
     if source_context:
         run_output.update(source_context)
@@ -1619,12 +1627,67 @@ def _derive_review_report_path(summary: ReviewResultSummary, report_payload: dic
     return summary.report_json_path or summary.report_md_path
 
 
+
+def _derive_memory_hits(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    direct = report_payload.get("memory_hits")
+    if isinstance(direct, list):
+        return [dict(item) for item in direct if isinstance(item, dict)]
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    direct = parallel_review.get("memory_hits")
+    if isinstance(direct, list):
+        return [dict(item) for item in direct if isinstance(item, dict)]
+
+    parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
+    direct = parallel_review_meta.get("memory_hits")
+    if isinstance(direct, list):
+        return [dict(item) for item in direct if isinstance(item, dict)]
+    return []
+
+
+def _derive_similar_reviews_referenced(report_payload: dict[str, Any]) -> list[str]:
+    for source in (
+        report_payload,
+        _extract_parallel_review_payload(report_payload),
+        _extract_parallel_review_meta_from_report(report_payload),
+    ):
+        direct = source.get("similar_reviews_referenced") if isinstance(source, dict) else None
+        if isinstance(direct, list):
+            return [str(item) for item in direct if str(item).strip()]
+    return []
+
+
+def _derive_normalizer_cache_hit(report_payload: dict[str, Any]) -> bool:
+    for source in (
+        report_payload,
+        _extract_parallel_review_payload(report_payload),
+        _extract_parallel_review_meta_from_report(report_payload),
+    ):
+        if isinstance(source, dict) and "normalizer_cache_hit" in source:
+            return bool(source.get("normalizer_cache_hit"))
+    return False
+
+
+def _derive_rag_enabled(report_payload: dict[str, Any]) -> bool:
+    for source in (
+        report_payload,
+        _extract_parallel_review_payload(report_payload),
+        _extract_parallel_review_meta_from_report(report_payload),
+    ):
+        if isinstance(source, dict) and "rag_enabled" in source:
+            return bool(source.get("rag_enabled"))
+    return False
+
 def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str, Any]:
     report_payload = _load_json_object(Path(summary.report_json_path))
     meta = _extract_parallel_review_meta_from_report(report_payload)
     gating = _derive_gating(report_payload)
     reviewers_used = _derive_reviewers_used(report_payload)
     reviewers_skipped = _derive_reviewers_skipped(report_payload)
+    memory_hits = _derive_memory_hits(report_payload)
+    similar_reviews_referenced = _derive_similar_reviews_referenced(report_payload)
+    normalizer_cache_hit = _derive_normalizer_cache_hit(report_payload)
+    rag_enabled = _derive_rag_enabled(report_payload)
     return {
         "review_id": summary.run_id,
         "run_id": summary.run_id,
@@ -1634,6 +1697,9 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
         "conflicts": _derive_review_conflicts(report_payload),
         "tool_calls": _derive_review_tool_calls(report_payload),
         "reviewer_insights": _derive_reviewer_insights(report_payload),
+        "memory_hits": memory_hits,
+        "similar_reviews_referenced": similar_reviews_referenced,
+        "normalizer_cache_hit": normalizer_cache_hit,
         "report_path": _derive_review_report_path(summary, report_payload),
         "review_mode": _derive_review_mode(report_payload),
         "mode": _derive_review_mode(report_payload),
@@ -1649,12 +1715,15 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
             "clarification": _derive_clarification(report_payload),
             "tool_calls": _derive_review_tool_calls(report_payload),
             "reviewer_insights": _derive_reviewer_insights(report_payload),
+            "memory_hits": memory_hits,
+            "memory_hit_count": len(memory_hits),
+            "similar_reviews_referenced": similar_reviews_referenced,
+            "normalizer_cache_hit": normalizer_cache_hit,
+            "rag_enabled": rag_enabled,
             **({"summary": report_payload.get("summary")} if isinstance(report_payload.get("summary"), dict) else {}),
             **meta,
         },
     }
-
-
 async def _review_summary_for_mcp_async(
     *,
     prd_text: str | None,
@@ -1681,6 +1750,9 @@ async def _review_summary_for_mcp_async(
     mode = resolved_options.get("mode")
     if isinstance(mode, str) and mode.strip():
         config_overrides["mode"] = mode.strip()
+    for option_key in ("review_memory_path", "review_memory_enabled", "review_memory_seeds_dir", "normalizer_cache_path"):
+        if option_key in resolved_options:
+            config_overrides[option_key] = resolved_options.get(option_key)
 
     summary = await review_prd_text_async(
         prd_text=prd_text,
@@ -1771,6 +1843,11 @@ def review_prd_for_mcp(
             )
         )
     raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
+
+
+
+
+
 
 
 
