@@ -56,6 +56,13 @@ export function fetchReviewResult(runId) {
   return requestJson(`/api/review/${encodeURIComponent(runId)}/result`);
 }
 
+export function answerReviewClarification(runId, payload) {
+  return requestJson(`/api/review/${encodeURIComponent(runId)}/clarification`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchArtifactPreview(runId, artifactKey) {
   return requestJson(`/api/review/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactKey)}`);
 }

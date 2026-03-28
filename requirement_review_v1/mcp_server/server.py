@@ -25,6 +25,7 @@ from requirement_review_v1.service.execution_service import (
 )
 from requirement_review_v1.service.report_service import get_report_for_mcp
 from requirement_review_v1.service.review_service import (
+    answer_review_clarification_for_mcp,
     approve_handoff_for_mcp,
     classify_review_input_error,
     generate_delivery_bundle_for_mcp,
@@ -116,6 +117,32 @@ async def review_requirement(
         if classified_error is not None:
             return _review_requirement_error_response(classified_error["code"], classified_error["message"])
         return _review_requirement_error_response("INTERNAL_ERROR", f"review_requirement failed: {exc}")
+
+@mcp.tool()
+def answer_review_clarification(
+    run_id: str,
+    answers: list[dict[str, Any]],
+    options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Apply user clarification answers to the persisted review result and return the refreshed facade payload."""
+    try:
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="answer_review_clarification")
+        return answer_review_clarification_for_mcp(
+            run_id=run_id,
+            answers=answers,
+            options=audited_options,
+        )
+    except FileNotFoundError as exc:
+        return {"run_id": str(run_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+    except (TypeError, ValueError) as exc:
+        return {"run_id": str(run_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+    except Exception as exc:
+        return {
+            "run_id": str(run_id or ""),
+            "error": {"code": "internal_error", "message": f"answer_review_clarification failed: {exc}"},
+        }
+
 
 @mcp.tool()
 def get_report(

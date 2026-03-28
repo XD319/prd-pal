@@ -12,6 +12,8 @@ from time import perf_counter
 from typing import Any
 
 from requirement_review_v1.connectors import ConnectorRegistry, get_connector_error_payload
+from requirement_review_v1.review.aggregator import _render_review_report, _render_summary
+from requirement_review_v1.review.clarification_gate import apply_clarification_answers, build_clarification_payload
 from requirement_review_v1.connectors.feishu import (
     FeishuAuthenticationError,
     FeishuDocumentNotFoundError,
@@ -206,6 +208,7 @@ def get_review_result_payload(
         "status": status,
         "mode": mode,
         "gating": gating,
+        "clarification": _derive_clarification(result) if isinstance(result, dict) else {},
         "reviewers_used": reviewers_used,
         "reviewers_skipped": reviewers_skipped,
         "result": result,
@@ -383,6 +386,10 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _resolve_outputs_root(outputs_root: str | Path = "outputs") -> Path:
@@ -1393,6 +1400,132 @@ def _derive_reviewer_insights(report_payload: dict[str, Any]) -> list[dict[str, 
     return []
 
 
+def _derive_clarification(report_payload: dict[str, Any]) -> dict[str, Any]:
+    clarification = report_payload.get("clarification")
+    if isinstance(clarification, dict):
+        return dict(clarification)
+
+    review_clarification = report_payload.get("review_clarification")
+    if isinstance(review_clarification, dict):
+        return dict(review_clarification)
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    clarification = parallel_review.get("clarification")
+    if isinstance(clarification, dict):
+        return dict(clarification)
+
+    findings = _derive_review_findings(report_payload)
+    reviewer_summaries = _derive_reviewer_insights(report_payload)
+    return build_clarification_payload(findings, reviewer_summaries)
+
+
+def _normalize_clarification_answers(answers: Any) -> list[dict[str, str]]:
+    if not isinstance(answers, list):
+        raise TypeError("answers must be a list")
+
+    normalized: list[dict[str, str]] = []
+    for item in answers:
+        if not isinstance(item, dict):
+            raise TypeError("each clarification answer must be an object")
+        question_id = str(item.get("question_id", "") or "").strip()
+        answer = str(item.get("answer", "") or "").strip()
+        if not question_id or not answer:
+            raise ValueError("each clarification answer must include question_id and answer")
+        normalized.append({"question_id": question_id, "answer": answer})
+    return normalized
+
+
+def _resolve_parallel_artifact_path(run_dir: Path, parallel_review: dict[str, Any], key: str, fallback_name: str) -> Path:
+    artifacts = parallel_review.get("artifacts") if isinstance(parallel_review.get("artifacts"), dict) else {}
+    raw_path = str(artifacts.get(key, "") or "").strip()
+    candidate = Path(raw_path) if raw_path else run_dir / fallback_name
+    if not candidate.is_absolute():
+        candidate = run_dir / candidate
+    return candidate.resolve()
+
+
+def _persist_parallel_review_refresh(run_dir: Path, report_payload: dict[str, Any]) -> None:
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    if not parallel_review:
+        return
+
+    review_result_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_result_json", "review_result.json")
+    review_report_json_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_report_json", "review_report.json")
+    review_report_md_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_report_md", "review_report.md")
+    review_summary_md_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_summary_md", "review_summary.md")
+
+    _write_json_object(review_result_path, parallel_review)
+    _write_json_object(review_report_json_path, parallel_review)
+    review_report_md_path.write_text(_render_review_report(parallel_review), encoding="utf-8")
+    review_summary_md_path.write_text(_render_summary(parallel_review), encoding="utf-8")
+
+
+def answer_review_clarification(
+    *,
+    run_id: str,
+    answers: list[dict[str, Any]],
+    outputs_root: str | Path = "outputs",
+) -> dict[str, Any]:
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    report_path = run_dir / "report.json"
+    report_payload = _load_json_object(report_path)
+    if not report_payload:
+        raise FileNotFoundError(f"report.json not found for run_id={run_id}")
+
+    normalized_answers = _normalize_clarification_answers(answers)
+    clarification = _derive_clarification(report_payload)
+    if not clarification.get("triggered"):
+        raise ValueError(f"clarification gate not active for run_id={run_id}")
+
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    if parallel_review:
+        current_findings = _copy_dict_list(parallel_review.get("findings"))
+        updated_findings, updated_clarification = apply_clarification_answers(current_findings, clarification, normalized_answers)
+        parallel_review["findings"] = updated_findings
+        parallel_review["clarification"] = updated_clarification
+        report_payload["parallel_review"] = parallel_review
+    else:
+        current_findings = _copy_dict_list(report_payload.get("findings"))
+        updated_findings, updated_clarification = apply_clarification_answers(current_findings, clarification, normalized_answers)
+        if current_findings:
+            report_payload["findings"] = updated_findings
+
+    report_payload["clarification"] = updated_clarification
+    report_payload["review_clarification"] = updated_clarification
+
+    if isinstance(report_payload.get("parallel_review_meta"), dict):
+        report_payload["parallel_review_meta"]["clarification_status"] = updated_clarification.get("status", "not_needed")
+    if isinstance(report_payload.get("parallel-review_meta"), dict):
+        report_payload["parallel-review_meta"]["clarification_status"] = updated_clarification.get("status", "not_needed")
+
+    _write_json_object(report_path, report_payload)
+    _persist_parallel_review_refresh(run_dir, report_payload)
+    return get_review_result_payload(run_id=run_id, outputs_root=outputs_root)
+
+
+def answer_review_clarification_for_mcp(
+    *,
+    run_id: str,
+    answers: list[dict[str, Any]],
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolved_options = options or {}
+    if not isinstance(resolved_options, dict):
+        raise TypeError("options must be an object")
+    outputs_root = resolved_options.get("outputs_root", "outputs")
+    answer_review_clarification(run_id=run_id, answers=answers, outputs_root=outputs_root)
+    summary = ReviewResultSummary(
+        run_id=run_id,
+        report_md_path=str(Path(outputs_root) / run_id / "report.md"),
+        report_json_path=str(Path(outputs_root) / run_id / "report.json"),
+        high_risk_ratio=0.0,
+        coverage_ratio=0.0,
+        revision_round=0,
+        status="completed",
+    )
+    return _build_review_requirement_payload(summary)
+
+
 def _derive_review_conflicts(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
     conflicts = _copy_dict_list(report_payload.get("conflicts"))
     if conflicts:
@@ -1507,11 +1640,13 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
         "gating": gating,
         "reviewers_used": reviewers_used,
         "reviewers_skipped": reviewers_skipped,
+        "clarification": _derive_clarification(report_payload),
         "meta": {
             "review_mode": _derive_review_mode(report_payload),
             "gating": gating,
             "reviewers_used": reviewers_used,
             "reviewers_skipped": reviewers_skipped,
+            "clarification": _derive_clarification(report_payload),
             "tool_calls": _derive_review_tool_calls(report_payload),
             "reviewer_insights": _derive_reviewer_insights(report_payload),
             **({"summary": report_payload.get("summary")} if isinstance(report_payload.get("summary"), dict) else {}),
