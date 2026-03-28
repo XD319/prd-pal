@@ -17,13 +17,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
 COPY requirement_review_v1/ ./requirement_review_v1/
 COPY review_runtime/ ./review_runtime/
+COPY README.md LICENSE NOTICE pyproject.toml main.py ./
+RUN pip install --no-cache-dir .
+
 COPY data/ ./data/
-COPY main.py pyproject.toml ./
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 
 ENV PYTHONUNBUFFERED=1

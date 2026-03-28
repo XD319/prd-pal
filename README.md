@@ -60,6 +60,8 @@ The review flow is usable today, but this package should not yet be treated as a
 pip install -e .
 ```
 
+`requirements.txt` remains as a thin compatibility wrapper around `pyproject.toml`, so package metadata and dependencies only need to be maintained in one place.
+
 ## Quick Start
 
 Use Docker to build and start the backend plus the production frontend bundle:
