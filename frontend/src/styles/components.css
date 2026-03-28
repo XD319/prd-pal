@@ -513,3 +513,57 @@
   color: var(--status-queued-text);
 }
 
+.metric-delta-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-md);
+}
+
+.metric-delta-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.metric-delta-header strong {
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+}
+
+.metric-delta-range {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.metric-delta-badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.metric-delta-positive .metric-delta-badge,
+.metric-delta-badge-positive {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-text);
+}
+
+.metric-delta-negative .metric-delta-badge,
+.metric-delta-badge-negative {
+  background: var(--status-failed-bg);
+  color: var(--status-failed-text);
+}
+
+.metric-delta-neutral .metric-delta-badge,
+.metric-delta-badge-neutral {
+  background: var(--status-idle-bg);
+  color: var(--status-idle-text);
+}
+

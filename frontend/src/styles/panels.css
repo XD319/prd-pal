@@ -386,3 +386,229 @@
 .trace-subtitle {
   color: var(--text-soft);
 }
+
+.comparison-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.comparison-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.diff-table {
+  width: 100%;
+  min-width: 44rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.diff-table th,
+.diff-table td {
+  padding: 0.9rem 1rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(19, 35, 51, 0.08);
+}
+
+.diff-table th {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+}
+
+.diff-row-removed {
+  background: rgba(73, 185, 139, 0.12);
+}
+
+.diff-row-added {
+  background: rgba(217, 101, 81, 0.12);
+}
+
+.diff-row-changed {
+  background: rgba(242, 176, 76, 0.16);
+}
+
+.diff-status {
+  font-weight: 700;
+}
+
+.diff-status-removed {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-text);
+}
+
+.diff-status-added {
+  background: var(--status-failed-bg);
+  color: var(--status-failed-text);
+}
+
+.diff-status-changed {
+  background: var(--status-running-bg);
+  color: var(--status-running-text);
+}
+
+.diff-status-unchanged {
+  background: var(--status-idle-bg);
+  color: var(--status-idle-text);
+}
+
+.risk-compare-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.risk-compare-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(19, 35, 51, 0.08);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-md);
+}
+
+.risk-compare-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.risk-compare-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.risk-compare-column {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgba(19, 35, 51, 0.04);
+}
+
+.risk-compare-column span,
+.trend-axis-note span,
+.trend-top-issues > span {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+.risk-compare-column p {
+  margin: 0.5rem 0 0;
+  line-height: 1.6;
+}
+
+.trend-chart-shell {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.trend-axis-note,
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.trend-chart-card {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(19, 35, 51, 0.02));
+  border: 1px solid rgba(19, 35, 51, 0.08);
+}
+
+.trend-chart {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.trend-grid-line {
+  stroke: rgba(19, 35, 51, 0.12);
+  stroke-width: 1;
+}
+
+.trend-line {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-line-findings,
+.trend-dot-findings {
+  stroke: #c7513a;
+  fill: #c7513a;
+}
+
+.trend-line-coverage,
+.trend-dot-coverage {
+  stroke: #1f7d67;
+  fill: #1f7d67;
+}
+
+.trend-label {
+  font-size: 11px;
+  fill: var(--text-soft);
+}
+
+.trend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-soft);
+}
+
+.trend-swatch {
+  width: 1.1rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.trend-swatch-findings {
+  background: #c7513a;
+}
+
+.trend-swatch-coverage {
+  background: #1f7d67;
+}
+
+.trend-top-issues {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 1180px) {
+  .comparison-summary-grid,
+  .comparison-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 780px) {
+  .risk-compare-head,
+  .risk-compare-columns,
+  .trend-axis-note,
+  .trend-legend {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .diff-table {
+    min-width: 36rem;
+  }
+}

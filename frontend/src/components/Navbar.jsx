@@ -32,6 +32,8 @@ function MoonIcon() {
 function Navbar({ theme, onToggleTheme }) {
   const location = useLocation();
   const isHistoryActive = location.pathname === '/' && location.hash === '#history';
+  const isCompareActive = location.pathname === '/compare';
+  const isTrendsActive = location.pathname === '/trends';
   const isDark = theme === 'dark';
 
   return (
@@ -62,6 +64,20 @@ function Navbar({ theme, onToggleTheme }) {
             >
               History
             </Link>
+            <NavLink
+              to="/compare"
+              className={`nav-link${isCompareActive ? ' nav-link-active' : ''}`}
+              aria-label="Open run comparison"
+            >
+              对比
+            </NavLink>
+            <NavLink
+              to="/trends"
+              className={`nav-link${isTrendsActive ? ' nav-link-active' : ''}`}
+              aria-label="Open trend analysis"
+            >
+              趋势
+            </NavLink>
           </nav>
 
           <button

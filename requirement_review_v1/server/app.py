@@ -33,6 +33,11 @@ from requirement_review_v1.service.review_service import (
     get_review_result_payload,
     review_prd_text_async,
 )
+from requirement_review_v1.service.comparison_service import (
+    compare_runs,
+    get_run_stats_summary,
+    get_trend_data,
+)
 from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 from requirement_review_v1.templates import TemplateRegistryError, list_template_records
 from requirement_review_v1.utils.logging import get_logger
@@ -1103,6 +1108,26 @@ async def get_review_artifact_preview(run_id: str, artifact_key: str) -> dict[st
             status_code=500,
             detail={"code": "invalid_artifact_preview", "message": str(exc), "run_id": run_id},
         ) from exc
+
+
+@app.get("/api/compare")
+async def compare_review_runs(run_a: str = Query(...), run_b: str = Query(...)) -> dict[str, Any]:
+    try:
+        return compare_runs(run_id_a=run_a, run_id_b=run_b, outputs_root=OUTPUTS_ROOT).model_dump(mode="json")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "run_not_found", "message": str(exc)}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "invalid_compare_request", "message": str(exc)}) from exc
+
+
+@app.get("/api/trends")
+async def get_review_trends(limit: int = Query(default=20, ge=1, le=200)) -> dict[str, Any]:
+    return get_trend_data(outputs_root=OUTPUTS_ROOT, limit=limit).model_dump(mode="json")
+
+
+@app.get("/api/stats")
+async def get_review_stats() -> dict[str, Any]:
+    return get_run_stats_summary(outputs_root=OUTPUTS_ROOT).model_dump(mode="json")
 
 
 @app.get("/api/report/{run_id}")

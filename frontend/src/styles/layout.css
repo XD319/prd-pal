@@ -239,6 +239,11 @@
   grid-template-columns: minmax(18rem, 0.74fr) minmax(0, 1.26fr);
 }
 
+.comparison-layout,
+.trend-layout {
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 1.2fr);
+}
+
 .stack,
 .stack-wide,
 .panel-grid,
@@ -285,6 +290,8 @@
   .hero,
   .workspace-grid-home,
   .workspace-grid-detail,
+  .comparison-layout,
+  .trend-layout,
   .panel-grid-two-up {
     grid-template-columns: 1fr;
   }

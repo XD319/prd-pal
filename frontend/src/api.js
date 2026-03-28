@@ -95,6 +95,22 @@ export function fetchRuns() {
   return requestJson('/api/runs');
 }
 
+export function fetchComparison(runA, runB) {
+  const params = new URLSearchParams({
+    run_a: runA,
+    run_b: runB,
+  });
+  return requestJson(`/api/compare?${params.toString()}`);
+}
+
+export function fetchTrendData(limit = 20) {
+  return requestJson(`/api/trends?limit=${encodeURIComponent(limit)}`);
+}
+
+export function fetchStatsSummary() {
+  return requestJson('/api/stats');
+}
+
 export async function downloadReportArtifact(runId, format) {
   const response = await fetchWithTimeout(`/api/report/${encodeURIComponent(runId)}?format=${encodeURIComponent(format)}`, {
     timeoutMs: 20000,

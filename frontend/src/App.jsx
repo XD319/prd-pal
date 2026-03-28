@@ -7,6 +7,8 @@ import HomePage from './pages/HomePage';
 import './styles/layout.css';
 
 const RunDetailsPage = lazy(() => import('./pages/RunDetailsPage'));
+const ComparisonPage = lazy(() => import('./pages/ComparisonPage'));
+const TrendsPage = lazy(() => import('./pages/TrendsPage'));
 
 function AppLayout() {
   const location = useLocation();
@@ -54,6 +56,22 @@ function App() {
           element={(
             <Suspense fallback={<RouteLoadingFallback />}>
               <RunDetailsPage />
+            </Suspense>
+          )}
+        />
+        <Route
+          path="compare"
+          element={(
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <ComparisonPage />
+            </Suspense>
+          )}
+        />
+        <Route
+          path="trends"
+          element={(
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <TrendsPage />
             </Suspense>
           )}
         />
