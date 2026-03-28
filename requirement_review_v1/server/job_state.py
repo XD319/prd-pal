@@ -384,8 +384,12 @@ def job_status_payload(job: JobRecord) -> dict[str, Any]:
 
 def persist_job_snapshot(job: JobRecord) -> None:
     job.run_dir.mkdir(parents=True, exist_ok=True)
-    progress_snapshot_path(job.run_dir).write_text(
-        json.dumps(job_status_payload(job), ensure_ascii=False, indent=2),
+    write_job_snapshot(job.run_dir, job_status_payload(job))
+
+
+def write_job_snapshot(run_dir: Path, payload: dict[str, Any]) -> None:
+    progress_snapshot_path(run_dir).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -522,6 +526,35 @@ def persisted_status_payload(run_id: str, run_dir: Path) -> dict[str, Any]:
     progress.setdefault("current_node", "")
     progress["updated_at"] = updated_at
     payload["progress"] = progress
+    return payload
+
+
+def hydrate_job_record(run_dir: Path, payload: dict[str, Any] | None = None) -> JobRecord | None:
+    hydrated = payload or read_progress_snapshot(run_dir)
+    if not isinstance(hydrated, dict):
+        return None
+
+    run_id = str(hydrated.get("run_id", run_dir.name) or run_dir.name)
+    progress = hydrated.get("progress") if isinstance(hydrated.get("progress"), dict) else {}
+    nodes = ordered_nodes_payload(progress.get("nodes"))
+    error_payload = hydrated.get("error") if isinstance(hydrated.get("error"), dict) else {}
+    return JobRecord(
+        run_id=run_id,
+        run_dir=run_dir,
+        status=str(hydrated.get("status", "failed") or "failed"),
+        current_node=str(progress.get("current_node", "") or ""),
+        created_at=str(hydrated.get("created_at", "") or datetime.now(timezone.utc).isoformat()),
+        updated_at=str(hydrated.get("updated_at", "") or datetime.now(timezone.utc).isoformat()),
+        error=str(error_payload.get("message", "") or progress.get("error", "") or ""),
+        error_code=str(error_payload.get("code", "") or ""),
+        report_paths=dict(hydrated.get("report_paths", {}) or {}) if isinstance(hydrated.get("report_paths"), dict) else {},
+        node_progress=nodes or {name: {"status": "pending", "runs": 0} for name in TRACKED_NODES},
+    )
+
+
+def normalize_persisted_job(run_id: str, run_dir: Path) -> dict[str, Any]:
+    payload = persisted_status_payload(run_id, run_dir)
+    write_job_snapshot(run_dir, payload)
     return payload
 
 

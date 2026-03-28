@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from requirement_review_v1.monitoring import query_audit_events
 from requirement_review_v1.run_review import make_run_id
+from requirement_review_v1.server.job_registry import JobRegistry
 from requirement_review_v1.server.job_state import (
     ClarificationAnswerRequest,
     JobRecord,
@@ -68,12 +69,14 @@ log = get_logger("server.http")
 @asynccontextmanager
 async def _app_lifespan(_: FastAPI):
     load_dotenv()
+    await _job_registry.recover()
     yield
 
 
 app = FastAPI(title="Requirement Review V2 API", version="2.0", lifespan=_app_lifespan)
-_jobs: dict[str, JobRecord] = {}
-_jobs_lock = asyncio.Lock()
+_job_registry = JobRegistry(lambda: OUTPUTS_ROOT)
+_jobs = _job_registry.jobs
+_jobs_lock = _job_registry.lock
 
 
 async def _run_job(
@@ -211,8 +214,7 @@ def list_audit_events_endpoint(
 
 @app.get("/api/runs")
 async def list_runs() -> dict[str, Any]:
-    async with _jobs_lock:
-        jobs = dict(_jobs)
+    jobs = await _job_registry.snapshot()
 
     if not OUTPUTS_ROOT.exists() or not OUTPUTS_ROOT.is_dir():
         return {"count": 0, "runs": []}
@@ -247,15 +249,13 @@ async def create_review(payload: ReviewCreateRequest) -> dict[str, str]:
     task = asyncio.create_task(_run_job(job, **review_inputs, llm_options=llm_options))
     job.task = task
 
-    async with _jobs_lock:
-        _jobs[run_id] = job
+    await _job_registry.register(job)
     return {"run_id": run_id}
 
 
 @app.get("/api/review/{run_id}")
 async def get_review_status(run_id: str) -> dict[str, Any]:
-    async with _jobs_lock:
-        job = _jobs.get(run_id)
+    job = await _job_registry.get(run_id)
 
     if job:
         return _job_status_payload(job)
@@ -269,8 +269,7 @@ async def get_review_status(run_id: str) -> dict[str, Any]:
 
 @app.get("/api/review/{run_id}/progress/stream")
 async def stream_review_progress(run_id: str) -> StreamingResponse:
-    async with _jobs_lock:
-        job = _jobs.get(run_id)
+    job = await _job_registry.get(run_id)
 
     run_dir = OUTPUTS_ROOT / run_id
     if job is None and not run_dir.exists():
@@ -339,9 +338,7 @@ async def get_review_result(run_id: str) -> dict[str, Any]:
             detail={"code": "run_not_found", "message": str(exc)},
         ) from exc
     except ReviewResultNotReadyError as exc:
-        async with _jobs_lock:
-            job = _jobs.get(run_id)
-
+        job = await _job_registry.get(run_id)
         detail = _result_unavailable_detail(run_id, job, outputs_root=OUTPUTS_ROOT)
         if detail.get("code") == "result_not_ready":
             detail["message"] = str(exc)
@@ -367,9 +364,7 @@ async def get_review_artifact_preview(run_id: str, artifact_key: str) -> dict[st
             detail={"code": "run_not_found", "message": str(exc)},
         ) from exc
     except ReviewResultNotReadyError as exc:
-        async with _jobs_lock:
-            job = _jobs.get(run_id)
-
+        job = await _job_registry.get(run_id)
         detail = _result_unavailable_detail(run_id, job, outputs_root=OUTPUTS_ROOT)
         if detail.get("code") == "result_not_ready":
             detail["message"] = str(exc)

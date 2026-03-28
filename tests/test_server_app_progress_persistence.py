@@ -131,3 +131,20 @@ def test_get_review_status_counts_failed_stages_toward_progress_percent(tmp_path
     assert response.status_code == 200
     assert response.json()['progress']['percent'] == 55
     app_module._jobs.clear()
+
+
+def test_app_lifespan_recovers_persisted_jobs_into_registry(tmp_path, monkeypatch):
+    run_id = '20260311T144151Z'
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    _write_progress_snapshot(run_dir, run_id)
+
+    monkeypatch.setattr(app_module, 'OUTPUTS_ROOT', tmp_path)
+    app_module._jobs.clear()
+
+    with TestClient(app_module.app):
+        assert run_id in app_module._jobs
+        assert app_module._jobs[run_id].status == 'failed'
+        assert 'no longer active' in app_module._jobs[run_id].error
+
+    app_module._jobs.clear()
