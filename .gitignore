@@ -17,12 +17,17 @@ venv.bak/
 outputs/
 *.lock
 dist/
+*.egg-info/
 
 #Ignore my local docs
 my-docs/
 
 #Ignore pycache
 **/__pycache__/
+.pytest_cache/
+.pytest-run-*/
+.pytest-tmp/
+.test-tmp/
 
 #Ignore mypy cache
 .mypy_cache/

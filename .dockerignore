@@ -1,5 +1,10 @@
 node_modules/
 __pycache__/
+.pytest_cache/
+.pytest-run-*/
+.pytest-tmp/
+.test-tmp/
+*.egg-info/
 .env
 outputs/
 logs/
