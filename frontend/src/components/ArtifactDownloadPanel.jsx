@@ -4,6 +4,13 @@ import '../styles/panels.css';
 import '../styles/components.css';
 import { pluralize } from '../utils/formatters';
 
+const DOWNLOAD_FORMAT_OPTIONS = [
+  { value: 'md', label: 'Markdown (.md)' },
+  { value: 'json', label: 'JSON (.json)' },
+  { value: 'html', label: 'HTML (.html)' },
+  { value: 'csv', label: 'CSV (.csv)' },
+];
+
 function getPreviewFormat(path) {
   const normalized = String(path ?? '').toLowerCase();
   if (normalized.endsWith('.md') || normalized.endsWith('.markdown')) {
@@ -19,6 +26,7 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
   const artifactPaths = resultPayload?.artifact_paths ?? statusPayload?.report_paths ?? {};
   const artifactKeys = Object.keys(artifactPaths);
   const canDownload = Boolean(runId) && status === 'completed';
+  const [selectedFormat, setSelectedFormat] = useState('md');
   const [previewState, setPreviewState] = useState({
     artifactKey: '',
     status: 'idle',
@@ -125,27 +133,33 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
       </div>
 
       <p className="panel-copy">
-        Download the canonical review report as Markdown or JSON after the run completes. Additional artifact paths are listed for inspection.
+        Download the canonical review report as Markdown, JSON, HTML, or CSV after the run completes. Additional artifact paths are listed for inspection.
       </p>
 
       <div className="action-row">
+        <label className="field-label" htmlFor="artifact-download-format">
+          Export format
+        </label>
+        <select
+          id="artifact-download-format"
+          className="input"
+          value={selectedFormat}
+          onChange={(event) => setSelectedFormat(event.target.value)}
+          disabled={!canDownload || Boolean(downloadFormat)}
+          aria-label="Select report export format"
+        >
+          {DOWNLOAD_FORMAT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
         <button
           type="button"
           className="primary-button"
-          disabled={!canDownload || downloadFormat === 'md'}
-          onClick={() => onDownload('md')}
-          aria-label={downloadFormat === 'md' ? 'Downloading markdown report' : 'Download markdown report'}
+          disabled={!canDownload || downloadFormat === selectedFormat}
+          onClick={() => onDownload(selectedFormat)}
+          aria-label={downloadFormat === selectedFormat ? `Downloading ${selectedFormat.toUpperCase()} report` : `Download ${selectedFormat.toUpperCase()} report`}
         >
-          {downloadFormat === 'md' ? 'Downloading Markdown...' : 'Download Markdown'}
-        </button>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={!canDownload || downloadFormat === 'json'}
-          onClick={() => onDownload('json')}
-          aria-label={downloadFormat === 'json' ? 'Downloading JSON report' : 'Download JSON report'}
-        >
-          {downloadFormat === 'json' ? 'Downloading JSON...' : 'Download JSON'}
+          {downloadFormat === selectedFormat ? `Downloading ${selectedFormat.toUpperCase()}...` : `Download ${selectedFormat.toUpperCase()}`}
         </button>
       </div>
 

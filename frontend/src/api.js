@@ -116,7 +116,13 @@ export async function downloadReportArtifact(runId, format) {
     timeoutMs: 20000,
     headers: {},
   });
-  const fallbackName = format === 'json' ? 'report.json' : 'report.md';
+  const fallbackNameByFormat = {
+    md: 'report.md',
+    json: 'report.json',
+    html: 'report.html',
+    csv: 'report.csv',
+  };
+  const fallbackName = fallbackNameByFormat[format] ?? 'report.md';
 
   if (!response.ok) {
     let payload = null;
