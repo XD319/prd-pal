@@ -641,6 +641,17 @@ CLAUDE_CODE_ADAPTER_PROMPT_TEMPLATE = AdapterPromptTemplate(
     section_order=BASE_SECTION_ORDER,
 )
 
+OPENCLAW_ADAPTER_PROMPT_TEMPLATE = AdapterPromptTemplate(
+    template_id="adapter.openclaw.handoff_markdown",
+    template_type="adapter_prompt",
+    version="handoff_markdown_v1",
+    description="Markdown handoff template tailored for OpenClaw execution requests.",
+    agent_name="OpenClaw",
+    role_summary="Use the execution pack as the source of truth, implement the intended change set, and keep verification scope explicit for local-agent execution.",
+    output_hint="Return a concise implementation summary, the changed files, and the validation scope you covered.",
+    section_order=BASE_SECTION_ORDER,
+)
+
 PRD_REVIEW_REPORT_TEMPLATE = DeliveryArtifactTemplate(
     template_id="delivery_artifact.prd_review_report",
     template_type="delivery_artifact_template",
@@ -868,6 +879,7 @@ for _template in (
     CLAUDE_CODE_PROMPT_GENERATION_REVIEW_PROMPT,
     CODEX_ADAPTER_PROMPT_TEMPLATE,
     CLAUDE_CODE_ADAPTER_PROMPT_TEMPLATE,
+    OPENCLAW_ADAPTER_PROMPT_TEMPLATE,
     PRD_REVIEW_REPORT_TEMPLATE,
     OPEN_QUESTIONS_TEMPLATE,
     SCOPE_BOUNDARY_TEMPLATE,

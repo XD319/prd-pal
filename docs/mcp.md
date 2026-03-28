@@ -43,6 +43,10 @@ These are the primary tools to emphasize:
   - Surfaces controlled Feishu connector failures with explicit error codes such as `AUTHENTICATION_FAILED`, `PERMISSION_DENIED`, `DOCUMENT_NOT_FOUND`, and `UNSUPPORTED_DOCUMENT_TYPE`
 - `get_report`
   - Fetches `report.md` or `report.json` for a completed run
+- `prepare_agent_handoff`
+  - Prepares adapter-specific request payloads for `codex`, `claude_code`, or `openclaw`
+  - Accepts either `run_id` or fresh PRD inputs (`source`, `prd_text`, `prd_path`)
+  - Returns request file paths, context paths, prompt paths, and structured request payloads
 
 Recommended first integration flow:
 
@@ -50,6 +54,7 @@ Recommended first integration flow:
 2. Call `review_requirement`
 3. Use the returned `review_id` or `run_id`
 4. Call `get_report`
+5. Optionally call `prepare_agent_handoff` when a downstream coding agent should continue from the reviewed artifacts
 
 Feishu source setup:
 
@@ -78,6 +83,18 @@ Then fetch the report:
   "arguments": {
     "run_id": "20260309T000000Z",
     "format": "md"
+  }
+}
+```
+
+Prepare all supported downstream handoffs from the same run:
+
+```json
+{
+  "tool": "prepare_agent_handoff",
+  "arguments": {
+    "run_id": "20260309T000000Z",
+    "agent": "all"
   }
 }
 ```

@@ -41,7 +41,7 @@ def test_list_templates_endpoint_supports_version_filter() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["count"] == 2
+    assert payload["count"] == 3
     assert {item["version"] for item in payload["templates"]} == {"handoff_markdown_v1"}
 
 

@@ -139,7 +139,7 @@ def client_ip(request: Request) -> str:
 
 def should_skip_request_logging(path: str) -> bool:
     normalized = str(path or "").strip()
-    if normalized == "/health":
+    if normalized in {"/health", "/ready"}:
         return True
     if normalized.startswith(("/static/", "/assets/")):
         return True

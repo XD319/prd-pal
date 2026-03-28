@@ -37,6 +37,9 @@ test = [
   "pytest-asyncio>=0.23.0"
 ]
 
+[project.scripts]
+prd-review = "requirement_review_v1.main:run_cli"
+
 [tool.setuptools.packages.find]
 include = ["requirement_review_v1*", "review_runtime*"]
 

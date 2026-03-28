@@ -751,6 +751,33 @@ async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_
 
 
 @pytest.mark.asyncio
+async def test_prepare_agent_handoff_returns_requests_for_all_supported_agents(tmp_path):
+    bundle_id = _write_approved_bundle_fixture(tmp_path)
+    run_dir = tmp_path / "20260307T010206Z"
+
+    result = await mcp_server.prepare_agent_handoff(
+        run_id="20260307T010206Z",
+        agent="all",
+        options={"outputs_root": str(tmp_path)},
+    )
+
+    by_agent = {item["agent"]: item for item in result["requests"]}
+
+    assert "error" not in result
+    assert result["bundle_id"] == bundle_id
+    assert result["status"] == "prepared"
+    assert result["request_count"] == 3
+    assert {item["agent"] for item in result["requests"]} == {"codex", "claude_code", "openclaw"}
+    assert (run_dir / "codex_request.json").exists()
+    assert (run_dir / "claude_code_request.json").exists()
+    assert (run_dir / "openclaw_request.json").exists()
+    assert by_agent["openclaw"]["source_pack_type"] == "implementation_pack"
+    assert by_agent["openclaw"]["request"]["request_type"] == "openclaw.run_pack"
+    assert by_agent["openclaw"]["request"]["input"]["verification_scope"]
+    assert Path(by_agent["openclaw"]["context_path"]).exists()
+
+
+@pytest.mark.asyncio
 async def test_handoff_to_executor_returns_invalid_input_when_adapter_is_missing(tmp_path, monkeypatch):
     bundle_id = _write_approved_bundle_fixture(tmp_path, run_id="20260307T010207Z")
     original_router = execution_service.ExecutorRouter
@@ -992,7 +1019,7 @@ def test_get_template_registry_supports_type_and_id_filters() -> None:
 
     assert "error" not in by_type
     assert by_type["template_type"] == "adapter_prompt"
-    assert by_type["count"] == 2
+    assert by_type["count"] == 3
     assert {item["template_type"] for item in by_type["templates"]} == {"adapter_prompt"}
     assert "error" not in by_id
     assert by_id["count"] == 1

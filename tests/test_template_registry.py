@@ -31,11 +31,13 @@ def test_registry_returns_versioned_review_templates() -> None:
 
 def test_registry_returns_versioned_adapter_templates() -> None:
     codex = get_adapter_prompt_template("adapter.codex.handoff_markdown")
+    openclaw = get_adapter_prompt_template("adapter.openclaw.handoff_markdown")
 
     assert codex.template_type == "adapter_prompt"
     assert codex.version == "handoff_markdown_v1"
     assert codex.agent_name == "Codex"
     assert codex.section_order
+    assert openclaw.agent_name == "OpenClaw"
 
 
 def test_registry_returns_delivery_artifact_templates_with_renderers() -> None:
@@ -74,6 +76,7 @@ def test_registry_supports_default_version_and_type_lookups() -> None:
     assert {template.template_id for template in adapter_templates} == {
         "adapter.claude_code.handoff_markdown",
         "adapter.codex.handoff_markdown",
+        "adapter.openclaw.handoff_markdown",
     }
 
 

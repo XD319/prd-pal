@@ -11,6 +11,7 @@ from requirement_review_v1.packs.schemas import ExecutionPack
 from .templates import (
     CLAUDE_CODE_PROMPT_TEMPLATE,
     CODEX_PROMPT_TEMPLATE,
+    OPENCLAW_PROMPT_TEMPLATE,
     PromptTemplate,
 )
 
@@ -153,3 +154,10 @@ def render_claude_code_prompt(execution_pack: ExecutionPack | BaseModel | dict[s
 
     pack = _as_execution_pack(execution_pack)
     return _render_prompt(pack, CLAUDE_CODE_PROMPT_TEMPLATE, prompt_source="validation")
+
+
+def render_openclaw_prompt(execution_pack: ExecutionPack | BaseModel | dict[str, Any]) -> str:
+    """Render a Markdown prompt tailored for OpenClaw."""
+
+    pack = _as_execution_pack(execution_pack)
+    return _render_prompt(pack, OPENCLAW_PROMPT_TEMPLATE, prompt_source="implementation")

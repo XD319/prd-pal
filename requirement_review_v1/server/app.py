@@ -67,16 +67,27 @@ log = get_logger("server.http")
 
 
 @asynccontextmanager
-async def _app_lifespan(_: FastAPI):
+async def _app_lifespan(app: FastAPI):
     load_dotenv()
+    OUTPUTS_ROOT.mkdir(parents=True, exist_ok=True)
     await _job_registry.recover()
+    app.state.startup_completed = True
     yield
+    app.state.startup_completed = False
 
 
 app = FastAPI(title="Requirement Review V2 API", version="2.0", lifespan=_app_lifespan)
 _job_registry = JobRegistry(lambda: OUTPUTS_ROOT)
 _jobs = _job_registry.jobs
 _jobs_lock = _job_registry.lock
+
+
+def _outputs_root_writable() -> bool:
+    OUTPUTS_ROOT.mkdir(parents=True, exist_ok=True)
+    probe_path = OUTPUTS_ROOT / ".ready-probe"
+    probe_path.write_text("ok", encoding="utf-8")
+    probe_path.unlink(missing_ok=True)
+    return True
 
 
 async def _run_job(
@@ -163,6 +174,43 @@ async def _handle_unexpected_error(_: Request, exc: Exception) -> JSONResponse:
         code="internal_server_error",
         message=f"The server could not process the request: {type(exc).__name__}.",
     )
+
+
+@app.get("/health")
+def healthcheck() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "status": "healthy",
+        "service": "requirement-review-v1",
+    }
+
+
+@app.get("/ready")
+def readiness_check() -> JSONResponse:
+    startup_completed = bool(getattr(app.state, "startup_completed", False))
+    outputs_writable = False
+    errors: list[str] = []
+
+    try:
+        outputs_writable = _outputs_root_writable()
+    except Exception as exc:
+        errors.append(f"outputs_root_unwritable: {exc}")
+
+    ready = startup_completed and outputs_writable
+    payload = {
+        "ok": ready,
+        "status": "ready" if ready else "not_ready",
+        "service": "requirement-review-v1",
+        "checks": {
+            "startup_completed": startup_completed,
+            "outputs_root_writable": outputs_writable,
+            "frontend_available": FRONTEND_DIST_ROOT.exists(),
+        },
+        "errors": errors,
+    }
+    if ready:
+        return JSONResponse(status_code=200, content=payload)
+    return JSONResponse(status_code=503, content=payload)
 
 
 @app.get("/api/templates")

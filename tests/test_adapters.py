@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from requirement_review_v1.adapters import BaseAdapter, ClaudeCodeAdapter, CodexAdapter
+from requirement_review_v1.adapters import BaseAdapter, ClaudeCodeAdapter, CodexAdapter, OpenClawAdapter
 from requirement_review_v1.execution import ExecutionMode, ExecutionTask, ExecutionTaskStatus
 from requirement_review_v1.packs import build_execution_pack
 from requirement_review_v1.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
@@ -221,3 +221,23 @@ def test_claude_code_adapter_build_prompt_and_context_generation(tmp_path: Path)
     assert "`bundle-adapter-001`" in context
     assert "Prompt rendering includes validation details" in context
     assert "# Claude Code Handoff Prompt" in context
+
+
+def test_openclaw_adapter_request_payload_contains_verification_scope(tmp_path: Path) -> None:
+    bundle = _make_bundle(tmp_path)
+    task = _make_task("openclaw", "implementation_pack")
+
+    request = OpenClawAdapter().create_execution_request(task, bundle)
+
+    assert request["adapter"] == "openclaw"
+    assert request["request_type"] == "openclaw.run_pack"
+    assert request["input"]["verification_scope"] == [
+        "codex request builder",
+        "claude_code request builder",
+    ]
+    assert request["input"]["edge_cases"] == [
+        "Missing execution pack file",
+        "Executor type mismatch",
+    ]
+    assert request["input"]["handoff_strategy"] == "sequential"
+    assert request["prompt"].startswith("# OpenClaw Handoff Prompt")

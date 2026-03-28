@@ -25,6 +25,7 @@ The review flow is usable today, but this package should not yet be treated as a
 - Aggregation of reviewer findings, risks, open questions, and conflicts
 - Review artifact generation for both human-readable and machine-readable outputs
 - CLI, FastAPI, and MCP entrypoints centered on producing review results
+- Agent handoff preparation for Codex, Claude Code, and OpenClaw
 
 ## Supported Input Boundaries
 
@@ -77,7 +78,19 @@ docker-compose up --build
 Run one review from a local file:
 
 ```bash
+python -m requirement_review_v1.main review --input docs/sample_prd.md
+```
+
+Legacy single-command usage remains available:
+
+```bash
 python -m requirement_review_v1.main --input docs/sample_prd.md
+```
+
+Prepare downstream agent handoff requests from an existing run:
+
+```bash
+python -m requirement_review_v1.main prepare-handoff --run-id 20260309T000000Z --agent all --json
 ```
 
 ### Review Engine Entry Points
@@ -119,8 +132,11 @@ Core review tools:
 - `review_requirement`
 - `review_prd`
 - `get_report`
+- `prepare_agent_handoff`
 
 Use `review_requirement` when you want the review engine contract: `findings`, `open_questions`, `risk_items`, `conflicts`, `report_path`, and `review_mode`.
+
+Use `prepare_agent_handoff` when you want adapter-specific request payloads for `codex`, `claude_code`, or `openclaw`, either from an existing `run_id` or directly from fresh PRD input.
 
 The MCP server may also expose compatibility or governance-oriented tools, but the stable review-engine contract is centered on the tools above.
 
@@ -168,6 +184,8 @@ In current code, surrounding workflow nodes such as parser, planner, risk analys
 
 - `docs/review-engine-positioning.md`: review-engine positioning and boundaries
 - `docs/mcp.md`: MCP usage, with the review tools first
+- `docs/agent-integration-plan.md`: recommended CLI + MCP integration contract for coding agents
+- `docs/deployment-guide.md`: local-vs-cloud rollout and container deployment guidance
 - `docs/v2-api.md`: FastAPI usage centered on review endpoints
 - `docs/review-engine-release-prompts.md`: phased implementation prompts for frontend and release-gap work
 

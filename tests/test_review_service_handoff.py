@@ -33,6 +33,7 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_
         "execution_pack",
         "codex_prompt",
         "claude_code_prompt",
+        "openclaw_prompt",
         "prd_review_report",
         "open_questions",
         "scope_boundary",

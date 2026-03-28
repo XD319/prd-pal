@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
+from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
 from requirement_review_v1.packs import ExecutionPackBuilder
 from requirement_review_v1.service.review_service import build_handoff_prompts
 
@@ -101,6 +101,15 @@ def test_render_claude_code_prompt_contains_validation_handoff_instructions() ->
     assert "Regression checks stay green" in prompt
 
 
+def test_render_openclaw_prompt_contains_local_agent_guidance() -> None:
+    prompt = render_openclaw_prompt(_build_execution_pack())
+
+    assert prompt.startswith("# OpenClaw Handoff Prompt")
+    assert "verification scope" in prompt
+    assert "Add SSO callback handler" in prompt
+    assert "Expired state token" in prompt
+
+
 def test_renderers_tolerate_missing_target_modules_and_risk_summary() -> None:
     pack = _build_execution_pack(
         implementation_plan={
@@ -139,6 +148,7 @@ def test_build_handoff_prompts_writes_expected_markdown_files(tmp_path: Path) ->
     assert prompt_paths == {
         "codex_prompt": str(tmp_path / "codex_prompt.md"),
         "claude_code_prompt": str(tmp_path / "claude_code_prompt.md"),
+        "openclaw_prompt": str(tmp_path / "openclaw_prompt.md"),
     }
     for path_str in prompt_paths.values():
         path = Path(path_str)
@@ -150,3 +160,4 @@ def test_build_handoff_prompts_writes_expected_markdown_files(tmp_path: Path) ->
     assert renderer_trace["template_version"] == "handoff_markdown_v1"
     assert renderer_trace["templates"]["codex_prompt"]["template_id"] == "adapter.codex.handoff_markdown"
     assert renderer_trace["templates"]["claude_code_prompt"]["template_id"] == "adapter.claude_code.handoff_markdown"
+    assert renderer_trace["templates"]["openclaw_prompt"]["template_id"] == "adapter.openclaw.handoff_markdown"

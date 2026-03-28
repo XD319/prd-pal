@@ -30,6 +30,7 @@ from requirement_review_v1.service.review_service import (
     classify_review_input_error,
     generate_delivery_bundle_for_mcp,
     get_review_workspace_for_mcp,
+    prepare_agent_handoff_for_mcp_async,
     review_prd_for_mcp_async,
     review_requirement_for_mcp_async,
 )
@@ -117,6 +118,60 @@ async def review_requirement(
         if classified_error is not None:
             return _review_requirement_error_response(classified_error["code"], classified_error["message"])
         return _review_requirement_error_response("INTERNAL_ERROR", f"review_requirement failed: {exc}")
+
+
+@mcp.tool()
+async def prepare_agent_handoff(
+    agent: Literal["all", "codex", "claude_code", "openclaw"] = "all",
+    run_id: str | None = None,
+    source: str | None = None,
+    prd_text: str | None = None,
+    prd_path: str | None = None,
+    options: dict[str, Any] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Prepare adapter-specific request payloads for downstream coding agents."""
+    try:
+        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="prepare_agent_handoff")
+        client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
+        return await prepare_agent_handoff_for_mcp_async(
+            agent=agent,
+            run_id=run_id,
+            prd_text=prd_text,
+            prd_path=prd_path,
+            source=source,
+            options=audited_options,
+            invocation_meta={"client_metadata": client_meta} if client_meta else {},
+        )
+    except FileNotFoundError as exc:
+        return _prepare_agent_handoff_error_response(run_id=run_id, agent=agent, code="NOT_FOUND", message=str(exc))
+    except NotImplementedError as exc:
+        return _prepare_agent_handoff_error_response(run_id=run_id, agent=agent, code="NOT_IMPLEMENTED", message=str(exc))
+    except (TypeError, ValueError) as exc:
+        classified_error = _review_input_error_response(exc)
+        if classified_error is not None:
+            return _prepare_agent_handoff_error_response(
+                run_id=run_id,
+                agent=agent,
+                code=classified_error["code"],
+                message=classified_error["message"],
+            )
+        return _prepare_agent_handoff_error_response(run_id=run_id, agent=agent, code="INVALID_INPUT", message=str(exc))
+    except Exception as exc:
+        classified_error = _review_input_error_response(exc)
+        if classified_error is not None:
+            return _prepare_agent_handoff_error_response(
+                run_id=run_id,
+                agent=agent,
+                code=classified_error["code"],
+                message=classified_error["message"],
+            )
+        return _prepare_agent_handoff_error_response(
+            run_id=run_id,
+            agent=agent,
+            code="INTERNAL_ERROR",
+            message=f"prepare_agent_handoff failed: {exc}",
+        )
 
 @mcp.tool()
 def answer_review_clarification(
@@ -611,6 +666,32 @@ def _review_requirement_error_response(code: str, message: str) -> dict[str, Any
         "gating": {},
         "reviewers_used": [],
         "reviewers_skipped": [],
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    }
+
+
+def _prepare_agent_handoff_error_response(
+    *,
+    run_id: str | None,
+    agent: str,
+    code: str,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "run_id": str(run_id or ""),
+        "bundle_id": "",
+        "status": "failed",
+        "agent_selection": str(agent or "all"),
+        "request_count": 0,
+        "requests": [],
+        "paths": {
+            "run_dir": "",
+            "delivery_bundle_path": "",
+            "execution_pack_path": "",
+        },
         "error": {
             "code": code,
             "message": message,

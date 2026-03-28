@@ -25,12 +25,22 @@ from requirement_review_v1.execution import (
 from requirement_review_v1.monitoring import append_audit_event, normalize_audit_context, retry_metadata_for_status
 from requirement_review_v1.notifications import NotificationType, dispatch_notification
 from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
-from requirement_review_v1.service.review_service import _load_json_object, _locate_bundle_path, _resolve_outputs_root
+from requirement_review_v1.service.review_service import (
+    _load_json_object,
+    _locate_bundle_path,
+    _resolve_outputs_root,
+    _resolve_run_dir,
+)
 from requirement_review_v1.workspace import ReviewWorkspaceRepository
 
 TASKS_FILENAME = "execution_tasks.json"
 TRACEABILITY_FILENAME = "traceability_map.json"
 RUN_TRACE_FILENAME = "run_trace.json"
+_HANDOFF_AGENT_TO_PACK: dict[str, str] = {
+    "codex": "implementation_pack",
+    "claude_code": "test_pack",
+    "openclaw": "implementation_pack",
+}
 
 
 def _utc_now_iso() -> str:
@@ -257,6 +267,147 @@ def _materialize_adapter_requests(tasks: list[ExecutionTask], bundle: DeliveryBu
             )
         )
     return materialized_tasks
+
+
+def _normalize_agent_selection(agent: str) -> str:
+    normalized = str(agent or "all").strip().lower().replace("-", "_").replace(" ", "_")
+    alias_map = {
+        "all": "all",
+        "codex": "codex",
+        "claude_code": "claude_code",
+        "claude": "claude_code",
+        "openclaw": "openclaw",
+    }
+    try:
+        return alias_map[normalized]
+    except KeyError as exc:
+        allowed = ", ".join(sorted(alias_map))
+        raise ValueError(f"agent must be one of: {allowed}") from exc
+
+
+def _selected_agents(agent: str) -> list[str]:
+    normalized = _normalize_agent_selection(agent)
+    if normalized == "all":
+        return ["codex", "claude_code", "openclaw"]
+    return [normalized]
+
+
+def _build_prepare_handoff_tasks(
+    bundle: DeliveryBundle,
+    *,
+    agent: str,
+    execution_mode: ExecutionMode,
+) -> list[ExecutionTask]:
+    now = _utc_now_iso()
+    tasks: list[ExecutionTask] = []
+    for executor_type in _selected_agents(agent):
+        source_pack_type = _HANDOFF_AGENT_TO_PACK[executor_type]
+        artifact_ref = getattr(bundle.artifacts, source_pack_type, None)
+        if artifact_ref is None or not str(artifact_ref.path or "").strip():
+            raise FileNotFoundError(f"{source_pack_type} is unavailable for agent '{executor_type}'")
+        task_id = f"{bundle.bundle_id}:{executor_type}:{source_pack_type}"
+        tasks.append(
+            ExecutionTask(
+                task_id=task_id,
+                bundle_id=bundle.bundle_id,
+                source_pack_type=source_pack_type,
+                executor_type=executor_type,
+                execution_mode=execution_mode,
+                created_at=now,
+                updated_at=now,
+                execution_log=[
+                    ExecutionEvent(
+                        event_id=f"{task_id}:prepared",
+                        timestamp=now,
+                        event_type="prepared",
+                        detail=f"Prepared handoff request for {executor_type}",
+                        actor="agent_handoff",
+                    )
+                ],
+                metadata={
+                    "artifact_path": str(artifact_ref.path),
+                    "preview_only": True,
+                    "generated_via": "prepare_agent_handoff",
+                },
+            )
+        )
+    return tasks
+
+
+def _prompt_path_for_agent(run_dir: Path, agent: str) -> str:
+    prompt_path = run_dir / f"{agent}_prompt.md"
+    return str(prompt_path) if prompt_path.exists() else ""
+
+
+def prepare_agent_handoff_for_run_for_mcp(
+    *,
+    run_id: str,
+    agent: str = "all",
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolved_options = _validate_options(options)
+    audit_context = _resolve_audit_context(resolved_options)
+    outputs_root = resolved_options.get("outputs_root", "outputs")
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    bundle_path = run_dir / "delivery_bundle.json"
+    if not bundle_path.exists():
+        raise FileNotFoundError(f"delivery_bundle.json not found for run_id={run_id}")
+
+    bundle = DeliveryBundle.model_validate(_load_json_object(bundle_path))
+    execution_mode = _resolve_mode(str(resolved_options.get("execution_mode", "agent_assisted") or "agent_assisted"))
+    materialized_tasks = _materialize_adapter_requests(
+        _build_prepare_handoff_tasks(bundle, agent=agent, execution_mode=execution_mode),
+        bundle,
+        run_dir,
+    )
+
+    requests: list[dict[str, Any]] = []
+    for task in materialized_tasks:
+        adapter_artifacts = task.metadata.get("adapter_artifacts") if isinstance(task.metadata, dict) else {}
+        request_path = Path(str(adapter_artifacts.get("request_path", "") or "").strip())
+        context_path = str(adapter_artifacts.get("context_path", "") or "").strip()
+        request_payload = _load_json_object(request_path) if request_path.name else {}
+        requests.append(
+            {
+                "agent": task.executor_type,
+                "task_id": task.task_id,
+                "source_pack_type": task.source_pack_type,
+                "request_type": str(adapter_artifacts.get("request_type", "") or ""),
+                "request_path": str(request_path),
+                "context_path": context_path,
+                "prompt_path": _prompt_path_for_agent(run_dir, task.executor_type),
+                "request": request_payload,
+            }
+        )
+
+    _append_audit_event_safe(
+        run_dir,
+        operation="prepare_agent_handoff",
+        status="prepared",
+        run_id=str(bundle.source_run_id),
+        bundle_id=str(bundle.bundle_id),
+        audit_context=audit_context,
+        details={
+            "agent_selection": _normalize_agent_selection(agent),
+            "request_count": len(requests),
+            "agents": [item["agent"] for item in requests],
+        },
+        retry=retry_metadata_for_status(status="prepared", non_blocking=False),
+    )
+
+    return {
+        "run_id": str(bundle.source_run_id),
+        "bundle_id": str(bundle.bundle_id),
+        "status": "prepared",
+        "agent_selection": _normalize_agent_selection(agent),
+        "request_count": len(requests),
+        "requests": requests,
+        "paths": {
+            "run_dir": str(run_dir),
+            "delivery_bundle_path": str(bundle_path),
+            "execution_pack_path": str(bundle.artifacts.execution_pack.path or ""),
+        },
+    }
 
 
 def _load_task_context(task_id: str, outputs_root: str | Path) -> tuple[Path, DeliveryBundle, list[ExecutionTask], int]:

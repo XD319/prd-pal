@@ -6,6 +6,7 @@ from .execution_service import (
     get_traceability_for_mcp,
     handoff_to_executor_for_mcp,
     list_execution_tasks_for_mcp,
+    prepare_agent_handoff_for_run_for_mcp,
     update_execution_task_for_mcp,
 )
 from .review_service import (
@@ -13,6 +14,7 @@ from .review_service import (
     answer_review_clarification,
     answer_review_clarification_for_mcp,
     get_review_workspace_for_mcp,
+    prepare_agent_handoff_for_mcp_async,
     review_prd_for_mcp,
     review_prd_for_mcp_async,
     review_prd_text,
@@ -30,6 +32,8 @@ __all__ = [
     "get_traceability_for_mcp",
     "handoff_to_executor_for_mcp",
     "list_execution_tasks_for_mcp",
+    "prepare_agent_handoff_for_mcp_async",
+    "prepare_agent_handoff_for_run_for_mcp",
     "review_prd_for_mcp",
     "review_prd_for_mcp_async",
     "review_prd_text",

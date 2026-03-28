@@ -5,10 +5,12 @@ from __future__ import annotations
 from .base import BaseAdapter
 from .claude_code import ClaudeCodeAdapter
 from .codex import CodexAdapter
+from .openclaw import OpenClawAdapter
 
 ADAPTER_REGISTRY = {
     "codex": CodexAdapter,
     "claude_code": ClaudeCodeAdapter,
+    "openclaw": OpenClawAdapter,
 }
 
 
@@ -28,5 +30,6 @@ __all__ = [
     "BaseAdapter",
     "ClaudeCodeAdapter",
     "CodexAdapter",
+    "OpenClawAdapter",
     "get_adapter",
 ]

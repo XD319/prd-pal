@@ -20,7 +20,7 @@ from requirement_review_v1.connectors.feishu import (
     FeishuPermissionDeniedError,
     FeishuUnsupportedDocumentTypeError,
 )
-from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt
+from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
 from requirement_review_v1.templates import get_adapter_prompt_template
 from requirement_review_v1.monitoring import append_audit_event, retry_metadata_for_status
 from requirement_review_v1.notifications import NotificationType, dispatch_notification
@@ -565,6 +565,7 @@ def build_handoff_prompts(
 ) -> dict[str, str]:
     codex_prompt_template = get_adapter_prompt_template("adapter.codex.handoff_markdown")
     claude_code_prompt_template = get_adapter_prompt_template("adapter.claude_code.handoff_markdown")
+    openclaw_prompt_template = get_adapter_prompt_template("adapter.openclaw.handoff_markdown")
     renderer_trace: dict[str, Any] = {
         "start": _utc_now_iso(),
         "end": "",
@@ -574,6 +575,7 @@ def build_handoff_prompts(
         "templates": {
             "codex_prompt": codex_prompt_template.trace_metadata(),
             "claude_code_prompt": claude_code_prompt_template.trace_metadata(),
+            "openclaw_prompt": openclaw_prompt_template.trace_metadata(),
         },
         "output_paths": {},
         "error_message": "",
@@ -602,6 +604,7 @@ def build_handoff_prompts(
         render_targets = (
             ("codex_prompt", output_dir / "codex_prompt.md", render_codex_prompt),
             ("claude_code_prompt", output_dir / "claude_code_prompt.md", render_claude_code_prompt),
+            ("openclaw_prompt", output_dir / "openclaw_prompt.md", render_openclaw_prompt),
         )
         render_failures: list[str] = []
 
@@ -1905,6 +1908,45 @@ async def review_requirement_for_mcp_async(
         invocation_meta=invocation_meta,
     )
     return _build_review_requirement_payload(summary)
+
+
+async def prepare_agent_handoff_for_mcp_async(
+    *,
+    agent: str = "all",
+    run_id: str | None = None,
+    prd_text: str | None,
+    prd_path: str | None,
+    source: str | None,
+    options: dict[str, Any] | None = None,
+    invocation_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolved_options = options or {}
+    if not isinstance(resolved_options, dict):
+        raise TypeError("options must be an object")
+
+    resolved_run_id = str(run_id or resolved_options.get("run_id", "") or "").strip()
+    if not resolved_run_id:
+        summary = await _review_summary_for_mcp_async(
+            prd_text=prd_text,
+            prd_path=prd_path,
+            source=source,
+            options=resolved_options,
+            invocation_meta=invocation_meta,
+        )
+        resolved_run_id = summary.run_id
+
+    outputs_root = str(resolved_options.get("outputs_root", "outputs"))
+    delivery_bundle_path = Path(outputs_root) / resolved_run_id / "delivery_bundle.json"
+    if not delivery_bundle_path.exists():
+        generate_delivery_bundle_for_mcp(run_id=resolved_run_id, options=resolved_options)
+
+    from requirement_review_v1.service.execution_service import prepare_agent_handoff_for_run_for_mcp
+
+    return prepare_agent_handoff_for_run_for_mcp(
+        run_id=resolved_run_id,
+        agent=agent,
+        options=resolved_options,
+    )
 
 def review_prd_for_mcp(
     *,
