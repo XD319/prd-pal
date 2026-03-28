@@ -182,12 +182,10 @@ In current code, surrounding workflow nodes such as parser, planner, risk analys
 
 ## Related Docs
 
-- `docs/review-engine-positioning.md`: review-engine positioning and boundaries
 - `docs/mcp.md`: MCP usage, with the review tools first
-- `docs/agent-integration-plan.md`: recommended CLI + MCP integration contract for coding agents
 - `docs/deployment-guide.md`: local-vs-cloud rollout and container deployment guidance
-- `docs/v2-api.md`: FastAPI usage centered on review endpoints
-- `docs/review-engine-release-prompts.md`: phased implementation prompts for frontend and release-gap work
+- `docs/eval-validation.md`: eval and smoke-check usage
+- `docs/sample_prd.md`: sample PRD input for local review runs
 
 ## Validation
 

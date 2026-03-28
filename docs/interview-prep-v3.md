@@ -369,7 +369,6 @@ Pitfalls
 
 技术要点  
 - TTL cache：`requirement_review_v1/skills/executor.py`
-- roadmap 约束：`docs/v3-roadmap.md`
 - 缓存测试：`tests/test_skills_cache.py`、`tests/test_risk_tool.py`
 - 长生命周期复用场景：FastAPI / MCP 进程
 
@@ -897,7 +896,6 @@ Pitfalls
 
 技术要点  
 - 现有实现：`skills/executor.py`
-- 设计边界：`docs/v3-roadmap.md`
 - 测试验证：`tests/test_skills_cache.py`
 
 Follow-ups
@@ -984,7 +982,6 @@ Pitfalls
 技术要点  
 - v1/v2 基座：多 Agent、schema、trace、服务入口
 - v3 扩展：`skills/`、`subflows/`、`metrics/runtime.py`
-- roadmap：`docs/v3-roadmap.md`
 - v3 验证：`eval/run_eval.py`、`tests/test_skills_cache.py`
 
 Follow-ups
@@ -1026,7 +1023,6 @@ Pitfalls
 技术要点  
 - 平台化边界：`service/`、`skills/`、`subflows/`、`server/`、`mcp_server/`
 - 质量门禁：`eval/run_eval.py`、`tests/`
-- roadmap 目标：`docs/v3-roadmap.md`
 
 Follow-ups
 - F1. 平台化最直接的产出是什么？
@@ -1066,7 +1062,6 @@ Pitfalls
 
 技术要点  
 - 代码证据：`workflow.py`、`state.py`、`skills/`、`subflows/`、`metrics/runtime.py`
-- 文档证据：`docs/v3-roadmap.md`
 - 回归证据：`eval/run_eval.py`、`tests/test_skills_cache.py`、`tests/test_metrics_runtime.py`
 - 说明：本题部分是基于 roadmap 和代码边界的工程决策解释，不是单一函数能直接证明的结论
 

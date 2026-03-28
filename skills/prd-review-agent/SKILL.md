@@ -17,7 +17,7 @@ Use the workspace directory that contains:
 
 - `pyproject.toml`
 - `requirement_review_v1/main.py`
-- `docs/agent-integration-plan.md`
+- `docs/mcp.md`
 
 If the current workspace does not contain those files, stop and ask for the PRDReview repository path.
 
