@@ -66,11 +66,15 @@ function HomePage() {
 
     try {
       const response = await submitReview(payload);
+      setForm(initialForm);
+      setSubmitState('idle');
       showToast(`Review submitted successfully. Tracking run ${response.run_id}.`, 'success');
       navigate(`/run/${response.run_id}`);
     } catch (error) {
+      const message = formatApiError(error, 'Review submission failed.');
       setSubmitState('idle');
-      setSubmitError(formatApiError(error, 'Review submission failed.'));
+      setSubmitError(message);
+      showToast(message, 'error');
     }
   }
 
