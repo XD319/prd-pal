@@ -8,18 +8,19 @@ import os
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 from langgraph.graph import END, StateGraph
 
-from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent
+from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent, risk_agent
 from .review import decide_review_mode, run_parallel_review_async
 from .state import ReviewState, plan_from_state
 from .review.memory_store import FileBackedMemoryStore, NoopMemoryStore
 from .review.normalizer_cache import FileBackedNormalizerCache, InMemoryNormalizerCache, normalize_requirement_with_cache
-from .subflows.risk_analysis import run_risk_analysis_from_review_state
 from .templates.registry import CLARIFY_PARSER_REVIEW_PROMPT, PARSER_REVIEW_PROMPT
+from .utils.logging import get_logger
 from .utils.trace import trace_start
 
 _MAX_REVISION_ROUNDS = 2
@@ -28,6 +29,7 @@ _PARALLEL_TRACE_KEY = "planner_risk_parallel"
 _PARALLEL_REVIEW_META_KEY = "parallel-review_meta"
 _ALLOWED_REVIEW_MODES = {"auto", "quick", "full", "single_review", "parallel_review"}
 ProgressHook = Callable[[str, str, ReviewState], None]
+log = get_logger("workflow")
 
 
 def _utc_now_iso() -> str:
@@ -41,6 +43,10 @@ def _parse_iso(value: Any) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState:
+    return await risk_agent.run(state)
 
 
 async def _clarify_node(state: ReviewState) -> ReviewState:
@@ -190,9 +196,17 @@ def _build_async_node(
     progress_hook: ProgressHook | None,
 ) -> Callable[[ReviewState], Awaitable[ReviewState]]:
     async def _runner(state: ReviewState) -> ReviewState:
+        started = perf_counter()
+        log.info("node started", extra={"node": node_name})
         if progress_hook:
             progress_hook("start", node_name, state)
-        update = await node_fn(state)
+        try:
+            update = await node_fn(state)
+        except Exception:
+            log.error("node failed", extra={"node": node_name}, exc_info=True)
+            raise
+        duration_ms = round((perf_counter() - started) * 1000)
+        log.info("node completed", extra={"node": node_name, "duration_ms": duration_ms})
         if progress_hook:
             merged_state: ReviewState = dict(state)
             if isinstance(update, dict):
@@ -209,9 +223,17 @@ def _build_sync_node(
     progress_hook: ProgressHook | None,
 ) -> Callable[[ReviewState], ReviewState]:
     def _runner(state: ReviewState) -> ReviewState:
+        started = perf_counter()
+        log.info("node started", extra={"node": node_name})
         if progress_hook:
             progress_hook("start", node_name, state)
-        update = node_fn(state)
+        try:
+            update = node_fn(state)
+        except Exception:
+            log.error("node failed", extra={"node": node_name}, exc_info=True)
+            raise
+        duration_ms = round((perf_counter() - started) * 1000)
+        log.info("node completed", extra={"node": node_name, "duration_ms": duration_ms})
         if progress_hook:
             merged_state: ReviewState = dict(state)
             if isinstance(update, dict):
@@ -314,9 +336,12 @@ async def _reviewer_node(state: ReviewState) -> ReviewState:
         requested_mode=requested_mode,
         normalized_requirement=review_context["normalized_requirement_obj"],
     )
+    log.info("review 模式: %s", decision.selected_mode, extra={"node": "reviewer"})
 
     if decision.selected_mode == "skip":
         update = _build_skip_reviewer_response(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+        findings_count = len(list(update.get("review_results", []) or []))
+        log.info("review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"})
         return _apply_review_context(update, review_context)
     if decision.selected_mode == "full":
         update = await _run_parallel_reviewer(
@@ -325,8 +350,12 @@ async def _reviewer_node(state: ReviewState) -> ReviewState:
             override=str(state.get("review_mode_override", "") or "").strip().lower(),
             review_context=review_context,
         )
+        findings_count = len(list(update.get("parallel_review", {}).get("findings", []) or []))
+        log.info("review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"})
         return _apply_review_context(update, review_context)
     update = await _run_single_reviewer(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+    findings_count = len(list(update.get("review_results", []) or []))
+    log.info("review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"})
     return _apply_review_context(update, review_context)
 
 

@@ -10,6 +10,7 @@ import asyncio
 from dotenv import load_dotenv
 
 from .service.review_service import review_prd_text_async
+from .utils.logging import setup_logging
 
 
 def _parse_args():
@@ -20,6 +21,7 @@ def _parse_args():
 
 async def main():
     load_dotenv()
+    setup_logging()
     args = _parse_args()
 
     with open(args.input, "r", encoding="utf-8") as f:

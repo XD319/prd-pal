@@ -5,6 +5,7 @@ import json
 import os
 import threading
 import time
+import uuid
 from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -34,6 +35,7 @@ from requirement_review_v1.service.review_service import (
 )
 from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 from requirement_review_v1.templates import TemplateRegistryError, list_template_records
+from requirement_review_v1.utils.logging import get_logger
 
 OUTPUTS_ROOT = Path("outputs")
 FRONTEND_DIST_ROOT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -82,6 +84,7 @@ _API_RATE_LIMIT_WINDOW_SEC_ENV = "MARRDP_API_RATE_LIMIT_WINDOW_SEC"
 _FALSE_VALUES = {"0", "false", "no", "off"}
 _submission_rate_limits: dict[str, deque[float]] = defaultdict(deque)
 _submission_rate_limit_lock = threading.Lock()
+log = get_logger("server.http")
 
 
 @dataclass(frozen=True)
@@ -345,6 +348,40 @@ def _rate_limit_identity(request: Request) -> str:
     return f"ip:{client_host}"
 
 
+def _client_ip(request: Request) -> str:
+    forwarded_for = str(request.headers.get("x-forwarded-for", "") or "").strip()
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    if request.client is not None and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _should_skip_request_logging(path: str) -> bool:
+    normalized = str(path or "").strip()
+    if normalized == "/health":
+        return True
+    if normalized.startswith(("/static/", "/assets/")):
+        return True
+    return normalized.endswith(
+        (
+            ".js",
+            ".css",
+            ".map",
+            ".ico",
+            ".svg",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".webp",
+            ".woff",
+            ".woff2",
+            ".ttf",
+        )
+    )
+
+
 def _enforce_submission_rate_limit(request: Request, settings: ApiSecuritySettings) -> JSONResponse | None:
     if request.method.upper() != "POST" or request.url.path != "/api/review":
         return None
@@ -377,6 +414,36 @@ def _enforce_submission_rate_limit(request: Request, settings: ApiSecuritySettin
 def _reset_submission_rate_limits() -> None:
     with _submission_rate_limit_lock:
         _submission_rate_limits.clear()
+
+
+@app.middleware("http")
+async def _request_logging_middleware(request: Request, call_next):
+    path = request.url.path
+    if _should_skip_request_logging(path):
+        return await call_next(request)
+
+    trace_id = uuid.uuid4().hex
+    started = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        status_code = response.status_code if response is not None else 500
+        log.info(
+            "request completed",
+            extra={
+                "trace_id": trace_id,
+                "method": request.method,
+                "path": path,
+                "status_code": status_code,
+                "duration_ms": duration_ms,
+                "client_ip": _client_ip(request),
+            },
+        )
+        if response is not None:
+            response.headers["X-Trace-ID"] = trace_id
 
 
 @app.middleware("http")

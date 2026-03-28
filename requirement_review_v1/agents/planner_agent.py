@@ -14,9 +14,11 @@ from ..state import ReviewState
 from ..templates.registry import PLANNER_REVIEW_PROMPT
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
+from ..utils.logging import get_logger
 from ..utils.trace import trace_start
 
 _AGENT = "planner"
+log = get_logger(_AGENT)
 
 
 async def run(state: ReviewState) -> ReviewState:
@@ -26,10 +28,12 @@ async def run(state: ReviewState) -> ReviewState:
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
     raw = ""
+    log.info("开始规划", extra={"node": _AGENT})
 
     if not parsed_items:
         span = trace_start(_AGENT, model="none", input_chars=0)
         trace[_AGENT] = span.end(status="error", error_message="parsed_items is empty - nothing to plan")
+        log.warning("规划完成, %s 个任务, %s 个里程碑", 0, 0, extra={"node": _AGENT})
         return _empty_result(trace)
 
     items_json = json.dumps(parsed_items, ensure_ascii=False, indent=2)
@@ -66,10 +70,13 @@ async def run(state: ReviewState) -> ReviewState:
                 error_message=f"schema validation failed: {exc}",
             )
 
+        tasks = output.get("tasks", [])
+        milestones = output.get("milestones", [])
+        log.info("规划完成, %s 个任务, %s 个里程碑", len(tasks), len(milestones), extra={"node": _AGENT})
         return {
             "plan": {
-                "tasks": output.get("tasks", []),
-                "milestones": output.get("milestones", []),
+                "tasks": tasks,
+                "milestones": milestones,
                 "dependencies": output.get("dependencies", []),
                 "estimation": output.get("estimation", {}),
             },
@@ -86,6 +93,7 @@ async def run(state: ReviewState) -> ReviewState:
             raw_output_path=raw_path,
             error_message=str(exc),
         )
+        log.warning("规划完成, %s 个任务, %s 个里程碑", 0, 0, extra={"node": _AGENT})
         return _empty_result(trace)
 
     except Exception as exc:
@@ -96,6 +104,7 @@ async def run(state: ReviewState) -> ReviewState:
             raw_output_path=raw_path,
             error_message=str(exc),
         )
+        log.warning("规划完成, %s 个任务, %s 个里程碑", 0, 0, extra={"node": _AGENT})
         return _empty_result(trace)
 
 

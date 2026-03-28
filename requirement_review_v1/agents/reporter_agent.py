@@ -6,6 +6,7 @@ from typing import Any
 
 from ..metrics import compute_requirement_coverage, compute_runtime_metrics
 from ..state import ReviewState, plan_from_state
+from ..utils.logging import get_logger
 from ..utils.trace import trace_start
 
 _RISK_HIGH = "High"
@@ -204,6 +205,7 @@ def _build_prompt_handoff_section(title: str, prompt_handoff: dict[str, Any]) ->
 
 
 _AGENT = "reporter"
+log = get_logger(_AGENT)
 
 
 async def run(state: ReviewState) -> ReviewState:
@@ -309,4 +311,5 @@ async def run(state: ReviewState) -> ReviewState:
 
     final_report = "\n".join(parts) + "\n"
     trace[_AGENT] = span.end(status="ok", output_chars=len(final_report))
+    log.info("报告生成完成", extra={"node": _AGENT})
     return {"final_report": final_report, "metrics": metrics, "trace": trace}

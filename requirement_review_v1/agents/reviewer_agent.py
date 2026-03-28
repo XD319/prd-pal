@@ -14,9 +14,11 @@ from ..state import ReviewState, plan_from_state
 from ..templates.registry import REVIEWER_REVIEW_PROMPT
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
+from ..utils.logging import get_logger
 from ..utils.trace import trace_start
 
 _AGENT = "reviewer"
+log = get_logger(_AGENT)
 _VAGUE_TERMS = (
     "fast",
     "quick",
@@ -84,10 +86,12 @@ async def run(state: ReviewState) -> ReviewState:
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
     raw = ""
+    log.info("review 模式: %s", "quick", extra={"node": _AGENT})
 
     if not parsed_items:
         span = trace_start(_AGENT, model="none", input_chars=0)
         trace[_AGENT] = span.end(status="error", error_message="parsed_items is empty - nothing to review")
+        log.warning("review 完成, %s 条 findings", 0, extra={"node": _AGENT})
         return {
             "review_results": [],
             "plan_review": {},
@@ -144,6 +148,7 @@ async def run(state: ReviewState) -> ReviewState:
         span.set_attr("high_risk_ratio", round(high_risk_ratio, 4))
         span.set_attr("ambiguity_ratio", round(ambiguity_ratio, 4))
         span.set_attr("revision_round", int(state.get("revision_round", 0) or 0))
+        log.info("review 完成, %s 条 findings", len(output.get("review_results", [])), extra={"node": _AGENT})
 
         return {
             "review_results": output.get("review_results", []),
@@ -162,6 +167,7 @@ async def run(state: ReviewState) -> ReviewState:
             raw_output_path=raw_path,
             error_message=str(exc),
         )
+        log.warning("review 完成, %s 条 findings", 0, extra={"node": _AGENT})
         return {
             "review_results": [],
             "plan_review": {},
@@ -177,6 +183,7 @@ async def run(state: ReviewState) -> ReviewState:
             raw_output_path=raw_path,
             error_message=str(exc),
         )
+        log.warning("review 完成, %s 条 findings", 0, extra={"node": _AGENT})
         return {
             "review_results": [],
             "plan_review": {},

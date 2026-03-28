@@ -21,11 +21,13 @@ from ..state import ReviewState
 from ..templates.registry import CLARIFY_PARSER_REVIEW_PROMPT, PARSER_REVIEW_PROMPT
 from ..utils.io import save_raw_agent_output
 from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
+from ..utils.logging import get_logger
 from ..utils.trace import trace_start
 
 _AGENT = "parser"
 _DEFAULT_PROMPT_VERSION = PARSER_REVIEW_PROMPT.version
 _CLARIFY_PROMPT_VERSION = CLARIFY_PARSER_REVIEW_PROMPT.version
+log = get_logger(_AGENT)
 
 
 async def run(state: ReviewState) -> ReviewState:
@@ -39,6 +41,7 @@ async def run(state: ReviewState) -> ReviewState:
     run_dir: str = state.get("run_dir", "")
     raw = ""
     prompt_version = str(state.get("parser_prompt_version", _DEFAULT_PROMPT_VERSION) or _DEFAULT_PROMPT_VERSION)
+    log.info("开始解析", extra={"node": _AGENT})
 
     span = trace_start(_AGENT, input_chars=len(requirement_doc))
 
@@ -86,7 +89,9 @@ async def run(state: ReviewState) -> ReviewState:
                 error_message=f"schema validation failed: {exc}",
             )
 
-        return {"parsed_items": output.get("parsed_items", []), "trace": trace}
+        parsed_items = output.get("parsed_items", [])
+        log.info("解析完成, %s 条需求", len(parsed_items), extra={"node": _AGENT})
+        return {"parsed_items": parsed_items, "trace": trace}
 
     except StructuredCallError as exc:
         raw = exc.raw_output or raw
@@ -98,6 +103,7 @@ async def run(state: ReviewState) -> ReviewState:
             raw_output_path=raw_path,
             error_message=str(exc),
         )
+        log.warning("解析完成, %s 条需求", 0, extra={"node": _AGENT})
         return {"parsed_items": [], "trace": trace}
 
     except Exception as exc:
@@ -108,4 +114,5 @@ async def run(state: ReviewState) -> ReviewState:
             raw_output_path=raw_path,
             error_message=str(exc),
         )
+        log.warning("解析完成, %s 条需求", 0, extra={"node": _AGENT})
         return {"parsed_items": [], "trace": trace}

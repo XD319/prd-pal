@@ -37,11 +37,14 @@ from requirement_review_v1.packs import (
     reset_to_draft,
 )
 from requirement_review_v1.packs.approval import build_approval_record
-from requirement_review_v1.run_review import run_review
+from requirement_review_v1.run_review import make_run_id, run_review
 from review_runtime.config.config import runtime_config_overrides
 from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 from requirement_review_v1.server.sse import ProgressBroadcaster
 from requirement_review_v1.workspace import ReviewWorkspaceRepository
+from requirement_review_v1.utils.logging import RunLogContext, get_logger
+
+log = get_logger("service.review")
 
 
 @dataclass(slots=True)
@@ -899,7 +902,7 @@ async def review_prd_text_async(
     progress_hook = overrides.get("progress_hook")
     if progress_hook is not None and not callable(progress_hook):
         raise TypeError("config_overrides['progress_hook'] must be callable")
-    resolved_run_id = str(run_id or "").strip()
+    resolved_run_id = str(run_id or "").strip() or make_run_id()
 
     def combined_progress_hook(event: str, node_name: str, state: dict[str, Any]) -> None:
         if progress_hook is not None:
@@ -913,7 +916,7 @@ async def review_prd_text_async(
     )
     run_review_kwargs: dict[str, Any] = {
         "requirement_doc": requirement_doc,
-        "run_id": run_id,
+        "run_id": resolved_run_id,
         "outputs_root": outputs_root,
         "progress_hook": combined_progress_hook,
     }
@@ -933,52 +936,61 @@ async def review_prd_text_async(
         run_review_kwargs["normalizer_cache_path"] = overrides.get("normalizer_cache_path")
 
     llm_runtime_overrides = _resolve_llm_config_overrides(overrides)
-    with runtime_config_overrides(llm_runtime_overrides):
-        run_output = await run_review(**run_review_kwargs)
-    if source_context:
-        run_output.update(source_context)
-        result = run_output.get("result")
-        if isinstance(result, dict):
-            result.update(source_context)
-
-    review_result = run_output.get("result")
-    if isinstance(review_result, dict):
-        review_metrics = review_result.get("metrics") if isinstance(review_result.get("metrics"), dict) else {}
-        review_status = _derive_status(review_result)
-        _append_audit_event_safe(
-            run_output.get("run_dir", outputs_root / str(run_output.get("run_id", "") or "")),
-            operation="review",
-            status=review_status,
-            run_id=str(run_output.get("run_id", "") or ""),
-            audit_context=audit_context,
-            details={
-                "coverage_ratio": _to_float(review_metrics.get("coverage_ratio")),
-                "high_risk_ratio": _to_float(review_result.get("high_risk_ratio")),
-                "revision_round": int(review_result.get("revision_round", 0) or 0),
-                "requirement_source": "source" if source else "prd_path" if prd_path else "inline_text",
-                "has_source_metadata": bool(source_context),
-                "review_mode": str(review_result.get("review_mode", review_result.get("mode", "quick")) or "quick"),
-                "parallel_review_enabled": bool(review_result.get("parallel_review_meta") or review_result.get("parallel-review_meta")),
+    with RunLogContext(resolved_run_id):
+        log.info(
+            "review run started",
+            extra={
+                "run_id": resolved_run_id,
+                "source_type": "source" if source else "prd_path" if prd_path else "inline_text",
             },
-            retry=retry_metadata_for_status(status=review_status, non_blocking=False),
         )
+        with runtime_config_overrides(llm_runtime_overrides):
+            run_output = await run_review(**run_review_kwargs)
+        if source_context:
+            run_output.update(source_context)
+            result = run_output.get("result")
+            if isinstance(result, dict):
+                result.update(source_context)
 
-    combined_progress_hook("start", "finalize_artifacts", run_output.get("result", {}))
+        review_result = run_output.get("result")
+        if isinstance(review_result, dict):
+            review_metrics = review_result.get("metrics") if isinstance(review_result.get("metrics"), dict) else {}
+            review_status = _derive_status(review_result)
+            _append_audit_event_safe(
+                run_output.get("run_dir", outputs_root / str(run_output.get("run_id", "") or "")),
+                operation="review",
+                status=review_status,
+                run_id=str(run_output.get("run_id", "") or ""),
+                audit_context=audit_context,
+                details={
+                    "coverage_ratio": _to_float(review_metrics.get("coverage_ratio")),
+                    "high_risk_ratio": _to_float(review_result.get("high_risk_ratio")),
+                    "revision_round": int(review_result.get("revision_round", 0) or 0),
+                    "requirement_source": "source" if source else "prd_path" if prd_path else "inline_text",
+                    "has_source_metadata": bool(source_context),
+                    "review_mode": str(review_result.get("review_mode", review_result.get("mode", "quick")) or "quick"),
+                    "parallel_review_enabled": bool(review_result.get("parallel_review_meta") or review_result.get("parallel-review_meta")),
+                },
+                retry=retry_metadata_for_status(status=review_status, non_blocking=False),
+            )
 
-    try:
-        build_delivery_handoff_outputs(run_output, audit_context=audit_context)
-    except Exception as exc:
-        combined_progress_hook("end", "finalize_artifacts", {
-            "trace": {"finalize_artifacts": {"status": "error"}},
-            "error": str(exc),
-        })
-        raise
-    else:
-        combined_progress_hook("end", "finalize_artifacts", {
-            "trace": {"finalize_artifacts": {"status": "ok"}},
-        })
+        combined_progress_hook("start", "finalize_artifacts", run_output.get("result", {}))
 
-    return _build_summary(run_output)
+        try:
+            build_delivery_handoff_outputs(run_output, audit_context=audit_context)
+        except Exception as exc:
+            combined_progress_hook("end", "finalize_artifacts", {
+                "trace": {"finalize_artifacts": {"status": "error"}},
+                "error": str(exc),
+            })
+            raise
+        else:
+            combined_progress_hook("end", "finalize_artifacts", {
+                "trace": {"finalize_artifacts": {"status": "ok"}},
+            })
+
+        log.info("review run completed", extra={"run_id": resolved_run_id})
+        return _build_summary(run_output)
 
 
 def review_prd_text(
