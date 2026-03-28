@@ -31,6 +31,11 @@ dependencies = [
   "uvicorn>=0.24.0.post1"
 ]
 
+[project.optional-dependencies]
+test = [
+  "pytest-asyncio>=0.23.0"
+]
+
 [tool.setuptools.packages.find]
 include = ["requirement_review_v1*", "review_runtime*"]
 

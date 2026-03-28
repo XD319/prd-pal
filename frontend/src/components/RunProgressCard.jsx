@@ -3,7 +3,15 @@ import '../styles/components.css';
 import { deriveNodes, formatNodeLabel } from '../utils/derivers';
 import { formatDateTime, formatPercentFromWhole, formatStatusLabel, pluralize } from '../utils/formatters';
 
-function RunProgressCard({ runId, status, statusPayload, failureMessage, loadState }) {
+function RunProgressCard({
+  runId,
+  status,
+  statusPayload,
+  failureMessage,
+  loadState,
+  isConnected = false,
+  isPolling = false,
+}) {
   const progress = statusPayload?.progress ?? {};
   const nodes = deriveNodes(progress);
   const isInitialLoading = Boolean(runId) && loadState === 'loading' && !statusPayload;
@@ -13,6 +21,8 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage, loadSta
   const currentNodeName = String(progress.current_node ?? '');
   const currentNodeLabel = statusPayload ? (formatNodeLabel(progress.current_node) || 'Waiting for next stage') : 'Fetching live status';
   const updatedLabel = statusPayload ? formatDateTime(progress.updated_at) : '--';
+  const connectionLabel = isConnected ? 'SSE live' : (isPolling ? 'Polling fallback' : 'Reconnecting');
+  const connectionClassName = isConnected ? 'live' : 'polling';
 
   return (
     <section className="panel run-progress-card">
@@ -21,7 +31,15 @@ function RunProgressCard({ runId, status, statusPayload, failureMessage, loadSta
           <p className="section-kicker">Pipeline Status</p>
           <h2>Run progress</h2>
         </div>
-        <span className={`status-badge status-${displayStatus}`}>{statusLabel}</span>
+        <div className="run-progress-header-meta">
+          {runId ? (
+            <span className={`connection-pill connection-pill-${connectionClassName}`} title={connectionLabel}>
+              <span className="connection-pill-dot" aria-hidden="true" />
+              {connectionLabel}
+            </span>
+          ) : null}
+          <span className={`status-badge status-${displayStatus}`}>{statusLabel}</span>
+        </div>
       </div>
 
       {!runId ? (

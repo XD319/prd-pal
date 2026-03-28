@@ -5,6 +5,7 @@ import json
 import os
 import threading
 import time
+from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -14,12 +15,13 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, model_validator
 
 from requirement_review_v1.monitoring import query_audit_events
 from requirement_review_v1.run_review import make_run_id
+from requirement_review_v1.server.sse import ProgressBroadcaster
 from requirement_review_v1.service.review_service import (
     ReviewArtifactNotFoundError,
     ReviewResultNotReadyError,
@@ -235,7 +237,13 @@ class JobRecord:
         }
 
 
-app = FastAPI(title="Requirement Review V2 API", version="2.0")
+@asynccontextmanager
+async def _app_lifespan(_: FastAPI):
+    load_dotenv()
+    yield
+
+
+app = FastAPI(title="Requirement Review V2 API", version="2.0", lifespan=_app_lifespan)
 _jobs: dict[str, JobRecord] = {}
 _jobs_lock = asyncio.Lock()
 
@@ -539,6 +547,35 @@ def _progress_percent_from_nodes(nodes: dict[str, Any] | None, *, status: str) -
     return percent
 
 
+def _terminal_sse_payload(run_id: str, status: str, timestamp: str, *, error: str = "") -> dict[str, Any]:
+    payload = {
+        "node": "run",
+        "status": str(status or "").strip(),
+        "timestamp": str(timestamp or "").strip() or datetime.now(timezone.utc).isoformat(),
+        "run_id": run_id,
+        "terminal": True,
+    }
+    if error:
+        payload["error"] = error
+    return payload
+
+
+def _terminal_payload_for_job(job: JobRecord) -> dict[str, Any] | None:
+    if job.status not in {"completed", "failed"}:
+        return None
+    return _terminal_sse_payload(job.run_id, job.status, job.updated_at, error=job.error)
+
+
+def _terminal_payload_for_run_dir(run_id: str, run_dir: Path) -> dict[str, Any] | None:
+    persisted = _persisted_status_payload(run_id, run_dir)
+    status = str(persisted.get("status", "") or "").strip()
+    if status not in {"completed", "failed"}:
+        return None
+    progress = persisted.get("progress", {}) if isinstance(persisted.get("progress"), dict) else {}
+    error = str(progress.get("error", "") or "")
+    return _terminal_sse_payload(run_id, status, str(persisted.get("updated_at", "") or ""), error=error)
+
+
 def _job_status_payload(job: JobRecord) -> dict[str, Any]:
     payload = {
         "run_id": job.run_id,
@@ -780,11 +817,11 @@ async def _run_job(
     finally:
         job.updated_at = datetime.now(timezone.utc).isoformat()
         _persist_job_snapshot(job)
-
-
-@app.on_event("startup")
-async def _load_env() -> None:
-    load_dotenv()
+        ProgressBroadcaster().publish(
+            job.run_id,
+            "run_status",
+            _terminal_sse_payload(job.run_id, job.status, job.updated_at, error=job.error),
+        )
 
 
 @app.get("/api/templates")
@@ -884,6 +921,39 @@ async def get_review_status(run_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
 
     return _persisted_status_payload(run_id, run_dir)
+
+
+@app.get("/api/review/{run_id}/progress/stream")
+async def stream_review_progress(run_id: str) -> StreamingResponse:
+    async with _jobs_lock:
+        job = _jobs.get(run_id)
+
+    run_dir = OUTPUTS_ROOT / run_id
+    if job is None and not run_dir.exists():
+        raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
+
+    broadcaster = ProgressBroadcaster()
+
+    async def event_stream():
+        terminal_payload = _terminal_payload_for_job(job) if job is not None else None
+        if terminal_payload is None and job is None and run_dir.exists():
+            terminal_payload = _terminal_payload_for_run_dir(run_id, run_dir)
+        if terminal_payload is not None:
+            yield broadcaster.encode_event(terminal_payload)
+            return
+
+        async for event in broadcaster.subscribe(run_id):
+            yield event
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/review/{run_id}/clarification")

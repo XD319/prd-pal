@@ -42,11 +42,16 @@ function shouldRetryStatusLoad(error) {
   return error.status >= 500;
 }
 
-function useReviewRun(runId) {
+function useReviewRun(runId, options = {}) {
+  const {
+    externalStatusPayload = null,
+    externalLoadError = '',
+    disableStatusPolling = false,
+  } = options;
   const { showToast } = useToast();
   const [runState, setRunState] = useState(() => ({
     ...initialRunState,
-    loadState: runId ? 'loading' : 'idle',
+    loadState: runId && !disableStatusPolling ? 'loading' : 'idle',
   }));
   const activeRunIdRef = useRef(runId);
   const previousStatusRef = useRef('idle');
@@ -205,22 +210,56 @@ function useReviewRun(runId) {
   useEffect(() => {
     setRunState({
       ...initialRunState,
-      loadState: runId ? 'loading' : 'idle',
+      loadState: runId && !disableStatusPolling ? 'loading' : 'idle',
     });
     previousStatusRef.current = 'idle';
     lastPollFailureToastAtRef.current = 0;
 
-    if (!runId) {
+    if (!runId || disableStatusPolling) {
       return;
     }
 
     void refreshStatus();
-  }, [runId, refreshStatus]);
-
-  const status = runState.statusPayload?.status ?? runState.status;
+  }, [disableStatusPolling, runId, refreshStatus]);
 
   useEffect(() => {
-    if (!runId || !['queued', 'running'].includes(status)) {
+    if (!externalStatusPayload || !runId) {
+      return;
+    }
+
+    startTransition(() => {
+      setRunState((current) => ({
+        ...current,
+        status: externalStatusPayload.status,
+        statusPayload: externalStatusPayload,
+        loadState: 'ready',
+        loadError: externalLoadError || '',
+        loadRetryEligible: false,
+        failureMessage: externalStatusPayload.status === 'failed'
+          ? deriveFailureMessage(externalStatusPayload, current.failureMessage || externalLoadError)
+          : current.failureMessage,
+      }));
+    });
+  }, [externalLoadError, externalStatusPayload, runId]);
+
+  useEffect(() => {
+    if (!disableStatusPolling || !externalLoadError || externalStatusPayload) {
+      return;
+    }
+
+    setRunState((current) => ({
+      ...current,
+      loadState: current.statusPayload ? 'ready' : 'error',
+      loadError: externalLoadError,
+      loadRetryEligible: false,
+      failureMessage: current.failureMessage || externalLoadError,
+    }));
+  }, [disableStatusPolling, externalLoadError, externalStatusPayload]);
+
+  const status = externalStatusPayload?.status ?? runState.statusPayload?.status ?? runState.status;
+
+  useEffect(() => {
+    if (disableStatusPolling || !runId || !['queued', 'running'].includes(status)) {
       return undefined;
     }
 
@@ -231,10 +270,10 @@ function useReviewRun(runId) {
     return () => {
       window.clearTimeout(handle);
     };
-  }, [runId, status, refreshStatus]);
+  }, [disableStatusPolling, runId, status, refreshStatus]);
 
   useEffect(() => {
-    if (!runId || runState.statusPayload || runState.loadState !== 'error' || !runState.loadRetryEligible) {
+    if (disableStatusPolling || !runId || runState.statusPayload || runState.loadState !== 'error' || !runState.loadRetryEligible) {
       return undefined;
     }
 
@@ -245,7 +284,7 @@ function useReviewRun(runId) {
     return () => {
       window.clearTimeout(handle);
     };
-  }, [runId, runState.statusPayload, runState.loadState, runState.loadRetryEligible, refreshStatus]);
+  }, [disableStatusPolling, runId, runState.statusPayload, runState.loadState, runState.loadRetryEligible, refreshStatus]);
 
   useEffect(() => {
     if (!runId || status !== 'completed' || runState.resultPayload || runState.resultState === 'loading') {
