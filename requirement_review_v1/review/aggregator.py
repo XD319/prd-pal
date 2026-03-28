@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 from .clarification_gate import build_clarification_payload
 from .reviewer_agents.base import ReviewFinding, ReviewerResult, normalize_severity
+from .reviewer_agents.delivery_reviewer import arbitrate_conflict
 
 _SEMANTIC_SIGNAL_PATTERNS: dict[str, tuple[str, ...]] = {
     "scope_inclusion": (
@@ -519,7 +520,75 @@ def _aggregate_open_questions(results: tuple[ReviewerResult, ...]) -> list[dict[
 def _detect_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
     conflicts = _detect_severity_conflicts(results)
     conflicts.extend(_detect_semantic_conflicts(results))
-    return conflicts
+    return _arbitrate_high_severity_conflicts(conflicts, results)
+
+
+def _arbitrate_high_severity_conflicts(
+    conflicts: list[dict[str, Any]],
+    results: tuple[ReviewerResult, ...],
+) -> list[dict[str, Any]]:
+    perspectives = _build_reviewer_perspectives(results)
+    resolved_conflicts: list[dict[str, Any]] = []
+    for conflict in conflicts:
+        resolved = dict(conflict)
+        resolved["conflict_severity"] = _infer_conflict_severity(resolved)
+        resolution = resolved.get("resolution")
+        if resolved["conflict_severity"] == "high":
+            resolution = arbitrate_conflict(
+                resolved,
+                product_summary=perspectives.get("product", ""),
+                engineering_summary=perspectives.get("engineering", ""),
+                qa_summary=perspectives.get("qa", ""),
+                security_summary=perspectives.get("security", ""),
+            ).to_dict()
+        if isinstance(resolution, dict):
+            resolved["resolution"] = dict(resolution)
+            resolved["requires_manual_resolution"] = bool(resolution.get("needs_human", True))
+        else:
+            resolved["resolution"] = None
+            resolved["requires_manual_resolution"] = True
+        resolved_conflicts.append(resolved)
+    return resolved_conflicts
+
+
+def _build_reviewer_perspectives(results: tuple[ReviewerResult, ...]) -> dict[str, str]:
+    perspectives: dict[str, list[str]] = {"product": [], "engineering": [], "qa": [], "security": []}
+    for result in results:
+        reviewer = str(result.reviewer or "").strip().lower()
+        if reviewer not in perspectives:
+            continue
+        parts = [
+            str(result.summary or "").strip(),
+            str(result.reviewer_status_detail or "").strip(),
+            *[str(note).strip() for note in result.notes if str(note).strip()],
+        ]
+        perspectives[reviewer] = _merge_unique(perspectives[reviewer], [part for part in parts if part])
+    return {reviewer: " ".join(parts).strip() for reviewer, parts in perspectives.items()}
+
+
+def _infer_conflict_severity(conflict: dict[str, Any]) -> str:
+    raw_conflict_severity = str(conflict.get("conflict_severity", "") or "").strip().lower()
+    if raw_conflict_severity:
+        return normalize_severity(raw_conflict_severity)
+
+    severities: list[str] = []
+    for key in ("finding_severity", "risk_severity"):
+        raw_value = str(conflict.get(key, "") or "").strip()
+        if not raw_value:
+            continue
+        for part in [segment.strip() for segment in raw_value.split(",") if segment.strip()]:
+            severities.append(normalize_severity(part))
+
+    if conflict.get("type") in {
+        "scope_inclusion_vs_dependency_blocker",
+        "acceptance_complete_vs_testability_gap",
+        "release_ok_vs_approval_blocker",
+    }:
+        severities.append("high")
+
+    if not severities:
+        return "medium"
+    return max(severities, key=lambda value: {"low": 0, "medium": 1, "high": 2}.get(value, 1))
 
 
 def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
@@ -573,6 +642,7 @@ def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
                     topic=topic,
                     finding_severity=finding_severity,
                     risk_severity=risk_severity,
+                    conflict_severity=_infer_conflict_severity({"finding_severity": finding_severity, "risk_severity": risk_severity}),
                 )
             )
             continue
@@ -587,6 +657,7 @@ def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
                     topic=topic,
                     finding_severity=finding_levels[0],
                     risk_severity=risk_levels[0],
+                    conflict_severity=_max_severity(finding_levels[0], risk_levels[0]),
                 )
             )
     return conflicts
@@ -628,6 +699,7 @@ def _detect_semantic_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
                 conflict_type=rule["type"],
                 description=description,
                 reviewers=reviewers,
+                conflict_severity="high",
             )
         )
 
@@ -705,18 +777,7 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
             "No tool calls.",
         )
     )
-    if conflicts:
-        lines.extend([
-            "",
-            "## Conflicts",
-            "",
-        ])
-        lines.extend(
-            _bullet_lines(
-                [_format_conflict_line(item) for item in conflicts],
-                "No conflicts.",
-            )
-        )
+    lines.extend(_conflict_section_lines(conflicts))
     return "\n".join(lines).strip() + "\n"
 
 
@@ -786,18 +847,7 @@ def _render_summary(report_payload: dict[str, Any]) -> str:
             "No tool calls.",
         )
     )
-    if conflicts:
-        lines.extend([
-            "",
-            "## Conflicts",
-            "",
-        ])
-        lines.extend(
-            _bullet_lines(
-                [_format_conflict_line(item) for item in conflicts],
-                "No conflicts.",
-            )
-        )
+    lines.extend(_conflict_section_lines(conflicts))
     return "\n".join(lines).strip() + "\n"
 
 
@@ -967,6 +1017,7 @@ def _build_conflict(
     topic: str = "",
     finding_severity: str = "",
     risk_severity: str = "",
+    conflict_severity: str = "medium",
 ) -> dict[str, Any]:
     normalized_reviewers = _merge_unique([], reviewers)
     conflict_id = _build_conflict_id(conflict_type, topic, description, ",".join(normalized_reviewers))
@@ -975,6 +1026,8 @@ def _build_conflict(
         "type": conflict_type,
         "description": description,
         "reviewers": normalized_reviewers,
+        "conflict_severity": normalize_severity(conflict_severity),
+        "resolution": None,
         "requires_manual_resolution": True,
         "status": conflict_type,
     }
@@ -993,14 +1046,45 @@ def _build_conflict_id(*parts: str) -> str:
     return f"conflict-{digest}"
 
 
+def _conflict_section_lines(conflicts: list[dict[str, Any]]) -> list[str]:
+    if not conflicts:
+        return ["", "## Conflicts", "", "- No conflicts."]
+
+    resolved = [item for item in conflicts if not bool(item.get("requires_manual_resolution", True))]
+    unresolved = [item for item in conflicts if bool(item.get("requires_manual_resolution", True))]
+    lines = ["", "## Conflicts", ""]
+    lines.append(f"- Resolved conflicts: {len(resolved)}")
+    lines.append(f"- Unresolved conflicts: {len(unresolved)}")
+    lines.extend(["", "### Resolved Conflicts", ""])
+    lines.extend(_bullet_lines([_format_conflict_line(item) for item in resolved], "No resolved conflicts."))
+    lines.extend(["", "### Unresolved Conflicts", ""])
+    lines.extend(_bullet_lines([_format_conflict_line(item) for item in unresolved], "No unresolved conflicts."))
+    return lines
+
+
 def _format_conflict_line(item: dict[str, Any]) -> str:
     description = str(item.get("description", "") or "").strip()
     reviewers = _format_reviewer_list(item.get("reviewers", []))
-    if description and reviewers:
-        return f"{description} Reviewers: {reviewers}."
-    if description:
-        return description
-    return "Conflict requires manual resolution."
+    conflict_severity = str(item.get("conflict_severity", "") or "").strip().lower()
+    resolution = item.get("resolution") if isinstance(item.get("resolution"), dict) else {}
+    recommendation = str(resolution.get("recommendation", "") or "").strip()
+    reasoning = str(resolution.get("reasoning", "") or "").strip()
+    decided_by = str(resolution.get("decided_by", "") or "").strip()
+    status = "needs human" if item.get("requires_manual_resolution", True) else "resolved"
+
+    parts = [description or "Conflict requires manual resolution."]
+    if reviewers:
+        parts.append(f"Reviewers: {reviewers}.")
+    if conflict_severity:
+        parts.append(f"Severity: {conflict_severity}.")
+    parts.append(f"Status: {status}.")
+    if recommendation:
+        parts.append(f"Recommendation: {recommendation}")
+    if reasoning:
+        parts.append(f"Reasoning: {reasoning}")
+    if decided_by:
+        parts.append(f"Decided by: {decided_by}")
+    return " ".join(parts).strip()
 
 
 def _format_reviewer_note(item: dict[str, Any]) -> str:
@@ -1126,3 +1210,4 @@ def _sort_severities(values: set[str]) -> list[str]:
 def _max_severity(left: str, right: str) -> str:
     order = {"low": 0, "medium": 1, "high": 2}
     return left if order.get(left, 1) >= order.get(right, 1) else right
+

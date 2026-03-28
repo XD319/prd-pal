@@ -1,4 +1,4 @@
-import { excerpt, formatPercent, formatStatusLabel, normalizeText, pluralize } from './formatters';
+﻿import { excerpt, formatPercent, formatStatusLabel, normalizeText, pluralize } from './formatters';
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -208,6 +208,31 @@ export function deriveToolCalls(result) {
   }));
 }
 
+export function deriveConflicts(result) {
+  const nested = result?.parallel_review ?? {};
+  const source = asArray(result?.conflicts ?? nested.conflicts);
+
+  return source
+    .map((item, index) => ({
+      id: item.conflict_id ?? `conflict-${index}`,
+      title: item.topic ?? item.type ?? `Conflict ${index + 1}`,
+      type: item.type ?? 'conflict',
+      description: item.description ?? 'Conflict requires manual review.',
+      reviewers: asArray(item.reviewers),
+      severity: String(item.conflict_severity ?? 'medium').toLowerCase(),
+      requiresManualResolution: Boolean(item.requires_manual_resolution ?? true),
+      recommendation: item.resolution?.recommendation ?? '',
+      reasoning: item.resolution?.reasoning ?? '',
+      decidedBy: item.resolution?.decided_by ?? '',
+    }))
+    .sort((left, right) => {
+      if (left.requiresManualResolution !== right.requiresManualResolution) {
+        return left.requiresManualResolution ? 1 : -1;
+      }
+      return severityRank(right.severity) - severityRank(left.severity);
+    });
+}
+
 export function deriveSummary(result, runId, statusPayload, resultPayload) {
   if (!result) {
     return {
@@ -304,3 +329,5 @@ export function describeHistoryRun(run) {
     hasResult,
   };
 }
+
+
