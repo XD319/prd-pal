@@ -56,23 +56,15 @@ class TestRouteNext:
 class TestRouteDeciderNode:
     """_route_decider_node decides loop vs finish and records trace."""
 
-    def test_high_ratio_round0_triggers_loop(self):
-        state: ReviewState = {
-            "high_risk_ratio": 0.6,
-            "revision_round": 0,
-            "trace": {},
-        }
+    def test_high_ratio_round0_triggers_loop(self, sample_review_state: ReviewState):
+        state: ReviewState = {**sample_review_state, "high_risk_ratio": 0.6, "revision_round": 0, "trace": {}}
         update = _route_decider_node(state)
         assert update["routing_reason"].startswith("loop:")
         assert update["revision_round"] == 1
         assert update["trace"]["router"]["decision"] == "clarify"
 
-    def test_high_ratio_round1_triggers_second_loop(self):
-        state: ReviewState = {
-            "high_risk_ratio": 0.5,
-            "revision_round": 1,
-            "trace": {},
-        }
+    def test_high_ratio_round1_triggers_second_loop(self, sample_review_state: ReviewState):
+        state: ReviewState = {**sample_review_state, "high_risk_ratio": 0.5, "revision_round": 1, "trace": {}}
         update = _route_decider_node(state)
         assert update["routing_reason"].startswith("loop:")
         assert update["revision_round"] == 2
@@ -112,9 +104,10 @@ class TestRouteDeciderNode:
         assert update["routing_reason"].startswith("finish:")
         assert update["trace"]["router"]["decision"] == "reporter"
 
-    def test_routing_rounds_accumulate(self):
+    def test_routing_rounds_accumulate(self, sample_review_state: ReviewState):
         """Each call appends to trace.routing_rounds."""
         state: ReviewState = {
+            **sample_review_state,
             "high_risk_ratio": 0.6,
             "revision_round": 0,
             "trace": {"routing_rounds": [{"round": 0, "decision": "previous"}]},

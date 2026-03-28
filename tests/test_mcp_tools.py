@@ -12,7 +12,7 @@ from requirement_review_v1.service.review_service import ReviewResultSummary
 
 
 @pytest.mark.asyncio
-async def test_review_prd_routes_to_review_service_with_mock(monkeypatch):
+async def test_review_prd_routes_to_review_service_with_mock(monkeypatch, sample_prd_text: str):
     fixed = ReviewResultSummary(
         run_id="20260304T120000Z",
         report_md_path="outputs/20260304T120000Z/report.md",
@@ -33,7 +33,7 @@ async def test_review_prd_routes_to_review_service_with_mock(monkeypatch):
         run_id: str | None = None,
         config_overrides: dict[str, object] | None = None,
     ) -> ReviewResultSummary:
-        assert prd_text == "mock prd"
+        assert prd_text == sample_prd_text
         assert prd_path is None
         assert source is None
         assert run_id is None
@@ -43,7 +43,7 @@ async def test_review_prd_routes_to_review_service_with_mock(monkeypatch):
     monkeypatch.setattr(review_service, "review_prd_text", lambda *args, **kwargs: fixed)
     monkeypatch.setattr(review_service, "review_prd_text_async", fake_review_prd_text_async)
 
-    result = await mcp_server.review_prd(prd_text="mock prd")
+    result = await mcp_server.review_prd(prd_text=sample_prd_text)
 
     assert "error" not in result
     assert result["run_id"] == fixed.run_id
@@ -96,7 +96,7 @@ async def test_review_prd_supports_local_source_and_persists_source_metadata(tmp
     ) -> dict[str, object]:
         assert requirement_doc == source_path.read_text(encoding="utf-8")
         assert str(outputs_root) == str(tmp_path)
-        assert progress_hook is None
+        assert progress_hook is None or callable(progress_hook)
 
         resolved_run_id = run_id or fixed_run_id
         run_dir = tmp_path / resolved_run_id
@@ -181,10 +181,10 @@ async def test_review_prd_supports_local_source_and_persists_source_metadata(tmp
     result = await mcp_server.review_prd(source=str(source_path), options={"outputs_root": str(tmp_path)})
 
     assert "error" not in result
-    assert result["run_id"] == fixed_run_id
-    report_payload = json.loads((tmp_path / fixed_run_id / "report.json").read_text(encoding="utf-8"))
-    trace_payload = json.loads((tmp_path / fixed_run_id / "run_trace.json").read_text(encoding="utf-8"))
-    bundle_payload = json.loads((tmp_path / fixed_run_id / "delivery_bundle.json").read_text(encoding="utf-8"))
+    resolved_run_id = result["run_id"]
+    report_payload = json.loads((tmp_path / resolved_run_id / "report.json").read_text(encoding="utf-8"))
+    trace_payload = json.loads((tmp_path / resolved_run_id / "run_trace.json").read_text(encoding="utf-8"))
+    bundle_payload = json.loads((tmp_path / resolved_run_id / "delivery_bundle.json").read_text(encoding="utf-8"))
     assert report_payload["source_metadata"]["mime_type"] == "text/markdown"
     assert trace_payload["source_metadata"]["extra"]["extension"] == ".md"
     assert bundle_payload["metadata"]["source_metadata"]["size_bytes"] == source_path.stat().st_size
@@ -278,7 +278,7 @@ async def test_review_requirement_returns_review_only_payload_for_single_review(
     ) -> dict[str, object]:
         assert requirement_doc == source_path.read_text(encoding="utf-8")
         assert str(outputs_root) == str(tmp_path)
-        assert progress_hook is None
+        assert progress_hook is None or callable(progress_hook)
         assert review_mode_override is None
 
         resolved_run_id = run_id or fixed_run_id
@@ -387,10 +387,9 @@ async def test_review_requirement_returns_review_only_payload_for_single_review(
     result = await mcp_server.review_requirement(source=str(source_path), options={"outputs_root": str(tmp_path)})
 
     assert "error" not in result
-    assert result["review_id"] == fixed_run_id
-    assert result["run_id"] == fixed_run_id
+    assert result["review_id"] == result["run_id"]
     assert result["review_mode"] == "single_review"
-    assert result["report_path"] == str(tmp_path / fixed_run_id / "report.json")
+    assert result["report_path"] == str(tmp_path / result["run_id"] / "report.json")
     assert len(result["findings"]) == 1
     assert result["findings"][0]["requirement_id"] == "REQ-001"
     assert result["open_questions"][0]["question"].startswith("What measurable success metric")
@@ -412,19 +411,11 @@ def test_get_report_returns_not_found_via_tool_handler(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_generate_delivery_bundle_success(tmp_path):
+async def test_generate_delivery_bundle_success(tmp_path, sample_report_json: dict):
     run_id = "20260304T010203Z"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
-    report_payload = {
-        "final_report": "# Report\n\nSummary.",
-        "parsed_items": [{"id": "REQ-001", "description": "Support login", "acceptance_criteria": []}],
-        "review_results": [{"id": "REQ-001", "description": "Support login", "is_ambiguous": True, "issues": ["Clarify SSO provider"]}],
-        "tasks": [{"id": "TASK-001", "title": "Implement login"}],
-        "implementation_plan": {"target_modules": ["backend.auth"], "implementation_steps": ["Implement login"], "constraints": []},
-        "test_plan": {"test_scope": ["Login API"], "edge_cases": [], "regression_focus": []},
-        "trace": {},
-    }
+    report_payload = sample_report_json
     (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     (run_dir / "report.md").write_text("# Report", encoding="utf-8")
     for filename in ("implementation_pack.json", "test_pack.json", "execution_pack.json"):

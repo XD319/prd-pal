@@ -5,36 +5,8 @@ from pathlib import Path
 from requirement_review_v1.packs.artifact_splitter import ArtifactSplitter
 
 
-def _review_result() -> dict:
-    return {
-        "final_report": "# Requirement Review Report\n\nSummary body.",
-        "parsed_items": [
-            {"id": "REQ-001", "description": "Support OAuth login"},
-            {"id": "REQ-002", "description": "Add audit trail"},
-        ],
-        "review_results": [
-            {"id": "REQ-001", "description": "Support OAuth login", "is_ambiguous": True, "issues": ["OAuth provider list is missing"]},
-            {"id": "REQ-002", "description": "Add audit trail", "is_ambiguous": False, "issues": []},
-        ],
-        "tasks": [
-            {"id": "TASK-001", "title": "Implement OAuth callback"},
-            {"id": "TASK-002", "title": "Add audit log persistence"},
-        ],
-        "implementation_plan": {
-            "target_modules": ["backend.auth", "frontend.login"],
-            "implementation_steps": ["Review current login flow", "Implement callback handler"],
-            "constraints": ["Preserve existing password login"],
-        },
-        "test_plan": {
-            "test_scope": ["OAuth callback API"],
-            "edge_cases": ["Expired OAuth state"],
-            "regression_focus": ["Password login"],
-        },
-    }
-
-
-def test_artifact_splitter_generates_expected_markdown_files(tmp_path: Path):
-    refs = ArtifactSplitter().split(_review_result(), tmp_path)
+def test_artifact_splitter_generates_expected_markdown_files(tmp_path: Path, sample_report_json: dict):
+    refs = ArtifactSplitter().split(sample_report_json, tmp_path)
 
     assert set(refs) == {
         "prd_review_report",
@@ -51,7 +23,7 @@ def test_artifact_splitter_generates_expected_markdown_files(tmp_path: Path):
 
     assert "# PRD Review Report" in (tmp_path / "prd_review_report.md").read_text(encoding="utf-8")
     assert "# Open Questions" in (tmp_path / "open_questions.md").read_text(encoding="utf-8")
-    assert "OAuth provider list is missing" in (tmp_path / "open_questions.md").read_text(encoding="utf-8")
+    assert "Shortlist export owner is not identified." in (tmp_path / "open_questions.md").read_text(encoding="utf-8")
     assert "# Scope Boundary" in (tmp_path / "scope_boundary.md").read_text(encoding="utf-8")
     assert "# Technical Design Draft" in (tmp_path / "tech_design_draft.md").read_text(encoding="utf-8")
     assert "# Test Checklist" in (tmp_path / "test_checklist.md").read_text(encoding="utf-8")
@@ -65,8 +37,8 @@ def test_artifact_splitter_degrades_gracefully_on_empty_input(tmp_path: Path):
     assert "No implementation steps were generated." in (tmp_path / "tech_design_draft.md").read_text(encoding="utf-8")
 
 
-def test_artifact_splitter_returns_correct_paths(tmp_path: Path):
-    refs = ArtifactSplitter().split(_review_result(), tmp_path)
+def test_artifact_splitter_returns_correct_paths(tmp_path: Path, sample_report_json: dict):
+    refs = ArtifactSplitter().split(sample_report_json, tmp_path)
 
     assert refs["prd_review_report"].path == str(tmp_path / "prd_review_report.md")
     assert refs["test_checklist"].path == str(tmp_path / "test_checklist.md")

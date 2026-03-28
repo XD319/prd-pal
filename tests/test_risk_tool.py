@@ -172,13 +172,12 @@ class TestSkillExecutorCache:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _base_state() -> ReviewState:
+@pytest.fixture
+def base_state(sample_review_state: ReviewState) -> ReviewState:
     return {
-        "tasks": [
-            {"id": "T-1", "title": "Design API", "owner": "BE", "requirement_ids": ["REQ-001"], "depends_on": [], "estimate_days": 3},
-        ],
-        "milestones": [{"id": "M-1", "title": "MVP", "includes": ["T-1"], "target_days": 5}],
-        "dependencies": [],
+        "tasks": sample_review_state["tasks"],
+        "milestones": sample_review_state["milestones"],
+        "dependencies": sample_review_state["dependencies"],
         "estimation": {"total_days": 10, "buffer_days": 1},
         "trace": {},
         "run_dir": "",
@@ -210,7 +209,7 @@ class TestRiskAgentToolEnabled:
         self.catalog_path = str(catalog_file)
 
     @pytest.mark.asyncio
-    async def test_tool_hit_attaches_evidence(self):
+    async def test_tool_hit_attaches_evidence(self, base_state: ReviewState):
         catalog_hits = [
             {"id": "RC-003", "title": "Insufficient schedule buffer", "score": 5.0, "snippet": "Buffer below 15%", "matched_terms": ["buffer"]},
         ]
@@ -229,7 +228,7 @@ class TestRiskAgentToolEnabled:
         ):
             from requirement_review_v1.agents import risk_agent
 
-            result = await risk_agent.run(_base_state())
+            result = await risk_agent.run(base_state)
 
         assert len(result["risks"]) == 1
         risk = result["risks"][0]
@@ -241,7 +240,7 @@ class TestRiskAgentToolEnabled:
         assert result["trace"]["risk_catalog.search"]["ttl_sec"] == 300
 
     @pytest.mark.asyncio
-    async def test_tool_miss_returns_risks_without_evidence(self):
+    async def test_tool_miss_returns_risks_without_evidence(self, base_state: ReviewState):
         with (
             patch(
                 "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
@@ -257,7 +256,7 @@ class TestRiskAgentToolEnabled:
         ):
             from requirement_review_v1.agents import risk_agent
 
-            result = await risk_agent.run(_base_state())
+            result = await risk_agent.run(base_state)
 
         assert len(result["risks"]) == 1
         risk = result["risks"][0]
@@ -265,7 +264,7 @@ class TestRiskAgentToolEnabled:
         assert result["trace"]["risk"]["status"] == "ok"
 
     @pytest.mark.asyncio
-    async def test_tool_second_run_hits_cache(self):
+    async def test_tool_second_run_hits_cache(self, base_state: ReviewState):
         catalog_hits = [
             {"id": "RC-003", "title": "Insufficient schedule buffer", "score": 5.0, "snippet": "Buffer below 15%", "matched_terms": ["buffer"]},
         ]
@@ -285,8 +284,8 @@ class TestRiskAgentToolEnabled:
         ):
             from requirement_review_v1.agents import risk_agent
 
-            first = await risk_agent.run(_base_state())
-            second = await risk_agent.run(_base_state())
+            first = await risk_agent.run(base_state)
+            second = await risk_agent.run(base_state)
 
         assert first["trace"]["risk_catalog.search"]["cache_hit"] is False
         assert second["trace"]["risk_catalog.search"]["cache_hit"] is True
@@ -304,7 +303,7 @@ class TestRiskAgentToolDisabled:
     """Risk agent with RISK_AGENT_ENABLE_CATALOG_TOOL=false."""
 
     @pytest.mark.asyncio
-    async def test_tool_disabled_skips_catalog(self):
+    async def test_tool_disabled_skips_catalog(self, base_state: ReviewState):
         mock_search = MagicMock(return_value=[])
         with (
             patch(
@@ -321,7 +320,7 @@ class TestRiskAgentToolDisabled:
         ):
             from requirement_review_v1.agents import risk_agent
 
-            result = await risk_agent.run(_base_state())
+            result = await risk_agent.run(base_state)
 
         mock_search.assert_not_called()
         assert len(result["risks"]) == 1
@@ -330,7 +329,7 @@ class TestRiskAgentToolDisabled:
         assert trace_risk.get("risk_catalog_tool_status") == "degraded_disabled"
 
     @pytest.mark.asyncio
-    async def test_tool_disabled_with_env_zero(self):
+    async def test_tool_disabled_with_env_zero(self, base_state: ReviewState):
         mock_search = MagicMock(return_value=[])
         with (
             patch(
@@ -347,7 +346,7 @@ class TestRiskAgentToolDisabled:
         ):
             from requirement_review_v1.agents import risk_agent
 
-            result = await risk_agent.run(_base_state())
+            result = await risk_agent.run(base_state)
 
         mock_search.assert_not_called()
         assert result["trace"]["risk"].get("risk_catalog_tool_status") == "degraded_disabled"
@@ -362,7 +361,7 @@ class TestRiskAgentToolError:
     """Risk agent gracefully degrades when catalog tool throws."""
 
     @pytest.mark.asyncio
-    async def test_tool_error_degrades_gracefully(self):
+    async def test_tool_error_degrades_gracefully(self, base_state: ReviewState):
         with (
             patch(
                 "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
@@ -378,7 +377,7 @@ class TestRiskAgentToolError:
         ):
             from requirement_review_v1.agents import risk_agent
 
-            result = await risk_agent.run(_base_state())
+            result = await risk_agent.run(base_state)
 
         assert len(result["risks"]) == 1
         trace_risk = result["trace"]["risk"]
@@ -415,7 +414,7 @@ class TestRiskAgentEmptyTasks:
 
 class TestRiskAnalysisSubflowContract:
     @pytest.mark.asyncio
-    async def test_subflow_returns_contract_fields(self):
+    async def test_subflow_returns_contract_fields(self, base_state: ReviewState):
         with (
             patch(
                 "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
@@ -439,10 +438,10 @@ class TestRiskAnalysisSubflowContract:
                         }
                     ],
                     "context": {
-                        "tasks": _base_state()["tasks"],
-                        "milestones": _base_state()["milestones"],
-                        "dependencies": _base_state()["dependencies"],
-                        "estimation": _base_state()["estimation"],
+                        "tasks": base_state["tasks"],
+                        "milestones": base_state["milestones"],
+                        "dependencies": base_state["dependencies"],
+                        "estimation": base_state["estimation"],
                         "trace": {},
                     },
                 }

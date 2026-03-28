@@ -9,7 +9,7 @@ from requirement_review_v1.service import review_service
 from requirement_review_v1.service.review_service import build_delivery_handoff_outputs
 
 
-def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path):
+def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_report_json: dict):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
     report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -22,64 +22,7 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path):
             "report_json": str(report_json_path),
             "run_trace": str(trace_path),
         },
-        "result": {
-            "final_report": "# Requirement Review Report\n\nSummary.",
-            "parsed_items": [
-                {
-                    "id": "REQ-001",
-                    "description": "Support OAuth login for campus recruiters",
-                    "acceptance_criteria": ["OAuth callback succeeds", "Session is persisted"],
-                }
-            ],
-            "review_results": [
-                {
-                    "id": "REQ-001",
-                    "description": "Support OAuth login for campus recruiters",
-                    "is_ambiguous": True,
-                    "issues": ["OAuth provider onboarding owner missing"],
-                }
-            ],
-            "tasks": [
-                {
-                    "id": "TASK-001",
-                    "title": "Implement OAuth login flow",
-                    "owner": "BE",
-                    "requirement_ids": ["REQ-001"],
-                }
-            ],
-            "risks": [
-                {
-                    "id": "RISK-001",
-                    "description": "Existing login flow may regress",
-                    "impact": "high",
-                    "mitigation": "Run focused auth regression tests",
-                    "owner": "qa",
-                }
-            ],
-            "implementation_plan": {
-                "implementation_steps": ["Inspect auth entrypoints", "Implement OAuth callback"],
-                "target_modules": ["backend.auth", "frontend.login"],
-                "constraints": ["Preserve password login behavior"],
-            },
-            "test_plan": {
-                "test_scope": ["OAuth callback API", "Recruiter login page"],
-                "edge_cases": ["Expired OAuth state"],
-                "regression_focus": ["Password login"],
-            },
-            "codex_prompt_handoff": {
-                "agent_prompt": "Implement the auth changes, then run focused backend and frontend tests.",
-                "recommended_execution_order": ["Review auth flow", "Apply backend changes"],
-                "non_goals": ["Do not redesign account settings"],
-                "validation_checklist": ["Acceptance criteria mapped to tests"],
-            },
-            "claude_code_prompt_handoff": {
-                "agent_prompt": "Verify the implementation with edge-case and regression coverage.",
-                "recommended_execution_order": ["Review changed files", "Run regression suite"],
-                "non_goals": ["Do not broaden test scope beyond auth"],
-                "validation_checklist": ["OAuth edge cases covered"],
-            },
-            "trace": {},
-        },
+        "result": sample_report_json,
     }
 
     artifact_paths = build_delivery_handoff_outputs(run_output)

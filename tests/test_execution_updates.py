@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from requirement_review_v1.execution import ExecutionMode, ExecutionTask, ExecutionTaskStatus
 from requirement_review_v1.service.execution_service import (
@@ -10,94 +9,6 @@ from requirement_review_v1.service.execution_service import (
     list_execution_tasks_for_mcp,
     update_execution_task_for_mcp,
 )
-
-
-def _write_approved_execution_workspace(tmp_path: Path, run_id: str = "20260308T020304Z") -> tuple[str, Path]:
-    run_dir = tmp_path / run_id
-    run_dir.mkdir(parents=True)
-
-    implementation_pack = {
-        "pack_type": "implementation_pack",
-        "task_id": "TASK-001",
-        "title": "Implement login",
-        "summary": "Support recruiter login safely.",
-        "context": "Repository auth flow context.",
-        "target_modules": ["backend.auth"],
-        "implementation_steps": ["Inspect auth flow", "Implement login change"],
-        "constraints": ["Do not break existing auth flow"],
-        "acceptance_criteria": ["Login succeeds"],
-        "recommended_skills": ["pytest"],
-        "agent_handoff": {
-            "primary_agent": "codex",
-            "supporting_agents": ["claude_code"],
-            "goals": ["Implement login"],
-            "expected_output": "Small safe auth patch",
-        },
-    }
-    test_pack = {
-        "pack_type": "test_pack",
-        "task_id": "TASK-001",
-        "title": "Test login",
-        "summary": "Validate recruiter login flow.",
-        "test_scope": ["Login API"],
-        "edge_cases": ["Invalid credentials"],
-        "acceptance_criteria": ["Regression covered"],
-        "agent_handoff": {
-            "primary_agent": "claude_code",
-            "supporting_agents": ["codex"],
-            "goals": ["Run auth checks"],
-            "expected_output": "Validation summary",
-        },
-    }
-    execution_pack = {
-        "pack_type": "execution_pack",
-        "pack_version": "1.0",
-        "implementation_pack": implementation_pack,
-        "test_pack": test_pack,
-        "risk_pack": [{"id": "RISK-001", "summary": "Auth regression", "level": "low"}],
-        "handoff_strategy": "sequential",
-    }
-
-    (run_dir / "implementation_pack.json").write_text(json.dumps(implementation_pack, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "test_pack.json").write_text(json.dumps(test_pack, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "execution_pack.json").write_text(json.dumps(execution_pack, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "report.json").write_text(
-        json.dumps(
-            {
-                "parsed_items": [{"id": "REQ-001", "description": "Support login"}],
-                "review_results": [{"id": "REQ-001", "issues": ["Clarify SSO provider"]}],
-                "tasks": [{"id": "TASK-001", "title": "Implement login", "requirement_ids": ["REQ-001"]}],
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-    bundle_id = f"bundle-{run_id}"
-    bundle_payload = {
-        "bundle_id": bundle_id,
-        "bundle_version": "1.0",
-        "created_at": "2026-03-08T02:03:04+00:00",
-        "status": "approved",
-        "source_run_id": run_id,
-        "artifacts": {
-            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
-            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
-            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
-            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
-            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
-            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
-            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
-            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
-        },
-        "approval_history": [],
-        "metadata": {"source_report_paths": {"report_json": str(run_dir / "report.json")}},
-    }
-    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return bundle_id, run_dir
-
-
 def test_append_execution_event_adds_log_entry_without_changing_status() -> None:
     task = ExecutionTask(
         task_id="bundle-1:implementation_pack",
@@ -119,8 +30,8 @@ def test_append_execution_event_adds_log_entry_without_changing_status() -> None
     assert updated.updated_at != task.updated_at
 
 
-def test_update_execution_task_for_mcp_persists_tasks_snapshot_and_trace(tmp_path: Path) -> None:
-    bundle_id, run_dir = _write_approved_execution_workspace(tmp_path)
+def test_update_execution_task_for_mcp_persists_tasks_snapshot_and_trace(tmp_path, write_delivery_workspace) -> None:
+    bundle_id, run_dir = write_delivery_workspace(tmp_path, bundle_status="approved")
     handoff_to_executor_for_mcp(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
     task_id = f"{bundle_id}:implementation_pack"
 

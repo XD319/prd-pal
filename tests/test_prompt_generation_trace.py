@@ -23,7 +23,7 @@ def clear_skill_cache():
 
 
 @pytest.mark.asyncio
-async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monkeypatch):
+async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monkeypatch, sample_prd_text: str):
     async def fake_parser_call(*, prompt, schema, metadata):
         return {
             "parsed_items": [
@@ -144,8 +144,6 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monk
 
     monkeypatch.setenv("RISK_AGENT_ENABLE_CATALOG_TOOL", "false")
 
-    sample_prd = Path("docs/sample_prd.md").read_text(encoding="utf-8")
-
     with (
         patch("requirement_review_v1.agents.parser_agent.Config", _FakeConfig),
         patch("requirement_review_v1.agents.planner_agent.Config", _FakeConfig),
@@ -157,7 +155,7 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monk
         patch("requirement_review_v1.agents.reviewer_agent.llm_structured_call", side_effect=fake_reviewer_call),
         patch("requirement_review_v1.skills.delivery_planning.llm_structured_call", side_effect=fake_delivery_skill_call),
     ):
-        result = await run_review(requirement_doc=sample_prd, outputs_root=tmp_path)
+        result = await run_review(requirement_doc=sample_prd_text, outputs_root=tmp_path)
 
     trace_path = Path(result["report_paths"]["run_trace"])
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
