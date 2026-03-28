@@ -7,7 +7,7 @@ description: Review PRD drafts through a deployed PRDReview HTTP service. Use wh
 
 ## Overview
 
-Use a deployed PRDReview HTTP API as the source of truth for review results. Prefer sending PRD content as request JSON, poll the run until completion, and summarize the review output instead of echoing raw payloads.
+Use a deployed PRDReview HTTP API as the source of truth for review results. Prefer sending PRD content as request JSON, treat the service primarily as a review kernel, poll the run until completion, and summarize the review output instead of echoing raw payloads.
 
 ## Workflow
 
@@ -25,7 +25,9 @@ Prefer request JSON content over server-side file paths.
 
 - If the user gave a local PRD file, read the file and submit its content as `prd_text`.
 - If the user pasted the draft directly, submit it as `prd_text`.
+- Treat `prd_text` as the default contract for strong callers that can already fetch requirement content.
 - Do not send remote connector `source` values such as URLs, Feishu, or Notion unless the user explicitly asks for them.
+- Treat remote connector-backed `source` as an integration boundary for weak callers that can only provide the source location, not the document content itself.
 - Do not send local machine paths as `prd_path` to a remote service unless the user confirms the server can access the same filesystem.
 
 ### 3. Start the review run
@@ -84,6 +86,7 @@ Do not paste full raw reports, full request payloads, or authentication headers 
 
 - Treat the deployed API as the system of record.
 - Prefer `prd_text` for remote submission.
+- Treat the remote API as review-first. Source fetching, human clarification conversations, and handoff decisions are usually better orchestrated by the caller's agent unless the user explicitly wants the service to own those steps.
 - Avoid connector-backed remote `source` values unless the user explicitly requests them.
 - Never reveal API keys, bearer tokens, or auth headers in your response.
 - If the user wants downstream coding-agent handoff generation, explain that the current shared HTTP flow is review-first; use local CLI or MCP when handoff prep is required.

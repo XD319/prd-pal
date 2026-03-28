@@ -67,7 +67,26 @@ Extract and summarize:
 - `conflicts`
 - `review_mode` or gating details when present
 
-### 5. Respond in review-first mode
+### 5. Check for a clarification loop before handoff
+
+Read the report payload's `clarification` field.
+
+- If `clarification.triggered` is `true` and `clarification.status` is `pending`, pause the workflow and ask the user the pending clarification questions before any handoff or execution prep.
+- Treat this as a multi-turn loop. Keep the `run_id` plus each question's `id`, `question`, and `reviewer` so the next user reply can be mapped back to the persisted run.
+- When the user answers, submit the answers through native project interfaces instead of inventing an updated review result.
+
+Preferred answer-submission path:
+
+`answer_review_clarification(run_id=<run_id>, answers=[{"question_id": "...", "answer": "..."}])`
+
+Fallback when working through the local HTTP API:
+
+`POST /api/review/<run_id>/clarification`
+
+- If neither MCP nor the local HTTP API is available for answer submission, ask the user to apply the clarification into the PRD itself and run a new review instead of pretending the clarification was persisted.
+- Do not continue to `prepare-handoff` while clarification is still pending.
+
+### 6. Respond in review-first mode
 
 Provide:
 
@@ -75,11 +94,12 @@ Provide:
 - missing acceptance criteria or scope boundaries
 - concrete PRD rewrite suggestions
 - whether the draft is ready for execution handoff
+- pending clarification questions when the clarification gate is active
 
 Do not jump straight to coding or task execution unless the user explicitly asks.
 Do not paste the full PRD or the full report JSON back into chat unless the user explicitly asks for it.
 
-### 6. Prepare downstream agent handoff only on request
+### 7. Prepare downstream agent handoff only on request
 
 When the user wants execution prep, run:
 
@@ -104,8 +124,11 @@ Return:
 - Prefer `--input` plus a saved markdown file.
 - Prefer `--json` for commands that the agent needs to parse.
 - Treat the CLI as the system of record. Do not invent review results.
+- The local CLI does not currently expose a dedicated clarification-answer subcommand. For clarification writeback, prefer MCP `answer_review_clarification`, then the local HTTP API.
 - Do not use connector-backed `--source` inputs such as URLs, Feishu, or Notion unless the user explicitly asks for them. Those paths may fetch external content or use configured credentials.
 - Prefer summarizing findings over echoing raw PRD text, raw reports, or large JSON blobs.
 - Mention the `run_id` in your response so the user can reuse it later.
+- When clarification is pending, surface the pending questions first and wait for the user's answers before preparing downstream execution requests.
+- When the user answers a pending clarification, preserve each `question_id` and submit the answers back to the project before summarizing the refreshed result.
 - If the user asks for another review after edits, run a new review instead of assuming old results still apply.
-- If the user asks for native tool integration instead of CLI, mention that MCP is also available via `review_requirement` and `prepare_agent_handoff`.
+- If the user asks for native tool integration instead of CLI, mention that MCP is also available via `review_requirement`, `answer_review_clarification`, and `prepare_agent_handoff`.

@@ -7,9 +7,14 @@ This document explains how to run the repository's MCP server with review-first 
 The MCP surface should be understood in two layers:
 
 - Core tools: review-only tools used to create and fetch review results
-- Extension tools: retained orchestration and governance tools built on top of those review results
+- Extension tools: retained source-integration, clarification, orchestration, and governance tools built on top of those review results
 
 If you are integrating this repository for the first time, start with the core tools only.
+
+As a default boundary:
+
+- Prefer `prd_text` or `prd_path` when the MCP client can already fetch source content.
+- Use connector-backed `source` when the MCP client is a weak caller that only knows the remote document identifier or URL.
 
 ## Prerequisites
 
@@ -47,6 +52,11 @@ These are the primary tools to emphasize:
   - Prepares adapter-specific request payloads for `codex`, `claude_code`, or `openclaw`
   - Accepts either `run_id` or fresh PRD inputs (`source`, `prd_text`, `prd_path`)
   - Returns request file paths, context paths, prompt paths, and structured request payloads
+
+Recommended input choice:
+
+- Use `prd_text` for strong callers that already fetched the requirement content.
+- Use `source` for weak callers that need PRDReview to fetch and normalize the source document.
 
 Recommended first integration flow:
 
@@ -118,6 +128,13 @@ The implementation may also persist additional extension artifacts in the same r
 
 When the run starts from connector-backed `source`, the persisted artifacts also retain `source_metadata` where supported so downstream MCP clients can trace the origin of the reviewed document.
 
+## Optional Human-Loop Tool
+
+- `answer_review_clarification`
+  - Applies user clarification answers to a persisted review result
+  - Accepts `run_id`, `answers`, and `options`
+  - Best used by caller-side agents that handle the user conversation but want project-side persistence for the refreshed review state
+
 ## Extension Tools
 
 The repository retains additional MCP tools for downstream orchestration and governance:
@@ -150,7 +167,8 @@ This is optional and should not be confused with the main review architecture.
 
 ## Notes For Client Authors
 
-- Prefer `source` for new integrations when you want connector-based intake.
+- Prefer `prd_text` for strong clients that can already fetch and normalize source content.
+- Prefer `source` when the client is intentionally delegating document fetch and normalization to PRDReview.
 - Keep `prd_text` and `prd_path` for backward compatibility.
 - Treat `review_requirement` as the review-only facade.
 - Treat `review_prd` as the richer compatibility surface when you intentionally need bundle-adjacent artifact paths in the same response.

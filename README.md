@@ -10,6 +10,39 @@ The repository should be evaluated against this review-engine contract:
 
 That review-result-first flow is the main architecture and the primary adoption path.
 
+## User Flow
+
+```mermaid
+flowchart LR
+    A["User provides PRD<br/>text / file / source"] --> B["Agent triggers Skill or MCP"]
+    B --> C{"PRD input type"}
+
+    C -->|text/file| D["Enter Review Kernel"]
+    C -->|source| E["Connector fetches remote document<br/>Notion / Feishu / URL"]
+    E --> D
+
+    D --> F["Generate review artifacts<br/>findings / risks / open questions / report"]
+    F --> G{"Clarification needed?"}
+
+    G -->|yes| H["User answers clarification questions"]
+    H --> I["Write clarification back<br/>refresh review result"]
+    I --> F
+
+    G -->|no| J{"Handoff needed?"}
+    F --> J
+    J -->|no| K["Return review result"]
+    J -->|yes| L["Generate optional handoff artifacts<br/>for Codex / Claude Code / OpenClaw"]
+```
+
+## Recommended Boundary
+
+Treat PRDReview primarily as a review kernel that turns requirement content into stable review artifacts.
+
+- Core path: `prd_text`, `prd_path`, and local text files flowing into review results.
+- Optional integration path: connector-backed `source` intake, clarification writeback, and downstream agent handoff preparation.
+- Prefer `prd_text` or `prd_path` when the caller can already fetch and normalize source content.
+- Use connector-backed `source` mainly for weak callers that can identify a document location but cannot fetch its content themselves.
+
 ## Package Status
 
 Package version `0.6.0` marks the current milestone baseline.
@@ -18,14 +51,16 @@ The review flow is usable today, but this package should not yet be treated as a
 
 ## Core Capabilities
 
-- Multi-source requirement intake through `prd_text`, `prd_path`, and connector-backed `source`
+- Review-kernel intake through `prd_text`, `prd_path`, and local text files
 - Review mode gating to choose between `single_review` and `parallel_review`
 - Requirement normalization into reviewer-specific views
 - Multi-role review across product, engineering, QA, and security perspectives
 - Aggregation of reviewer findings, risks, open questions, and conflicts
 - Review artifact generation for both human-readable and machine-readable outputs
 - CLI, FastAPI, and MCP entrypoints centered on producing review results
+- Clarification writeback for human-in-the-loop review refinement
 - Agent handoff preparation for Codex, Claude Code, and OpenClaw
+- Optional connector-backed source intake for Feishu, Notion, and public URLs
 
 ## Supported Input Boundaries
 
@@ -38,6 +73,11 @@ The review flow is usable today, but this package should not yet be treated as a
 - Controlled Feishu fetch failures are surfaced explicitly as authentication, permission, not-found, or unsupported-document-type errors in the API and MCP layers.
 - Controlled Notion fetch failures are surfaced explicitly as authentication, permission, not-found, rate-limit, or network errors in the API and MCP layers.
 - Local-file and public-URL ingestion behavior is unchanged.
+
+When deciding whether to use connector-backed `source` intake:
+
+- Prefer caller-side fetch plus `prd_text` when the caller already has access to the source system.
+- Prefer project-side `source` intake when you need one-hop review from document identifiers, centralized auth, or persisted source metadata in review artifacts.
 
 ## Source Support
 
@@ -97,6 +137,7 @@ python -m requirement_review_v1.main prepare-handoff --run-id 20260309T000000Z -
 
 - Use `review_requirement` when the consumer needs structured review output only.
 - `review_prd` remains available as a compatibility surface in the current MCP implementation, but the mainline contract is the review result.
+- Treat `answer_review_clarification` and `prepare_agent_handoff` as optional follow-up interfaces rather than part of the minimum viable review contract.
 
 ### FastAPI
 
@@ -132,9 +173,12 @@ Core review tools:
 - `review_requirement`
 - `review_prd`
 - `get_report`
+- `answer_review_clarification`
 - `prepare_agent_handoff`
 
 Use `review_requirement` when you want the review engine contract: `findings`, `open_questions`, `risk_items`, `conflicts`, `report_path`, and `review_mode`.
+
+Use `answer_review_clarification` when a human answers pending clarification questions for an existing run and you want the refreshed review result without inventing local state.
 
 Use `prepare_agent_handoff` when you want adapter-specific request payloads for `codex`, `claude_code`, or `openclaw`, either from an existing `run_id` or directly from fresh PRD input.
 
@@ -179,6 +223,7 @@ In current code, surrounding workflow nodes such as parser, planner, risk analys
 - A successful mainline run means the repository produced review artifacts.
 - The review-engine contract does not require approval, downstream orchestration, or external executor control to complete.
 - Input handling outside local files, plain text, and public text URLs should be treated as an explicit integration boundary unless documented otherwise.
+- Connector-backed enterprise sources such as Feishu and Notion are best treated as optional adapters, not the required entry path for every caller.
 
 ## Related Docs
 
