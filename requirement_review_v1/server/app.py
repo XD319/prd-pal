@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, model_validator
 
 from requirement_review_v1.monitoring import query_audit_events
@@ -33,6 +34,7 @@ from requirement_review_v1.service.report_service import RUN_ID_PATTERN
 from requirement_review_v1.templates import TemplateRegistryError, list_template_records
 
 OUTPUTS_ROOT = Path("outputs")
+FRONTEND_DIST_ROOT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 RUN_PROGRESS_FILENAME = "run_progress.json"
 PRIMARY_NODES = (
     "parser",
@@ -979,6 +981,11 @@ async def get_report(run_id: str, format: Literal["md", "json"] = Query(default=
 
     media_type = "text/markdown; charset=utf-8" if format == "md" else "application/json"
     return FileResponse(path=str(path), media_type=media_type, filename=filename)
+
+
+if FRONTEND_DIST_ROOT.exists():
+    # Mount the built SPA after registering API routes so `/api/*` keeps priority.
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST_ROOT, html=True), name="frontend")
 
 
 

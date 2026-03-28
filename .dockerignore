@@ -1,2 +1,8 @@
-.git
-output/
+node_modules/
+__pycache__/
+.env
+outputs/
+logs/
+.git/
+*.pyc
+eval/
