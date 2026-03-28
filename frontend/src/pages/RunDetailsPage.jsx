@@ -56,6 +56,7 @@ function RunDetailsPage() {
               status={status}
               statusPayload={runState.statusPayload}
               failureMessage={runState.failureMessage}
+              loadState={runState.loadState}
             />
           </PanelErrorBoundary>
 

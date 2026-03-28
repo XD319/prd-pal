@@ -1,7 +1,8 @@
-"""Delivery planning node that enriches the base plan with execution skills."""
+﻿"""Delivery planning node that enriches the base plan with execution skills."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -80,6 +81,18 @@ def _collect_prompt_constraints(
     return constraints
 
 
+async def _execute_skill(executor, skill_name: str, payload: dict[str, Any], trace: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        output = await executor.execute(
+            get_skill_spec(skill_name),
+            payload,
+            trace=trace,
+        )
+        return output.model_dump(mode="python"), None
+    except Exception:
+        return None, skill_name
+
+
 async def run(state: ReviewState) -> ReviewState:
     parsed_items: list[dict[str, Any]] = list(state.get("parsed_items", []) or [])
     risks: list[dict[str, Any]] = list(state.get("risks", []) or [])
@@ -102,25 +115,21 @@ async def run(state: ReviewState) -> ReviewState:
     degraded_skills: list[str] = []
     executor = get_skill_executor()
 
-    try:
-        implementation_output = await executor.execute(
-            get_skill_spec(_IMPLEMENTATION_SKILL),
-            payload,
-            trace=trace,
-        )
-        implementation_plan = implementation_output.model_dump(mode="python")
-    except Exception:
-        degraded_skills.append(_IMPLEMENTATION_SKILL)
+    implementation_result, test_result = await asyncio.gather(
+        _execute_skill(executor, _IMPLEMENTATION_SKILL, payload, trace),
+        _execute_skill(executor, _TEST_PLAN_SKILL, payload, trace),
+    )
+    implementation_output, implementation_error = implementation_result
+    test_output, test_error = test_result
 
-    try:
-        test_output = await executor.execute(
-            get_skill_spec(_TEST_PLAN_SKILL),
-            payload,
-            trace=trace,
-        )
-        test_plan = test_output.model_dump(mode="python")
-    except Exception:
-        degraded_skills.append(_TEST_PLAN_SKILL)
+    if implementation_output is not None:
+        implementation_plan = implementation_output
+    if test_output is not None:
+        test_plan = test_output
+    if implementation_error:
+        degraded_skills.append(implementation_error)
+    if test_error:
+        degraded_skills.append(test_error)
 
     prompt_payload = {
         "implementation_plan": implementation_plan,
@@ -129,25 +138,21 @@ async def run(state: ReviewState) -> ReviewState:
         "acceptance_criteria": _collect_acceptance_criteria(parsed_items),
     }
 
-    try:
-        codex_output = await executor.execute(
-            get_skill_spec(_CODEX_PROMPT_SKILL),
-            prompt_payload,
-            trace=trace,
-        )
-        codex_prompt_handoff = codex_output.model_dump(mode="python")
-    except Exception:
-        degraded_skills.append(_CODEX_PROMPT_SKILL)
+    codex_result, claude_result = await asyncio.gather(
+        _execute_skill(executor, _CODEX_PROMPT_SKILL, prompt_payload, trace),
+        _execute_skill(executor, _CLAUDE_CODE_PROMPT_SKILL, prompt_payload, trace),
+    )
+    codex_output, codex_error = codex_result
+    claude_code_output, claude_error = claude_result
 
-    try:
-        claude_code_output = await executor.execute(
-            get_skill_spec(_CLAUDE_CODE_PROMPT_SKILL),
-            prompt_payload,
-            trace=trace,
-        )
-        claude_code_prompt_handoff = claude_code_output.model_dump(mode="python")
-    except Exception:
-        degraded_skills.append(_CLAUDE_CODE_PROMPT_SKILL)
+    if codex_output is not None:
+        codex_prompt_handoff = codex_output
+    if claude_code_output is not None:
+        claude_code_prompt_handoff = claude_code_output
+    if codex_error:
+        degraded_skills.append(codex_error)
+    if claude_error:
+        degraded_skills.append(claude_error)
 
     span.set_attr("implementation_skill", _IMPLEMENTATION_SKILL)
     span.set_attr("test_plan_skill", _TEST_PLAN_SKILL)

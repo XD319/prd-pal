@@ -134,6 +134,11 @@
   color: var(--status-queued-text);
 }
 
+.status-loading {
+  background: var(--status-queued-bg);
+  color: var(--status-queued-text);
+}
+
 .status-running {
   background: var(--status-running-bg);
   color: var(--status-running-text);
@@ -464,3 +469,4 @@
   background: var(--status-queued-bg);
   color: var(--status-queued-text);
 }
+

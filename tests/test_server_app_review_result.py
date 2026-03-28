@@ -52,6 +52,40 @@ def test_get_review_result_returns_parsed_report_and_gating_metadata(tmp_path, m
     app_module._jobs.clear()
 
 
+
+def test_get_review_result_returns_completed_when_reporter_succeeds_after_degraded_steps(tmp_path, monkeypatch):
+    run_id = '20260309T010206Z'
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+
+    report_payload = {
+        'run_id': run_id,
+        'schema_version': 'v1.1',
+        'trace': {
+            'planner': {'status': 'error', 'error_message': 'parsed_items is empty - nothing to plan'},
+            'risk': {'status': 'error', 'error_message': 'structured_requirements is empty - nothing to assess'},
+            'reviewer': {'status': 'error', 'error_message': 'parsed_items is empty - nothing to review'},
+            'reporter': {'status': 'ok'},
+            'pack_builder': {'status': 'ok', 'non_blocking': True},
+        },
+    }
+    (run_dir / 'report.md').write_text('# Review Report', encoding='utf-8')
+    (run_dir / 'report.json').write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    (run_dir / 'run_trace.json').write_text(json.dumps(report_payload['trace'], ensure_ascii=False, indent=2), encoding='utf-8')
+
+    monkeypatch.setattr(app_module, 'OUTPUTS_ROOT', tmp_path)
+    app_module._jobs.clear()
+
+    client = TestClient(app_module.app)
+    response = client.get(f'/api/review/{run_id}/result')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['status'] == 'completed'
+    assert payload['result'] == report_payload
+    app_module._jobs.clear()
+
+
 def test_get_review_result_returns_404_for_missing_run(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, 'OUTPUTS_ROOT', tmp_path)
     app_module._jobs.clear()

@@ -11,14 +11,38 @@
   return fallbackMessage;
 }
 
+const defaultRequestTimeoutMs = 15000;
+
+async function fetchWithTimeout(path, options = {}) {
+  const { timeoutMs = defaultRequestTimeoutMs, headers, ...restOptions } = options;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(path, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers ?? {}),
+      },
+      ...restOptions,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error(`Request timed out after ${timeoutMs}ms.`);
+      timeoutError.name = 'TimeoutError';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function requestJson(path, options = {}) {
-  const response = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
-    ...options,
-  });
+  const response = await fetchWithTimeout(path, options);
 
   const contentType = response.headers.get('content-type') ?? '';
   const payload = contentType.includes('application/json')
@@ -72,7 +96,10 @@ export function fetchRuns() {
 }
 
 export async function downloadReportArtifact(runId, format) {
-  const response = await fetch(`/api/report/${encodeURIComponent(runId)}?format=${encodeURIComponent(format)}`);
+  const response = await fetchWithTimeout(`/api/report/${encodeURIComponent(runId)}?format=${encodeURIComponent(format)}`, {
+    timeoutMs: 20000,
+    headers: {},
+  });
   const fallbackName = format === 'json' ? 'report.json' : 'report.md';
 
   if (!response.ok) {

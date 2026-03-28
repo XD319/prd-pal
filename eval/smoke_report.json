@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-03-10T02:45:09Z",
+  "scope": "review-engine-only",
+  "checks": {
+    "cli": {
+      "passed": true,
+      "output": "Report : C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\cli-run\\report.md\nState  : C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\cli-run\\report.json\nTrace  : C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\cli-run\\run_trace.json",
+      "artifacts": {
+        "report_md": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\cli-run\\report.md",
+        "report_json": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\cli-run\\report.json",
+        "run_trace": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\cli-run\\run_trace.json"
+      }
+    },
+    "fastapi": {
+      "passed": true,
+      "create": {
+        "run_id": "20260310T120000Z"
+      },
+      "status": {
+        "run_id": "20260310T120000Z",
+        "status": "completed",
+        "progress": {
+          "percent": 100,
+          "current_node": "",
+          "nodes": {
+            "parser": {
+              "status": "pending",
+              "runs": 0
+            },
+            "clarify": {
+              "status": "pending",
+              "runs": 0
+            },
+            "planner": {
+              "status": "pending",
+              "runs": 0
+            },
+            "risk": {
+              "status": "pending",
+              "runs": 0
+            },
+            "reviewer": {
+              "status": "pending",
+              "runs": 0
+            },
+            "route_decider": {
+              "status": "pending",
+              "runs": 0
+            },
+            "reporter": {
+              "status": "pending",
+              "runs": 0
+            }
+          },
+          "updated_at": "2026-03-10T02:45:09.931124+00:00",
+          "error": ""
+        },
+        "report_paths": {
+          "report_md": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\fastapi-outputs\\20260310T120000Z\\report.md",
+          "report_json": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\fastapi-outputs\\20260310T120000Z\\report.json",
+          "run_trace": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\fastapi-outputs\\20260310T120000Z\\run_trace.json"
+        }
+      },
+      "result": {
+        "run_id": "20260310T120000Z",
+        "status": "completed",
+        "result": {
+          "run_id": "20260310T120000Z",
+          "status": "completed",
+          "trace": {
+            "reporter": {
+              "status": "ok"
+            }
+          },
+          "metrics": {
+            "coverage_ratio": 1.0
+          }
+        },
+        "artifact_paths": {
+          "report_md": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\fastapi-outputs\\20260310T120000Z\\report.md",
+          "report_json": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\fastapi-outputs\\20260310T120000Z\\report.json",
+          "run_trace": "C:\\Users\\dell\\AppData\\Local\\Temp\\tmpqq_ceret\\fastapi-outputs\\20260310T120000Z\\run_trace.json"
+        }
+      }
+    }
+  },
+  "passed": true
+}

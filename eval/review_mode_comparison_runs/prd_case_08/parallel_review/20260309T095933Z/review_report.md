@@ -1,0 +1,48 @@
+# Review Report
+
+## Meta
+
+- Review mode: parallel_review
+- Partial review: no
+- Reviewers completed: product, engineering, qa, security
+- Reviewers failed: none
+- Findings: 3
+- Risk Items: 0
+- Open Questions: 0
+- Conflicts: 0
+
+## Findings
+
+- [high] finding-5f4730a0acdd User scenarios are missing
+  - Description: The PRD does not describe concrete user scenarios or business flows.
+  - Category: scope
+  - Source reviewer: product
+  - Suggested action: Add concrete user scenarios and business flows to the PRD before implementation starts.
+  - Assignee: product
+- [high] finding-4faa0fe08cce Acceptance criteria are incomplete
+  - Description: The PRD lacks testable acceptance criteria for product sign-off.
+  - Category: acceptance
+  - Source reviewer: product
+  - Suggested action: Add explicit, testable acceptance criteria that product and QA can sign off on.
+  - Assignee: product
+- [high] finding-eb015fbfc694 Test oracle is missing
+  - Description: QA cannot derive pass/fail expectations because acceptance criteria are absent.
+  - Category: testability
+  - Source reviewer: qa
+  - Suggested action: Expand pass/fail criteria and edge-case coverage so QA can validate the requirement.
+  - Assignee: qa
+
+## Risks
+
+- No risk items.
+
+## Open Questions
+
+- No open questions.
+
+## Reviewer Notes
+
+- product: Product review completed against scenarios and acceptance coverage.
+- engineering: Engineering review completed against module and dependency complexity.
+- qa: QA review completed against acceptance and regression coverage.
+- security: Security review completed against sensitive data and release controls.
