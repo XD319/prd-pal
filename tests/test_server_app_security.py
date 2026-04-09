@@ -90,3 +90,34 @@ def test_create_review_enforces_rate_limit_for_submission_endpoint(tmp_path, mon
     assert second.json()["detail"]["limit"] == 1
     assert second.json()["detail"]["window_sec"] == 60
     _reset_state()
+
+
+def test_feishu_events_challenge_returns_challenge(monkeypatch):
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_DISABLED", "true")
+    _reset_state()
+
+    client = _build_client()
+    response = client.post("/api/feishu/events", json={"type": "url_verification", "challenge": "challenge-token"})
+
+    assert response.status_code == 200
+    assert response.json() == {"challenge": "challenge-token"}
+
+
+def test_feishu_events_reject_invalid_signature(monkeypatch):
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_DISABLED", "false")
+    monkeypatch.setenv("MARRDP_FEISHU_WEBHOOK_SECRET", "test-secret")
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC", "300")
+    _reset_state()
+
+    client = _build_client()
+    response = client.post(
+        "/api/feishu/events",
+        json={"type": "url_verification", "challenge": "challenge-token"},
+        headers={
+            "X-Lark-Request-Timestamp": "1710000000",
+            "X-Lark-Signature": "invalid-signature",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "invalid_feishu_signature"

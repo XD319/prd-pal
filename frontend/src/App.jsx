@@ -1,8 +1,9 @@
-﻿import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import RouteLoadingFallback from './components/RouteLoadingFallback';
 import { useTheme } from './hooks/useTheme';
+import FeishuEntryPage from './pages/FeishuEntryPage';
 import HomePage from './pages/HomePage';
 import './styles/layout.css';
 
@@ -13,6 +14,8 @@ const TrendsPage = lazy(() => import('./pages/TrendsPage'));
 function AppLayout() {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const searchParams = new URLSearchParams(location.search);
+  const isFeishuEmbed = location.pathname.startsWith('/run/') && searchParams.get('embed') === 'feishu';
 
   useEffect(() => {
     if (location.hash) {
@@ -34,12 +37,12 @@ function AppLayout() {
   }, [location.pathname, location.hash]);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isFeishuEmbed ? ' app-shell-embed' : ''}`}>
       <div className="ambient ambient-left" />
       <div className="ambient ambient-right" />
-      <Navbar theme={theme} onToggleTheme={toggleTheme} />
+      {!isFeishuEmbed ? <Navbar theme={theme} onToggleTheme={toggleTheme} /> : null}
 
-      <div className="page-shell">
+      <div className={`page-shell${isFeishuEmbed ? ' page-shell-embed' : ''}`}>
         <Outlet />
       </div>
     </div>
@@ -51,6 +54,7 @@ function App() {
     <Routes>
       <Route path="/" element={<AppLayout />}>
         <Route index element={<HomePage />} />
+        <Route path="feishu" element={<FeishuEntryPage />} />
         <Route
           path="run/:runId"
           element={(

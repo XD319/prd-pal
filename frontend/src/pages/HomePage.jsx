@@ -13,6 +13,7 @@ const initialForm = {
   prd_text: '',
   prd_path: '',
   source: '',
+  mode: 'quick',
 };
 
 function HomePage() {
@@ -37,6 +38,7 @@ function HomePage() {
         'Goal: reviewers should submit one PRD, monitor progress, inspect structured findings, and download a report without leaving the workspace.\n\nAcceptance criteria should clarify success metrics, rollout risk, and who owns ambiguous requirements before delivery planning begins.\n\nEdge cases must explain how missing inputs, failed review runs, and unavailable result artifacts are surfaced to the reviewer.',
       prd_path: '',
       source: '',
+      mode: 'quick',
     });
     setSubmitError('');
   }

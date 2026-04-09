@@ -18,6 +18,7 @@ from requirement_review_v1.monitoring import (
 from .base import BaseNotifier, resolve_notifiers
 from .models import (
     DispatchStatus,
+    NotificationDeliveryResult,
     NotificationDispatchRecord,
     NotificationDispatchResult,
     NotificationEvent,
@@ -109,6 +110,7 @@ def build_notification_record(
     bundle_id: str = "",
     task_id: str = "",
     metadata: dict[str, Any] | None = None,
+    delivery_metadata: dict[str, Any] | None = None,
     audit_context: dict[str, Any] | None = None,
     channel: str,
     payload: dict[str, Any] | None = None,
@@ -141,6 +143,7 @@ def build_notification_record(
         title=event.title,
         summary=event.summary,
         metadata=event.metadata,
+        delivery_metadata=dict(delivery_metadata) if isinstance(delivery_metadata, dict) else {},
         dry_run=event.dry_run,
     )
 
@@ -191,6 +194,7 @@ def _append_dispatch_audit_event(
             "dry_run": record.dry_run,
             "error_message": record.error_message,
             "payload_keys": sorted(record.payload.keys()),
+            "delivery_metadata_keys": sorted(record.delivery_metadata.keys()),
         },
     )
 
@@ -223,13 +227,31 @@ def dispatch_notification(
 
     for notifier in resolved_notifiers:
         dispatched_at = _utc_now_iso()
+        payload: dict[str, Any] = {}
         try:
             payload = notifier.build_payload(event)
+            delivery_result = notifier.send_payload(event, payload)
+            if isinstance(delivery_result, NotificationDeliveryResult):
+                recorded_payload = (
+                    dict(delivery_result.payload)
+                    if isinstance(delivery_result.payload, dict)
+                    else dict(payload)
+                )
+                record_dry_run = delivery_result.dry_run
+                delivery_metadata = (
+                    dict(delivery_result.delivery_metadata)
+                    if isinstance(delivery_result.delivery_metadata, dict)
+                    else {}
+                )
+            else:
+                recorded_payload = dict(payload)
+                record_dry_run = event.dry_run
+                delivery_metadata = {}
             record = NotificationDispatchRecord(
                 notification_id=event.notification_id,
                 event_type=event.event_type,
                 channel=str(notifier.channel or "").strip(),
-                payload=payload,
+                payload=recorded_payload,
                 dispatch_status=DispatchStatus.dispatched,
                 created_at=event.created_at,
                 dispatched_at=dispatched_at,
@@ -239,14 +261,15 @@ def dispatch_notification(
                 title=event.title,
                 summary=event.summary,
                 metadata=event.metadata,
-                dry_run=event.dry_run,
+                delivery_metadata=delivery_metadata,
+                dry_run=record_dry_run,
             )
         except Exception as exc:
             record = NotificationDispatchRecord(
                 notification_id=event.notification_id,
                 event_type=event.event_type,
                 channel=str(notifier.channel or "").strip() or notifier.__class__.__name__,
-                payload={},
+                payload=payload if isinstance(payload, dict) else {},
                 dispatch_status=DispatchStatus.failed,
                 created_at=event.created_at,
                 dispatched_at=dispatched_at,
@@ -257,6 +280,7 @@ def dispatch_notification(
                 title=event.title,
                 summary=event.summary,
                 metadata=event.metadata,
+                delivery_metadata={},
                 dry_run=event.dry_run,
             )
 

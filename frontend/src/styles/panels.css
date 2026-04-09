@@ -87,6 +87,13 @@
   gap: 0.65rem;
 }
 
+.field-emphasis input,
+.field-emphasis textarea,
+.field-emphasis select {
+  border-color: rgba(38, 103, 153, 0.28);
+  box-shadow: 0 0 0 3px rgba(38, 103, 153, 0.1), var(--field-shadow);
+}
+
 .field span,
 .history-meta span,
 .status-meta span,
@@ -108,6 +115,44 @@
   background: var(--panel-strong);
   color: var(--text-main);
   box-shadow: var(--field-shadow);
+}
+
+.field-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 0.85rem;
+}
+
+.field-meta-stacked {
+  display: grid;
+  justify-items: start;
+}
+
+.field-feedback {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.field-warning {
+  color: var(--status-failed-text);
+}
+
+.field-accent {
+  color: #1f5478;
+  font-weight: 700;
+}
+
+[data-theme='dark'] .field-accent {
+  color: #9fd3f1;
+}
+
+.field-counter {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 
 .field textarea {
@@ -247,6 +292,29 @@
 
 .empty-state-compact {
   min-height: 14rem;
+}
+
+.submission-success-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(73, 185, 139, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(242, 249, 245, 0.94)),
+    var(--surface-card);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme='dark'] .submission-success-card {
+  background:
+    linear-gradient(180deg, rgba(14, 33, 47, 0.92), rgba(15, 42, 42, 0.98)),
+    var(--surface-card);
+}
+
+.submission-success-card h3 {
+  margin: 0;
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
 }
 
 .panel-error-state .empty-state,

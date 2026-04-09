@@ -430,6 +430,73 @@ def _dispatch_notification(
     )
 
 
+def _should_dispatch_review_notifications(audit_context: dict[str, Any] | None) -> bool:
+    if not isinstance(audit_context, dict):
+        return False
+    if str(audit_context.get("source") or "").strip().lower() == "feishu":
+        return True
+    client_metadata = audit_context.get("client_metadata")
+    if not isinstance(client_metadata, dict):
+        return False
+    return str(client_metadata.get("trigger_source") or "").strip().lower() == "feishu"
+
+
+def _format_ratio_percent(value: Any) -> str:
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return "0%"
+    return f"{normalized * 100:.0f}%"
+
+
+def _resolve_review_notification_summary(review_result: dict[str, Any], *, status: str) -> str:
+    clarification = _derive_clarification(review_result)
+    if status == "clarification_required":
+        question_count = len([item for item in clarification.get("questions", []) if isinstance(item, dict)])
+        return (
+            "Review requires clarification before follow-up. "
+            f"{question_count} question(s) are waiting for an answer."
+        )
+
+    metrics = review_result.get("metrics") if isinstance(review_result.get("metrics"), dict) else {}
+    coverage_ratio = _format_ratio_percent(metrics.get("coverage_ratio"))
+    high_risk_ratio = _format_ratio_percent(review_result.get("high_risk_ratio"))
+    return f"Review completed. Coverage ratio {coverage_ratio}. High-risk ratio {high_risk_ratio}."
+
+
+def _dispatch_review_status_notification(
+    run_dir: str | Path,
+    *,
+    run_id: str,
+    review_status: str,
+    summary: str,
+    audit_context: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    status_mapping = {
+        "submitted": NotificationType.review_submitted,
+        "running": NotificationType.review_running,
+        "completed": NotificationType.review_completed,
+        "failed": NotificationType.review_failed,
+        "clarification_required": NotificationType.clarification_required,
+    }
+    notification_type = status_mapping.get(str(review_status or "").strip().lower())
+    if notification_type is None:
+        return
+
+    resolved_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    resolved_metadata.setdefault("review_run_status", str(review_status or "").strip().lower())
+    _dispatch_notification(
+        run_dir,
+        notification_type=notification_type,
+        title=f"Review {str(review_status or '').replace('_', ' ')}: {run_id}",
+        summary=summary,
+        run_id=run_id,
+        metadata=resolved_metadata,
+        audit_context=audit_context,
+    )
+
+
 def _load_json_object(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -906,6 +973,7 @@ async def review_prd_text_async(
     if progress_hook is not None and not callable(progress_hook):
         raise TypeError("config_overrides['progress_hook'] must be callable")
     resolved_run_id = str(run_id or "").strip() or make_run_id()
+    run_dir = outputs_root / resolved_run_id
 
     def combined_progress_hook(event: str, node_name: str, state: dict[str, Any]) -> None:
         if progress_hook is not None:
@@ -939,6 +1007,15 @@ async def review_prd_text_async(
         run_review_kwargs["normalizer_cache_path"] = overrides.get("normalizer_cache_path")
 
     llm_runtime_overrides = _resolve_llm_config_overrides(overrides)
+    if _should_dispatch_review_notifications(audit_context):
+        _dispatch_review_status_notification(
+            run_dir,
+            run_id=resolved_run_id,
+            review_status="submitted",
+            summary="Review submitted from Feishu entry and is now being processed.",
+            audit_context=audit_context,
+        )
+
     with RunLogContext(resolved_run_id):
         log.info(
             "review run started",
@@ -947,8 +1024,19 @@ async def review_prd_text_async(
                 "source_type": "source" if source else "prd_path" if prd_path else "inline_text",
             },
         )
-        with runtime_config_overrides(llm_runtime_overrides):
-            run_output = await run_review(**run_review_kwargs)
+        try:
+            with runtime_config_overrides(llm_runtime_overrides):
+                run_output = await run_review(**run_review_kwargs)
+        except Exception as exc:
+            if _should_dispatch_review_notifications(audit_context):
+                _dispatch_review_status_notification(
+                    run_dir,
+                    run_id=resolved_run_id,
+                    review_status="failed",
+                    summary=f"Review failed before completion: {str(exc) or type(exc).__name__}.",
+                    audit_context=audit_context,
+                )
+            raise
         if source_context:
             run_output.update(source_context)
             result = run_output.get("result")
@@ -982,6 +1070,14 @@ async def review_prd_text_async(
         try:
             build_delivery_handoff_outputs(run_output, audit_context=audit_context)
         except Exception as exc:
+            if _should_dispatch_review_notifications(audit_context):
+                _dispatch_review_status_notification(
+                    run_output.get("run_dir", run_dir),
+                    run_id=str(run_output.get("run_id", "") or resolved_run_id),
+                    review_status="failed",
+                    summary=f"Review artifacts could not be finalized: {str(exc) or type(exc).__name__}.",
+                    audit_context=audit_context,
+                )
             combined_progress_hook("end", "finalize_artifacts", {
                 "trace": {"finalize_artifacts": {"status": "error"}},
                 "error": str(exc),
@@ -991,6 +1087,26 @@ async def review_prd_text_async(
             combined_progress_hook("end", "finalize_artifacts", {
                 "trace": {"finalize_artifacts": {"status": "ok"}},
             })
+
+        if isinstance(review_result, dict) and _should_dispatch_review_notifications(audit_context):
+            clarification = _derive_clarification(review_result)
+            question_count = len([item for item in clarification.get("questions", []) if isinstance(item, dict)])
+            notification_status = (
+                "clarification_required"
+                if clarification.get("triggered") and clarification.get("status") == "pending"
+                else "completed"
+            )
+            _dispatch_review_status_notification(
+                run_output.get("run_dir", run_dir),
+                run_id=str(run_output.get("run_id", "") or resolved_run_id),
+                review_status=notification_status,
+                summary=_resolve_review_notification_summary(review_result, status=notification_status),
+                audit_context=audit_context,
+                metadata={
+                    "clarification_status": str(clarification.get("status", "") or ""),
+                    "clarification_question_count": question_count,
+                },
+            )
 
         log.info("review run completed", extra={"run_id": resolved_run_id})
         return _build_summary(run_output)
@@ -1560,6 +1676,7 @@ def answer_review_clarification(
     run_id: str,
     answers: list[dict[str, Any]],
     outputs_root: str | Path = "outputs",
+    audit_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     run_dir = _resolve_run_dir(run_id, outputs_root)
     report_path = run_dir / "report.json"
@@ -1595,6 +1712,24 @@ def answer_review_clarification(
 
     _write_json_object(report_path, report_payload)
     _persist_parallel_review_refresh(run_dir, report_payload)
+    pending_questions = [
+        item for item in updated_clarification.get("questions", [])
+        if isinstance(item, dict) and item.get("id")
+    ]
+    answered_question_ids = [item["question_id"] for item in normalized_answers]
+    _append_audit_event_safe(
+        run_dir,
+        operation="clarification_answer",
+        status=str(updated_clarification.get("status", "answered") or "answered"),
+        run_id=run_id,
+        audit_context=audit_context,
+        details={
+            "question_ids": answered_question_ids,
+            "answered_count": len(answered_question_ids),
+            "remaining_question_count": len(pending_questions),
+            "clarification_status": str(updated_clarification.get("status", "") or "answered"),
+        },
+    )
     return get_review_result_payload(run_id=run_id, outputs_root=outputs_root)
 
 

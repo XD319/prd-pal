@@ -111,6 +111,95 @@ Use Docker to build and start the backend plus the production frontend bundle:
 docker-compose up --build
 ```
 
+## Feishu Plugin Deployment
+
+Use the Feishu plugin entry layer when you want users to submit and follow up on review runs from inside Feishu, while still reusing the existing review engine.
+
+### What To Configure In Feishu
+
+Create one Feishu app and prepare these capabilities:
+
+1. Enable bot or event subscription delivery to the backend.
+2. Configure the backend callback URL for Feishu events:
+   - `POST https://<your-domain>/api/feishu/events`
+3. Configure the plugin-side review submit target:
+   - `POST https://<your-domain>/api/feishu/submit`
+4. Configure the plugin-side clarification answer target:
+   - `POST https://<your-domain>/api/feishu/clarification`
+5. Configure the in-Feishu H5 result page URL:
+   - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+
+### Required Environment Variables
+
+The following variables must be present before Feishu plugin traffic is enabled:
+
+- `MARRDP_FEISHU_APP_ID`
+- `MARRDP_FEISHU_APP_SECRET`
+- `MARRDP_FEISHU_SIGNATURE_DISABLED`
+- `MARRDP_FEISHU_WEBHOOK_SECRET` when signature verification is enabled
+
+Recommended production values:
+
+- `MARRDP_FEISHU_SIGNATURE_DISABLED=false`
+- `MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300`
+- `MARRDP_API_AUTH_DISABLED=false`
+- Set `MARRDP_API_KEY` and/or `MARRDP_API_BEARER_TOKEN` for non-Feishu API usage
+
+### Local Bring-Up
+
+1. Copy `.env.example` to `.env`.
+2. Fill in `OPENAI_API_KEY` and any Feishu credentials you plan to exercise.
+3. For local backend-only mocking, keep `MARRDP_FEISHU_SIGNATURE_DISABLED=true`.
+4. Start the stack:
+
+```bash
+docker-compose up --build
+```
+
+5. For frontend H5 development, start the Vite profile in a second terminal:
+
+```bash
+docker-compose --profile dev up dev
+```
+
+### Local Mock Flow
+
+Challenge handshake:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/feishu/events" \
+  -H "Content-Type: application/json" \
+  -d "{\"type\":\"url_verification\",\"challenge\":\"challenge-token\"}"
+```
+
+Submit a review:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/feishu/submit" \
+  -H "Content-Type: application/json" \
+  -d "{\"source\":\"feishu://docx/doc-token\",\"mode\":\"quick\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
+```
+
+Answer a clarification:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/feishu/clarification" \
+  -H "Content-Type: application/json" \
+  -d "{\"run_id\":\"20260309T000000Z\",\"question_id\":\"clarify-1\",\"answer\":\"Use 30-second dashboard arrival as the success metric.\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
+```
+
+### Production Rollout Steps
+
+1. Deploy the backend behind HTTPS. Feishu callbacks should not target plain HTTP.
+2. Mount `./outputs` or an equivalent persistent volume so `report.json`, `entry_context.json`, and `audit_log.jsonl` survive restarts.
+3. Set `MARRDP_FEISHU_SIGNATURE_DISABLED=false`.
+4. Set `MARRDP_FEISHU_WEBHOOK_SECRET` to the same secret configured in the Feishu app.
+5. Set `MARRDP_FEISHU_APP_ID` and `MARRDP_FEISHU_APP_SECRET`.
+6. Register the Feishu event callback URL and complete the challenge handshake.
+7. Update the Feishu plugin or card action configuration to call `/api/feishu/submit` and `/api/feishu/clarification`.
+8. Use the H5 result URL form shown above so Feishu can open the compact result page with `embed=feishu`.
+9. Validate one end-to-end run and confirm that `outputs/<run_id>/entry_context.json` and `outputs/<run_id>/audit_log.jsonl` were written.
+
 ## Usage
 
 ### CLI

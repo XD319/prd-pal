@@ -622,6 +622,7 @@ async def run_job(
     source: str | None = None,
     mode: str | None = None,
     llm_options: dict[str, Any] | None = None,
+    audit_context: dict[str, Any] | None = None,
 ) -> None:
     job.status = "running"
     job.error = ""
@@ -637,6 +638,7 @@ async def run_job(
             config_overrides={
                 "outputs_root": outputs_root,
                 "progress_hook": lambda event, node, state: apply_progress_event(job, event, node, state),
+                **({"audit_context": dict(audit_context)} if isinstance(audit_context, dict) and audit_context else {}),
                 **({"mode": mode} if isinstance(mode, str) and mode.strip() else {}),
                 **(dict(llm_options) if isinstance(llm_options, dict) else {}),
             },

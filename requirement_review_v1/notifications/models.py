@@ -14,7 +14,8 @@ except ImportError:  # pragma: no cover - Python < 3.11 fallback
     from enum import Enum
 
     class StrEnum(str, Enum):
-        pass
+        def __str__(self) -> str:
+            return str(self.value)
 
 
 class NotificationType(StrEnum):
@@ -23,6 +24,11 @@ class NotificationType(StrEnum):
     executor_handoff_created = "executor_handoff_created"
     execution_completed = "execution_completed"
     execution_failed = "execution_failed"
+    review_submitted = "review_submitted"
+    review_running = "review_running"
+    review_completed = "review_completed"
+    review_failed = "review_failed"
+    clarification_required = "clarification_required"
 
 
 class DispatchStatus(StrEnum):
@@ -65,6 +71,7 @@ class NotificationDispatchRecord(AgentSchemaModel):
     title: str = ""
     summary: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
+    delivery_metadata: dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = True
 
     @property
@@ -83,3 +90,9 @@ class NotificationDispatchResult(AgentSchemaModel):
     @property
     def notification_type(self) -> NotificationType:
         return self.event_type
+
+
+class NotificationDeliveryResult(AgentSchemaModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+    delivery_metadata: dict[str, Any] = Field(default_factory=dict)
+    dry_run: bool = True

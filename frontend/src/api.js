@@ -72,6 +72,13 @@ export function submitReview(payload) {
   });
 }
 
+export function submitFeishuReview(payload) {
+  return requestJson('/api/feishu/submit', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchReviewStatus(runId) {
   return requestJson(`/api/review/${encodeURIComponent(runId)}`);
 }

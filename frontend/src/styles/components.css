@@ -463,6 +463,15 @@
 }
 
 @media (max-width: 780px) {
+  .ghost-button,
+  .secondary-button,
+  .primary-button,
+  .nav-link,
+  .artifact-key-button {
+    width: 100%;
+    justify-content: center;
+  }
+
   .action-row {
     flex-direction: column;
     align-items: flex-start;

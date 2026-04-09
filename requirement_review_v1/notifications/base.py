@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Sequence
 
-from .models import NotificationEvent
+from .models import NotificationDeliveryResult, NotificationEvent
 
 
 class BaseNotifier(ABC):
@@ -15,6 +15,17 @@ class BaseNotifier(ABC):
     @abstractmethod
     def build_payload(self, event: NotificationEvent) -> dict[str, object]:
         """Return one dry-run payload for the notifier channel."""
+
+    def send_payload(
+        self,
+        event: NotificationEvent,
+        payload: dict[str, object],
+    ) -> NotificationDeliveryResult:
+        """Deliver a prepared payload or record a dry run."""
+        return NotificationDeliveryResult(
+            payload=dict(payload) if isinstance(payload, dict) else {},
+            dry_run=event.dry_run,
+        )
 
 
 def default_notifiers() -> tuple[BaseNotifier, ...]:

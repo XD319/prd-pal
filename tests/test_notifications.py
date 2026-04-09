@@ -5,7 +5,11 @@ import pytest
 from requirement_review_v1.monitoring import read_audit_events
 from requirement_review_v1.notifications import (
     BaseNotifier,
+    FeishuCardRenderer,
+    FeishuNotifier,
+    FeishuNotifierConfig,
     NotificationType,
+    build_notification_event,
     build_notification_record,
     dispatch_notification,
     read_notification_records,
@@ -124,3 +128,75 @@ def test_dispatch_notification_persists_failed_dispatches_without_silencing_erro
     assert audit_events[0]["operation"] == "notification_dispatch"
     assert audit_events[0]["status"] == "failed"
     assert audit_events[0]["details"]["error_message"] == "cannot render blocked_by_risk"
+
+
+@pytest.mark.parametrize(
+    ("notification_type", "expected_status", "expected_template"),
+    [
+        (NotificationType.review_submitted, "Submitted", "wathet"),
+        (NotificationType.review_running, "Running", "blue"),
+        (NotificationType.review_completed, "Completed", "green"),
+        (NotificationType.review_failed, "Failed", "red"),
+        (NotificationType.clarification_required, "Clarification Required", "orange"),
+    ],
+)
+def test_feishu_renderer_builds_review_status_cards(
+    notification_type: NotificationType,
+    expected_status: str,
+    expected_template: str,
+) -> None:
+    renderer = FeishuCardRenderer(
+        config=FeishuNotifierConfig(
+            detail_base_url="https://review.example.test",
+            dry_run=True,
+        )
+    )
+    event = build_notification_event(
+        notification_type=notification_type,
+        title=f"Review update: {notification_type.value}",
+        summary="Structured review update.",
+        run_id="20260308T060711Z",
+    )
+
+    payload = renderer.render(event)
+
+    assert payload["channel"] == "feishu"
+    assert payload["msg_type"] == "interactive"
+    assert payload["card"]["header"]["template"] == expected_template
+    assert expected_status in payload["card"]["header"]["title"]["content"]
+    button = payload["card"]["elements"][-1]["actions"][0]
+    assert button["url"] == "https://review.example.test/run/20260308T060711Z"
+    fields = payload["card"]["elements"][0]["fields"]
+    assert "`20260308T060711Z`" in fields[0]["text"]["content"]
+    assert expected_status in fields[1]["text"]["content"]
+
+
+def test_dispatch_notification_records_feishu_dry_run_delivery_metadata(tmp_path) -> None:
+    notifier = FeishuNotifier(
+        renderer=FeishuCardRenderer(
+            config=FeishuNotifierConfig(
+                detail_base_url="https://review.example.test",
+                dry_run=True,
+            )
+        )
+    )
+
+    result = dispatch_notification(
+        tmp_path,
+        notification_type=NotificationType.review_completed,
+        title="Review completed: 20260308T060712Z",
+        summary="Review completed and is ready for inspection.",
+        run_id="20260308T060712Z",
+        metadata={"review_run_status": "completed"},
+        notifiers=[notifier],
+    )
+
+    records = read_notification_records(tmp_path)
+
+    assert result.status == "dispatched"
+    assert len(records) == 1
+    assert records[0]["channel"] == "feishu"
+    assert records[0]["dry_run"] is True
+    assert records[0]["payload"]["dry_run"] is True
+    assert records[0]["delivery_metadata"]["mode"] == "dry_run"
+    assert records[0]["payload"]["card"]["header"]["template"] == "green"

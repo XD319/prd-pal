@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -13,7 +16,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from requirement_review_v1.monitoring import query_audit_events
+from requirement_review_v1.monitoring import append_audit_event, query_audit_events, resolve_audit_client_metadata
+from requirement_review_v1.integrations.feishu import create_feishu_router
 from requirement_review_v1.run_review import make_run_id
 from requirement_review_v1.server.job_registry import JobRegistry
 from requirement_review_v1.server.job_state import (
@@ -63,6 +67,7 @@ from requirement_review_v1.utils.logging import get_logger
 
 OUTPUTS_ROOT = Path("outputs")
 FRONTEND_DIST_ROOT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+RUN_ENTRY_CONTEXT_FILENAME = "entry_context.json"
 log = get_logger("server.http")
 
 
@@ -90,6 +95,18 @@ def _outputs_root_writable() -> bool:
     return True
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
 async def _run_job(
     job: JobRecord,
     *,
@@ -98,6 +115,7 @@ async def _run_job(
     source: str | None = None,
     mode: str | None = None,
     llm_options: dict[str, Any] | None = None,
+    audit_context: dict[str, Any] | None = None,
 ) -> None:
     await _run_job_impl(
         job,
@@ -107,7 +125,193 @@ async def _run_job(
         source=source,
         mode=mode,
         llm_options=llm_options,
+        audit_context=audit_context,
     )
+
+
+async def _enqueue_review_run(
+    *,
+    prd_text: str | None = None,
+    prd_path: str | None = None,
+    source: str | None = None,
+    mode: str | None = None,
+    llm_options: dict[str, Any] | None = None,
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    run_id = make_run_id()
+    run_dir = OUTPUTS_ROOT / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    entry_context = _persist_run_entry_context(run_dir, audit_context)
+
+    if isinstance(audit_context, dict) and audit_context:
+        append_audit_event(
+            run_dir,
+            operation="review_submission",
+            status="accepted",
+            run_id=run_id,
+            audit_context=audit_context,
+            details={
+                "source_origin": str((entry_context or {}).get("source_origin") or "web").strip(),
+                "entry_mode": str((entry_context or {}).get("entry_mode") or "direct").strip(),
+            },
+        )
+
+    job = JobRecord(run_id=run_id, run_dir=run_dir)
+    _persist_job_snapshot(job)
+    task = asyncio.create_task(
+        _run_job(
+            job,
+            prd_text=prd_text,
+            prd_path=prd_path,
+            source=source,
+            mode=mode,
+            llm_options=llm_options,
+            **({"audit_context": audit_context} if isinstance(audit_context, dict) and audit_context else {}),
+        )
+    )
+    job.task = task
+    await _job_registry.register(job)
+    return {"run_id": run_id}
+
+
+def _submit_review_clarification_internal(
+    *,
+    run_id: str,
+    answers: list[dict[str, Any]],
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    run_dir = OUTPUTS_ROOT / str(run_id or "").strip()
+    _validate_feishu_run_access(
+        run_dir=run_dir,
+        context=resolve_audit_client_metadata(audit_context),
+    )
+    return answer_review_clarification(
+        run_id=run_id,
+        answers=answers,
+        outputs_root=OUTPUTS_ROOT,
+        audit_context=audit_context,
+    )
+
+
+def _entry_context_path(run_dir: Path) -> Path:
+    return run_dir / RUN_ENTRY_CONTEXT_FILENAME
+
+
+def _is_feishu_audit_context(audit_context: dict[str, Any] | None) -> bool:
+    if not isinstance(audit_context, dict):
+        return False
+    if str(audit_context.get("source") or "").strip().lower() == "feishu":
+        return True
+    client_metadata = resolve_audit_client_metadata(audit_context)
+    return str(client_metadata.get("trigger_source") or "").strip().lower() == "feishu"
+
+
+def _build_run_entry_context(audit_context: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not _is_feishu_audit_context(audit_context):
+        return None
+
+    client_metadata = resolve_audit_client_metadata(audit_context)
+    submitter_open_id = str(client_metadata.get("open_id") or "").strip()
+    tenant_key = str(client_metadata.get("tenant_key") or "").strip()
+    actor = str(audit_context.get("actor") or submitter_open_id or "feishu").strip() or "feishu"
+    return {
+        "source_origin": "feishu",
+        "entry_mode": "plugin",
+        "submitter_open_id": submitter_open_id,
+        "tenant_key": tenant_key,
+        "trigger_source": str(client_metadata.get("trigger_source") or "feishu").strip() or "feishu",
+        "submitted_by": actor,
+        "tool_name": str(audit_context.get("tool_name") or "").strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _persist_run_entry_context(run_dir: Path, audit_context: dict[str, Any] | None) -> dict[str, Any] | None:
+    entry_context = _build_run_entry_context(audit_context)
+    if entry_context is None:
+        return None
+    _entry_context_path(run_dir).write_text(
+        json.dumps(entry_context, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return entry_context
+
+
+def _read_run_entry_context(run_dir: Path) -> dict[str, Any]:
+    path = _entry_context_path(run_dir)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _extract_feishu_context_from_url(raw_url: str | None) -> dict[str, str]:
+    if not raw_url:
+        return {}
+    parsed = urlparse(str(raw_url))
+    query_params = parse_qs(parsed.query or "", keep_blank_values=False)
+    resolved: dict[str, str] = {}
+    for key in ("open_id", "tenant_key"):
+        value = query_params.get(key, [""])[0]
+        normalized = str(value or "").strip()
+        if normalized:
+            resolved[key] = normalized
+    return resolved
+
+
+def _resolve_request_feishu_context(request: Request | None) -> dict[str, str]:
+    if request is None:
+        return {}
+
+    resolved: dict[str, str] = {}
+    candidates = (
+        ("open_id", str(request.query_params.get("open_id", "") or "").strip()),
+        ("tenant_key", str(request.query_params.get("tenant_key", "") or "").strip()),
+        ("open_id", str(request.headers.get("x-feishu-open-id", "") or "").strip()),
+        ("tenant_key", str(request.headers.get("x-feishu-tenant-key", "") or "").strip()),
+    )
+    for key, value in candidates:
+        if value and key not in resolved:
+            resolved[key] = value
+
+    referer_context = _extract_feishu_context_from_url(request.headers.get("referer"))
+    for key, value in referer_context.items():
+        resolved.setdefault(key, value)
+    return resolved
+
+
+def _validate_feishu_run_access(*, run_dir: Path, context: dict[str, Any] | None) -> None:
+    entry_context = _read_run_entry_context(run_dir)
+    if str(entry_context.get("source_origin") or "").strip().lower() != "feishu":
+        return
+
+    provided_context = dict(context) if isinstance(context, dict) else {}
+    provided_open_id = str(provided_context.get("open_id") or "").strip()
+    provided_tenant_key = str(provided_context.get("tenant_key") or "").strip()
+    expected_open_id = str(entry_context.get("submitter_open_id") or "").strip()
+    expected_tenant_key = str(entry_context.get("tenant_key") or "").strip()
+
+    if not provided_tenant_key or (expected_open_id and not provided_open_id):
+        raise PermissionError("This run requires the originating Feishu identity context.")
+    if expected_tenant_key and provided_tenant_key != expected_tenant_key:
+        raise PermissionError("This run is not accessible from the current Feishu tenant context.")
+    if expected_open_id and provided_open_id != expected_open_id:
+        raise PermissionError("This run is not accessible to the current Feishu user.")
+
+
+def _enforce_run_access(request: Request | None, run_id: str) -> None:
+    run_dir = OUTPUTS_ROOT / str(run_id or "").strip()
+    if not run_dir.exists() or not run_dir.is_dir():
+        return
+    try:
+        _validate_feishu_run_access(run_dir=run_dir, context=_resolve_request_feishu_context(request))
+    except PermissionError as exc:
+        message = str(exc)
+        code = "feishu_context_required" if "requires" in message else "run_access_denied"
+        raise HTTPException(status_code=403, detail={"code": code, "message": message}) from exc
 
 
 @app.middleware("http")
@@ -144,6 +348,8 @@ async def _request_logging_middleware(request: Request, call_next):
 async def _api_security_middleware(request: Request, call_next):
     if not request.url.path.startswith("/api/"):
         return await call_next(request)
+    if request.url.path.startswith("/api/feishu/"):
+        return await call_next(request)
 
     settings = security_settings()
     auth_error = authenticate_request(request, settings)
@@ -163,7 +369,7 @@ async def _handle_request_validation_error(_: Request, exc: RequestValidationErr
         422,
         code="request_validation_error",
         message="Request validation failed.",
-        extra={"errors": exc.errors()},
+        extra={"errors": _json_safe(exc.errors())},
     )
 
 
@@ -288,21 +494,12 @@ async def list_runs() -> dict[str, Any]:
 async def create_review(payload: ReviewCreateRequest) -> dict[str, str]:
     review_inputs = _resolve_review_inputs(payload)
     llm_options = _resolve_runtime_llm_options(payload)
-    run_id = make_run_id()
-    run_dir = OUTPUTS_ROOT / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    job = JobRecord(run_id=run_id, run_dir=run_dir)
-    _persist_job_snapshot(job)
-    task = asyncio.create_task(_run_job(job, **review_inputs, llm_options=llm_options))
-    job.task = task
-
-    await _job_registry.register(job)
-    return {"run_id": run_id}
+    return await _enqueue_review_run(**review_inputs, llm_options=llm_options)
 
 
 @app.get("/api/review/{run_id}")
-async def get_review_status(run_id: str) -> dict[str, Any]:
+async def get_review_status(run_id: str, request: Request = None) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
     job = await _job_registry.get(run_id)
 
     if job:
@@ -352,12 +549,20 @@ async def stream_review_progress(run_id: str) -> StreamingResponse:
 
 
 @app.post("/api/review/{run_id}/clarification")
-async def submit_review_clarification(run_id: str, payload: ClarificationAnswerRequest) -> dict[str, Any]:
+async def submit_review_clarification(run_id: str, payload: ClarificationAnswerRequest, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
+    request_context = _resolve_request_feishu_context(request)
     try:
         return answer_review_clarification(
             run_id=run_id,
             answers=[item.model_dump(mode="python") for item in payload.answers],
             outputs_root=OUTPUTS_ROOT,
+            audit_context={
+                "source": "web",
+                "tool_name": "review.clarification",
+                "actor": str(request_context.get("open_id") or "web").strip() or "web",
+                "client_metadata": request_context,
+            },
         )
     except FileNotFoundError as exc:
         raise HTTPException(
@@ -377,7 +582,8 @@ async def submit_review_clarification(run_id: str, payload: ClarificationAnswerR
 
 
 @app.get("/api/review/{run_id}/result")
-async def get_review_result(run_id: str) -> dict[str, Any]:
+async def get_review_result(run_id: str, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
     try:
         return get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
     except ReviewRunNotFoundError as exc:
@@ -399,7 +605,8 @@ async def get_review_result(run_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/review/{run_id}/artifacts/{artifact_key}")
-async def get_review_artifact_preview(run_id: str, artifact_key: str) -> dict[str, Any]:
+async def get_review_artifact_preview(run_id: str, artifact_key: str, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
     try:
         return get_review_artifact_preview_payload(
             run_id=run_id,
@@ -450,7 +657,12 @@ async def get_review_stats() -> dict[str, Any]:
 
 
 @app.get("/api/report/{run_id}")
-async def get_report(run_id: str, format: Literal["md", "json", "html", "csv"] = Query(default="md")) -> Response:
+async def get_report(
+    run_id: str,
+    request: Request,
+    format: Literal["md", "json", "html", "csv"] = Query(default="md"),
+) -> Response:
+    _enforce_run_access(request, run_id)
     run_dir = OUTPUTS_ROOT / run_id
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
@@ -489,6 +701,14 @@ async def get_report(run_id: str, format: Literal["md", "json", "html", "csv"] =
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="report.csv"'},
     )
+
+
+app.include_router(
+    create_feishu_router(
+        submit_review_run=_enqueue_review_run,
+        submit_clarification=_submit_review_clarification_internal,
+    )
+)
 
 
 if FRONTEND_DIST_ROOT.exists():

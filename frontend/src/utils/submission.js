@@ -1,10 +1,12 @@
 import { normalizeMultiline, normalizeText } from './formatters';
 
-export function buildSubmissionPayload(form) {
+export function buildSubmissionPayload(form, options = {}) {
+  const { includeMode = false, allowPrdPath = true } = options;
   const payload = {};
   const source = normalizeText(form.source);
   const prdText = normalizeMultiline(form.prd_text);
   const prdPath = normalizeText(form.prd_path);
+  const mode = normalizeText(form.mode);
 
   if (source) {
     payload.source = source;
@@ -12,20 +14,28 @@ export function buildSubmissionPayload(form) {
   if (prdText) {
     payload.prd_text = prdText;
   }
-  if (prdPath) {
+  if (allowPrdPath && prdPath) {
     payload.prd_path = prdPath;
+  }
+  if (includeMode && mode) {
+    payload.mode = mode;
   }
 
   return payload;
 }
 
-export function validateSubmission(payload) {
+export function validateSubmission(payload, options = {}) {
+  const { allowPrdPath = true, requireSourceOrText = false } = options;
   const hasSource = Boolean(payload.source);
   const hasText = Boolean(payload.prd_text);
-  const hasPath = Boolean(payload.prd_path);
+  const hasPath = allowPrdPath && Boolean(payload.prd_path);
 
   if (hasSource) {
     return '';
+  }
+
+  if (requireSourceOrText) {
+    return hasText ? '' : 'Provide source or prd_text.';
   }
 
   if (hasText === hasPath) {

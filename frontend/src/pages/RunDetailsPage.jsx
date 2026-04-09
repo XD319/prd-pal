@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtifactDownloadPanel from '../components/ArtifactDownloadPanel';
 import ClarificationPanel from '../components/ClarificationPanel';
 import ConflictResolutionPanel from '../components/ConflictResolutionPanel';
@@ -15,6 +15,8 @@ import useReviewRunSSE from '../hooks/useReviewRunSSE';
 
 function RunDetailsPage() {
   const { runId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const isFeishuEmbed = searchParams.get('embed') === 'feishu';
   const sseRun = useReviewRunSSE(runId, { fallbackToPolling: true });
   const { runState, status, result, refreshStatus, downloadArtifact, submitClarification } = useReviewRun(runId, {
     externalStatusPayload: sseRun.statusPayload,
@@ -28,40 +30,51 @@ function RunDetailsPage() {
 
   return (
     <>
-      <header className="page-header">
-        <nav className="breadcrumbs" aria-label="Breadcrumb">
-          <Link to="/" aria-label="Return to home page">Home</Link>
-          <span>{'>'}</span>
-          <span>Run</span>
-          <span>{'>'}</span>
-          <span aria-current="page">{runId}</span>
-        </nav>
+      <header className={`page-header${isFeishuEmbed ? ' page-header-embed' : ''}`}>
+        {!isFeishuEmbed ? (
+          <nav className="breadcrumbs" aria-label="Breadcrumb">
+            <Link to="/" aria-label="Return to home page">Home</Link>
+            <span>{'>'}</span>
+            <span>Run</span>
+            <span>{'>'}</span>
+            <span aria-current="page">{runId}</span>
+          </nav>
+        ) : null}
 
-        <div className="page-header-row">
+        <div className={`page-header-row${isFeishuEmbed ? ' page-header-row-embed' : ''}`}>
           <div>
-            <p className="eyebrow">Run detail workspace</p>
+            <p className="eyebrow">{isFeishuEmbed ? 'Feishu review run' : 'Run detail workspace'}</p>
             <h1>Run {runId}</h1>
             <p className="hero-copy">
-              Track execution, inspect structured review output, and download artifacts from one dedicated run URL.
+              {isFeishuEmbed
+                ? 'Track progress, review findings, respond to clarification prompts, and open artifacts from a compact mobile-friendly detail page.'
+                : 'Track execution, inspect structured review output, and download artifacts from one dedicated run URL.'}
             </p>
           </div>
 
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => refreshStatus()}
-            aria-label={`Refresh status for run ${runId}`}
-          >
-            Refresh status
-          </button>
+          <div className="action-row">
+            {!isFeishuEmbed ? (
+              <Link to="/" className="ghost-button" aria-label="Return to home page">
+                Back to home
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => refreshStatus()}
+              aria-label={`Refresh status for run ${runId}`}
+            >
+              Refresh status
+            </button>
+          </div>
         </div>
 
         {runState.loadError && <div className="feedback-banner feedback-error" aria-live="polite">{runState.loadError}</div>}
       </header>
 
-      <main className="workspace-grid workspace-grid-detail">
+      <main className={`workspace-grid workspace-grid-detail${isFeishuEmbed ? ' workspace-grid-detail-embed' : ''}`}>
         <section className="stack">
-          <PanelErrorBoundary panelTitle="运行进度" resetKey={`${runId}:${status}`}>
+          <PanelErrorBoundary panelTitle="Run Progress" resetKey={`${runId}:${status}`}>
             <RunProgressCard
               runId={runId}
               status={status}
@@ -73,7 +86,7 @@ function RunDetailsPage() {
             />
           </PanelErrorBoundary>
 
-          <PanelErrorBoundary panelTitle="产物下载" resetKey={`${runId}:${runState.downloadFormat}`}>
+          <PanelErrorBoundary panelTitle="Artifacts" resetKey={`${runId}:${runState.downloadFormat}`}>
             <ArtifactDownloadPanel
               runId={runId}
               status={status}
@@ -86,7 +99,7 @@ function RunDetailsPage() {
         </section>
 
         <section className="stack stack-wide">
-          <PanelErrorBoundary panelTitle="结果总览" resetKey={`${runId}:${runState.resultState}`}>
+          <PanelErrorBoundary panelTitle="Result Overview" resetKey={`${runId}:${runState.resultState}`}>
             <ReviewSummaryPanel
               runId={runId}
               status={status}
@@ -99,24 +112,28 @@ function RunDetailsPage() {
             />
           </PanelErrorBoundary>
 
-          <div className="panel-grid panel-grid-two-up">
-            <PanelErrorBoundary panelTitle="Reviewer Insights" resetKey={`${runId}:${runState.resultState}:reviewer-insights`}>
-              <ReviewerInsightsPanel result={result} resultPayload={runState.resultPayload} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary panelTitle="Tool Trace" resetKey={`${runId}:${runState.resultState}:tool-trace`}>
-              <ToolTracePanel result={result} />
-            </PanelErrorBoundary>
-          </div>
+          {!isFeishuEmbed ? (
+            <div className="panel-grid panel-grid-two-up">
+              <PanelErrorBoundary panelTitle="Reviewer Insights" resetKey={`${runId}:${runState.resultState}:reviewer-insights`}>
+                <ReviewerInsightsPanel result={result} resultPayload={runState.resultPayload} />
+              </PanelErrorBoundary>
+              <PanelErrorBoundary panelTitle="Tool Trace" resetKey={`${runId}:${runState.resultState}:tool-trace`}>
+                <ToolTracePanel result={result} />
+              </PanelErrorBoundary>
+            </div>
+          ) : null}
 
-          <PanelErrorBoundary panelTitle="Conflict Resolution" resetKey={`${runId}:${runState.resultState}:conflicts`}>
-            <ConflictResolutionPanel result={result} />
-          </PanelErrorBoundary>
+          {!isFeishuEmbed ? (
+            <PanelErrorBoundary panelTitle="Conflict Resolution" resetKey={`${runId}:${runState.resultState}:conflicts`}>
+              <ConflictResolutionPanel result={result} />
+            </PanelErrorBoundary>
+          ) : null}
 
           <div className="panel-grid panel-grid-two-up">
-            <PanelErrorBoundary panelTitle="发现列表" resetKey={`${runId}:${runState.resultState}:findings`}>
+            <PanelErrorBoundary panelTitle="Findings" resetKey={`${runId}:${runState.resultState}:findings`}>
               <FindingsPanel result={result} status={status} resultState={runState.resultState} />
             </PanelErrorBoundary>
-            <PanelErrorBoundary panelTitle="风险列表" resetKey={`${runId}:${runState.resultState}:risks`}>
+            <PanelErrorBoundary panelTitle="Risks" resetKey={`${runId}:${runState.resultState}:risks`}>
               <RisksPanel result={result} />
             </PanelErrorBoundary>
           </div>

@@ -72,6 +72,32 @@ Feishu source setup:
 - Use `MARRDP_FEISHU_OPEN_BASE_URL` only when you need a non-default Open API base URL.
 - Supported Feishu document types are `wiki`, `docx`, and legacy `docs` sources that can be converted to `docx`.
 
+## MCP And Feishu Plugin Boundary
+
+The Feishu main-entry pluginization does not replace the MCP server.
+
+Use MCP when:
+
+- an internal tool, IDE agent, or automation wants to call `review_requirement` directly
+- the caller already has its own identity and access-control layer
+- you do not need Feishu callback routing or H5 rendering
+
+Use the FastAPI Feishu entry layer when:
+
+- the caller is a Feishu app, plugin, bot, or card action
+- you need `/api/feishu/events`, `/api/feishu/submit`, or `/api/feishu/clarification`
+- you need the compact result page at `/run/<run_id>?embed=feishu`
+- you want run-level Feishu entry metadata and lightweight access checks persisted under `outputs/<run_id>/`
+
+Recommended production split:
+
+1. Deploy one backend instance.
+2. Enable Feishu app credentials and webhook verification in that backend.
+3. Let Feishu traffic hit the FastAPI layer.
+4. Let internal automation and agent workflows keep using MCP.
+
+This keeps review logic single-sourced while leaving protocol adaptation in the HTTP integration layer.
+
 ## Core Example
 
 Use any MCP client to call:

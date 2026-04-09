@@ -78,6 +78,13 @@ function Navbar({ theme, onToggleTheme }) {
             >
               趋势
             </NavLink>
+            <NavLink
+              to="/feishu"
+              className={({ isActive }) => `nav-link${isActive ? ' nav-link-active' : ''}`}
+              aria-label="Open Feishu entry page"
+            >
+              Feishu Entry
+            </NavLink>
           </nav>
 
           <button
