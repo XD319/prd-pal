@@ -132,6 +132,8 @@ async def _run_review_command(args: argparse.Namespace) -> int:
             "implementation_pack_path": summary.implementation_pack_path,
             "test_pack_path": summary.test_pack_path,
             "execution_pack_path": summary.execution_pack_path,
+            "prd_v1_path": summary.prd_v1_path,
+            "task_bundle_v1_path": summary.task_bundle_v1_path,
             "delivery_bundle_path": summary.delivery_bundle_path,
         },
     }
@@ -143,6 +145,8 @@ async def _run_review_command(args: argparse.Namespace) -> int:
         print(f"Report : {summary.report_md_path}")
         print(f"State  : {summary.report_json_path}")
         print(f"Trace  : {summary.run_trace_path}")
+        print(f"PRD V1 : {summary.prd_v1_path}")
+        print(f"Tasks  : {summary.task_bundle_v1_path}")
         print(f"Bundle : {summary.delivery_bundle_path}")
     return 0
 

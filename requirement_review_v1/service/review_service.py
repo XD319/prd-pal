@@ -20,7 +20,9 @@ from requirement_review_v1.connectors.feishu import (
     FeishuPermissionDeniedError,
     FeishuUnsupportedDocumentTypeError,
 )
+from requirement_review_v1.draft_generator import generate_prd_v1_artifact
 from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
+from requirement_review_v1.task_bundle_generator import generate_task_bundle_v1_artifact
 from requirement_review_v1.templates import get_adapter_prompt_template
 from requirement_review_v1.monitoring import append_audit_event, retry_metadata_for_status
 from requirement_review_v1.notifications import NotificationType, dispatch_notification
@@ -60,6 +62,8 @@ class ReviewResultSummary:
     implementation_pack_path: str = ""
     test_pack_path: str = ""
     execution_pack_path: str = ""
+    prd_v1_path: str = ""
+    task_bundle_v1_path: str = ""
     delivery_bundle_path: str = ""
 
     def to_report_paths(self) -> dict[str, str]:
@@ -70,6 +74,8 @@ class ReviewResultSummary:
             "implementation_pack": self.implementation_pack_path,
             "test_pack": self.test_pack_path,
             "execution_pack": self.execution_pack_path,
+            "prd_v1": self.prd_v1_path,
+            "task_bundle_v1": self.task_bundle_v1_path,
             "delivery_bundle": self.delivery_bundle_path,
         }
 
@@ -125,6 +131,8 @@ _REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {
     "report_md": "report.md",
     "report_json": "report.json",
     "run_trace": "run_trace.json",
+    "prd_v1": "prd_v1.md",
+    "task_bundle_v1": "task_bundle_v1.json",
     "review_report_json": "review_report.json",
     "risk_items_json": "risk_items.json",
     "open_questions_json": "open_questions.json",
@@ -354,6 +362,8 @@ def _build_summary(run_output: dict[str, Any]) -> ReviewResultSummary:
         implementation_pack_path=str(report_paths.get("implementation_pack", "")),
         test_pack_path=str(report_paths.get("test_pack", "")),
         execution_pack_path=str(report_paths.get("execution_pack", "")),
+        prd_v1_path=str(report_paths.get("prd_v1", "")),
+        task_bundle_v1_path=str(report_paths.get("task_bundle_v1", "")),
         delivery_bundle_path=str(report_paths.get("delivery_bundle", "")),
         high_risk_ratio=_to_float(result.get("high_risk_ratio") if isinstance(result, dict) else 0.0),
         coverage_ratio=_to_float(metrics.get("coverage_ratio") if isinstance(metrics, dict) else 0.0),
@@ -826,6 +836,71 @@ def build_delivery_handoff_outputs(
     prompt_paths = build_handoff_prompts(artifact_paths.get("execution_pack"), trace=trace)
     artifact_paths.update(prompt_paths)
 
+    draft_generator_trace: dict[str, Any] = {
+        "start": _utc_now_iso(),
+        "end": "",
+        "duration_ms": 0,
+        "status": "running",
+        "error_message": "",
+        "non_blocking": True,
+        "retry": {},
+        "artifact_path": "",
+        "output_paths": {},
+        "generator_version": "",
+        "source_artifacts": [],
+    }
+    draft_started = perf_counter()
+    try:
+        prd_draft_artifact = generate_prd_v1_artifact(run_output)
+        artifact_paths[prd_draft_artifact.artifact_key] = prd_draft_artifact.path
+        draft_generator_trace.update(prd_draft_artifact.trace)
+    except Exception as exc:
+        draft_generator_trace["status"] = "failed"
+        draft_generator_trace["error_message"] = str(exc)
+    finally:
+        draft_generator_trace["end"] = str(draft_generator_trace.get("end", "") or _utc_now_iso())
+        duration_ms = round((perf_counter() - draft_started) * 1000)
+        draft_generator_trace["duration_ms"] = max(duration_ms, int(draft_generator_trace.get("duration_ms", 0) or 0))
+        draft_generator_trace["retry"] = retry_metadata_for_status(
+            status=str(draft_generator_trace.get("status", "")),
+            non_blocking=bool(draft_generator_trace.get("non_blocking")),
+            error_message=str(draft_generator_trace.get("error_message", "")),
+        )
+        trace["draft_generator"] = draft_generator_trace
+
+    task_bundle_trace: dict[str, Any] = {
+        "start": _utc_now_iso(),
+        "end": "",
+        "duration_ms": 0,
+        "status": "running",
+        "error_message": "",
+        "non_blocking": True,
+        "retry": {},
+        "artifact_path": "",
+        "output_paths": {},
+        "generator_version": "",
+        "source_artifacts": [],
+        "task_count": 0,
+    }
+    task_bundle_started = perf_counter()
+    try:
+        task_bundle_artifact = generate_task_bundle_v1_artifact(run_output)
+        artifact_paths[task_bundle_artifact.artifact_key] = task_bundle_artifact.path
+        task_bundle_trace.update(task_bundle_artifact.trace)
+    except Exception as exc:
+        task_bundle_trace["status"] = "failed"
+        task_bundle_trace["error_message"] = str(exc)
+    finally:
+        task_bundle_trace["end"] = str(task_bundle_trace.get("end", "") or _utc_now_iso())
+        duration_ms = round((perf_counter() - task_bundle_started) * 1000)
+        task_bundle_trace["duration_ms"] = max(duration_ms, int(task_bundle_trace.get("duration_ms", 0) or 0))
+        task_bundle_trace["retry"] = retry_metadata_for_status(
+            status=str(task_bundle_trace.get("status", "")),
+            non_blocking=bool(task_bundle_trace.get("non_blocking")),
+            error_message=str(task_bundle_trace.get("error_message", "")),
+        )
+        trace["task_bundle_builder"] = task_bundle_trace
+
     bundle_builder_trace: dict[str, Any] = {
         "start": _utc_now_iso(),
         "end": "",
@@ -891,6 +966,8 @@ def build_delivery_handoff_outputs(
             if not isinstance(report_trace, dict):
                 report_trace = {}
             report_trace["pack_builder"] = pack_builder_trace
+            report_trace["draft_generator"] = draft_generator_trace
+            report_trace["task_bundle_builder"] = task_bundle_trace
             handoff_renderer_trace = trace.get("handoff_renderer")
             if isinstance(handoff_renderer_trace, dict):
                 report_trace["handoff_renderer"] = handoff_renderer_trace
@@ -914,6 +991,8 @@ def build_delivery_handoff_outputs(
     handoff_renderer_status = handoff_renderer_trace.get("status", "") if isinstance(handoff_renderer_trace, dict) else ""
     bundle_operation_status = _combine_operation_status(
         str(pack_builder_trace.get("status", "")),
+        str(draft_generator_trace.get("status", "")),
+        str(task_bundle_trace.get("status", "")),
         str(handoff_renderer_status),
         str(bundle_builder_trace.get("status", "")),
     )
@@ -924,6 +1003,8 @@ def build_delivery_handoff_outputs(
             message
             for message in (
                 str(pack_builder_trace.get("error_message", "")),
+                str(draft_generator_trace.get("error_message", "")),
+                str(task_bundle_trace.get("error_message", "")),
                 str(handoff_renderer_trace.get("error_message", "")) if isinstance(handoff_renderer_trace, dict) else "",
                 str(bundle_builder_trace.get("error_message", "")),
             )
@@ -948,6 +1029,8 @@ def build_delivery_handoff_outputs(
             "delivery_bundle_path": delivery_bundle_path,
             "component_statuses": {
                 "pack_builder": pack_builder_trace.get("status", ""),
+                "draft_generator": draft_generator_trace.get("status", ""),
+                "task_bundle_builder": task_bundle_trace.get("status", ""),
                 "handoff_renderer": handoff_renderer_status,
                 "bundle_builder": bundle_builder_trace.get("status", ""),
             },
@@ -2021,6 +2104,8 @@ async def review_prd_for_mcp_async(
             "implementation_pack_path": summary.implementation_pack_path,
             "test_pack_path": summary.test_pack_path,
             "execution_pack_path": summary.execution_pack_path,
+            "prd_v1_path": summary.prd_v1_path,
+            "task_bundle_v1_path": summary.task_bundle_v1_path,
             "delivery_bundle_path": summary.delivery_bundle_path,
         },
     }

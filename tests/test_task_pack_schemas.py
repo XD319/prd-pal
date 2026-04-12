@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from requirement_review_v1.packs import (
     ExecutionPack,
     ImplementationPack,
+    TaskBundleV1,
     TestPack as SchemaTestPack,
     build_execution_pack,
 )
@@ -87,3 +88,35 @@ def test_implementation_pack_requires_task_id() -> None:
                 "agent_handoff": {},
             }
         )
+
+
+def test_task_bundle_v1_schema_validates_role_partitions() -> None:
+    bundle = TaskBundleV1.model_validate(
+        {
+            "run_id": "20260412T041500Z",
+            "version": 1,
+            "generated_at": "2026-04-12T04:15:00+00:00",
+            "source_artifacts": ["report.json"],
+            "tasks_by_role": {
+                "backend": [
+                    {
+                        "task_id": "TB-BE-001",
+                        "role": "backend",
+                        "title": "Implement API",
+                        "description": "Add backend support",
+                        "priority": "high",
+                        "prd_refs": ["REQ-001"],
+                        "context": ["Derived from plan"],
+                        "depends_on": [],
+                        "source_type": "plan",
+                    }
+                ],
+                "frontend": [],
+                "qa": [],
+                "security": [],
+            },
+        }
+    )
+
+    assert bundle.version == 1
+    assert bundle.tasks_by_role.backend[0].role == "backend"

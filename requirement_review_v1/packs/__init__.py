@@ -11,6 +11,7 @@ from .artifact_splitter import ArtifactSplitter
 from .builders import (
     ExecutionPackBuilder,
     ImplementationPackBuilder,
+    TaskBundleBuilder,
     TestPackBuilder,
     build_execution_pack,
     build_implementation_pack,
@@ -24,6 +25,9 @@ from .schemas import (
     ExecutionPack,
     ImplementationPack,
     RiskSummaryItem,
+    TaskBundleTask,
+    TaskBundleTasksByRole,
+    TaskBundleV1,
     TestPack,
 )
 
@@ -47,6 +51,10 @@ __all__ = [
     "request_more_info",
     "reset_to_draft",
     "RiskSummaryItem",
+    "TaskBundleBuilder",
+    "TaskBundleTask",
+    "TaskBundleTasksByRole",
+    "TaskBundleV1",
     "TestPack",
     "TestPackBuilder",
     "build_execution_pack",

@@ -1,5 +1,7 @@
 """Structured task pack schemas for coding-agent handoff."""
 
+from enum import Enum
+
 from pydantic import Field
 
 from requirement_review_v1.schemas.base import AgentSchemaModel, ID, RiskLevel
@@ -65,3 +67,50 @@ class ExecutionPack(AgentSchemaModel):
     test_pack: TestPack
     risk_pack: list[RiskSummaryItem] = Field(default_factory=list)
     handoff_strategy: str = "sequential"
+
+
+class TaskBundleRole(str, Enum):
+    backend = "backend"
+    frontend = "frontend"
+    qa = "qa"
+    security = "security"
+
+
+class TaskBundlePriority(str, Enum):
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class TaskBundleSourceType(str, Enum):
+    finding = "finding"
+    open_question = "open_question"
+    risk = "risk"
+    plan = "plan"
+
+
+class TaskBundleTask(AgentSchemaModel):
+    task_id: ID
+    role: TaskBundleRole
+    title: str = ""
+    description: str = ""
+    priority: TaskBundlePriority = TaskBundlePriority.medium
+    prd_refs: list[str] = Field(default_factory=list)
+    context: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    source_type: TaskBundleSourceType = TaskBundleSourceType.plan
+
+
+class TaskBundleTasksByRole(AgentSchemaModel):
+    backend: list[TaskBundleTask] = Field(default_factory=list)
+    frontend: list[TaskBundleTask] = Field(default_factory=list)
+    qa: list[TaskBundleTask] = Field(default_factory=list)
+    security: list[TaskBundleTask] = Field(default_factory=list)
+
+
+class TaskBundleV1(AgentSchemaModel):
+    run_id: str = ""
+    version: int = 1
+    generated_at: str = ""
+    source_artifacts: list[str] = Field(default_factory=list)
+    tasks_by_role: TaskBundleTasksByRole = Field(default_factory=TaskBundleTasksByRole)

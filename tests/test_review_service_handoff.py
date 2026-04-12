@@ -6,7 +6,7 @@ from pathlib import Path
 from requirement_review_v1.connectors.schemas import SourceMetadata
 from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
 from requirement_review_v1.service import review_service
-from requirement_review_v1.service.review_service import build_delivery_handoff_outputs
+from requirement_review_v1.service.review_service import build_delivery_handoff_outputs, get_review_result_payload
 
 
 def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_report_json: dict):
@@ -22,7 +22,10 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_
             "report_json": str(report_json_path),
             "run_trace": str(trace_path),
         },
-        "result": sample_report_json,
+        "result": {
+            **sample_report_json,
+            "requirement_doc": "# Recruiter Workflow PRD\n\nOriginal base requirement content.",
+        },
     }
 
     artifact_paths = build_delivery_handoff_outputs(run_output)
@@ -31,6 +34,8 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_
         "implementation_pack",
         "test_pack",
         "execution_pack",
+        "prd_v1",
+        "task_bundle_v1",
         "codex_prompt",
         "claude_code_prompt",
         "openclaw_prompt",
@@ -50,7 +55,7 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_
             assert payload
         else:
             content = path.read_text(encoding="utf-8")
-            assert content.startswith("# ")
+            assert content.startswith("# ") or content.startswith("<!--")
 
     bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
     bundle = DeliveryBundle.model_validate(bundle_payload)
@@ -60,13 +65,19 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_
 
     trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace_payload["pack_builder"]["status"] == "ok"
+    assert trace_payload["draft_generator"]["status"] == "ok"
+    assert trace_payload["task_bundle_builder"]["status"] == "ok"
     assert trace_payload["handoff_renderer"]["status"] == "ok"
     assert trace_payload["bundle_builder"]["status"] == "ok"
     assert trace_payload["bundle_builder"]["output_paths"]["delivery_bundle"].endswith("delivery_bundle.json")
 
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
     assert report_payload["artifacts"]["implementation_pack"].endswith("implementation_pack.json")
+    assert report_payload["artifacts"]["prd_v1"].endswith("prd_v1.md")
+    assert report_payload["artifacts"]["task_bundle_v1"].endswith("task_bundle_v1.json")
     assert report_payload["artifacts"]["delivery_bundle"].endswith("delivery_bundle.json")
+    assert report_payload["trace"]["draft_generator"]["status"] == "ok"
+    assert report_payload["trace"]["task_bundle_builder"]["status"] == "ok"
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
 
 
@@ -251,6 +262,112 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(tm
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
 
 
+def test_build_delivery_handoff_outputs_keeps_main_result_when_prd_draft_fails(tmp_path, monkeypatch):
+    report_json_path = tmp_path / "report.json"
+    trace_path = tmp_path / "run_trace.json"
+    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    run_output = {
+        "run_dir": str(tmp_path),
+        "run_id": "20260307T010205Z",
+        "report_paths": {
+            "report_json": str(report_json_path),
+            "run_trace": str(trace_path),
+        },
+        "result": {
+            "requirement_doc": "# Requirement\n\nOriginal body.",
+            "final_report": "# Requirement Review Report\n\nSummary.",
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Support OAuth login for campus recruiters",
+                    "acceptance_criteria": ["OAuth callback succeeds", "Session is persisted"],
+                }
+            ],
+            "review_results": [],
+            "tasks": [{"id": "TASK-001", "title": "Implement OAuth login flow", "owner": "BE", "requirement_ids": ["REQ-001"]}],
+            "risks": [],
+            "implementation_plan": {
+                "implementation_steps": ["Inspect auth entrypoints", "Implement OAuth callback"],
+                "target_modules": ["backend.auth"],
+                "constraints": ["Preserve password login behavior"],
+            },
+            "test_plan": {
+                "test_scope": ["OAuth callback API"],
+                "edge_cases": ["Expired OAuth state"],
+                "regression_focus": ["Password login"],
+            },
+            "codex_prompt_handoff": {},
+            "claude_code_prompt_handoff": {},
+            "trace": {},
+        },
+    }
+
+    monkeypatch.setattr(review_service, "generate_prd_v1_artifact", lambda _run_output: (_ for _ in ()).throw(RuntimeError("draft boom")))
+
+    artifact_paths = build_delivery_handoff_outputs(run_output)
+
+    assert "execution_pack" in artifact_paths
+    assert "delivery_bundle" in artifact_paths
+    assert "prd_v1" not in artifact_paths
+
+    trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    assert trace_payload["draft_generator"]["status"] == "failed"
+    assert trace_payload["draft_generator"]["error_message"] == "draft boom"
+    assert trace_payload["bundle_builder"]["status"] == "ok"
+
+    report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
+    assert report_payload["trace"]["draft_generator"]["status"] == "failed"
+    assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
+
+
+def test_build_delivery_handoff_outputs_keeps_main_result_when_task_bundle_fails(tmp_path, monkeypatch):
+    report_json_path = tmp_path / "report.json"
+    trace_path = tmp_path / "run_trace.json"
+    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    run_output = {
+        "run_dir": str(tmp_path),
+        "run_id": "20260307T010209Z",
+        "report_paths": {
+            "report_json": str(report_json_path),
+            "run_trace": str(trace_path),
+        },
+        "result": {
+            "requirement_doc": "# Requirement\n\nOriginal body.",
+            "final_report": "# Requirement Review Report\n\nSummary.",
+            "parsed_items": [{"id": "REQ-001", "description": "Support OAuth login", "acceptance_criteria": ["OAuth callback succeeds"]}],
+            "review_results": [],
+            "tasks": [{"id": "TASK-001", "title": "Implement OAuth login flow", "owner": "BE", "requirement_ids": ["REQ-001"]}],
+            "risks": [],
+            "implementation_plan": {"implementation_steps": ["Implement OAuth callback"], "target_modules": ["backend.auth"], "constraints": []},
+            "test_plan": {"test_scope": ["OAuth callback API"], "edge_cases": [], "regression_focus": []},
+            "codex_prompt_handoff": {},
+            "claude_code_prompt_handoff": {},
+            "trace": {},
+        },
+    }
+
+    monkeypatch.setattr(review_service, "generate_task_bundle_v1_artifact", lambda _run_output: (_ for _ in ()).throw(RuntimeError("task bundle boom")))
+
+    artifact_paths = build_delivery_handoff_outputs(run_output)
+
+    assert "execution_pack" in artifact_paths
+    assert "delivery_bundle" in artifact_paths
+    assert "task_bundle_v1" not in artifact_paths
+
+    trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    assert trace_payload["task_bundle_builder"]["status"] == "failed"
+    assert trace_payload["task_bundle_builder"]["error_message"] == "task bundle boom"
+    assert trace_payload["bundle_builder"]["status"] == "ok"
+
+    report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
+    assert report_payload["trace"]["task_bundle_builder"]["status"] == "failed"
+    assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
+
+
 def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
     parallel_review_meta = {
         "default_mode": "parallel_review",
@@ -307,3 +424,39 @@ def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
     assert trace_payload["parallel-review_meta"] == parallel_review_meta
     assert report_payload["parallel-review_meta"] == parallel_review_meta
     assert report_payload["parallel-review_meta"]["artifact_paths"]["review_result_json"].endswith("review_result.json")
+
+
+def test_build_summary_exposes_generated_artifact_paths():
+    summary = review_service._build_summary(
+        {
+            "run_id": "20260307T010208Z",
+            "report_paths": {
+                "report_md": "outputs/20260307T010208Z/report.md",
+                "report_json": "outputs/20260307T010208Z/report.json",
+                "run_trace": "outputs/20260307T010208Z/run_trace.json",
+                "prd_v1": "outputs/20260307T010208Z/prd_v1.md",
+                "task_bundle_v1": "outputs/20260307T010208Z/task_bundle_v1.json",
+            },
+            "result": {"metrics": {}, "high_risk_ratio": 0.0, "revision_round": 0},
+        }
+    )
+
+    assert summary.prd_v1_path.endswith("prd_v1.md")
+    assert summary.task_bundle_v1_path.endswith("task_bundle_v1.json")
+    assert summary.to_report_paths()["prd_v1"].endswith("prd_v1.md")
+    assert summary.to_report_paths()["task_bundle_v1"].endswith("task_bundle_v1.json")
+
+
+def test_get_review_result_payload_discovers_generated_artifacts(tmp_path):
+    run_id = "20260307T010210Z"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "report.json").write_text(json.dumps({"trace": {}, "artifacts": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "run_trace.json").write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "prd_v1.md").write_text("# Draft\n", encoding="utf-8")
+    (run_dir / "task_bundle_v1.json").write_text(json.dumps({"run_id": run_id, "version": 1, "generated_at": "2026-04-12T00:00:00+00:00", "source_artifacts": [], "tasks_by_role": {"backend": [], "frontend": [], "qa": [], "security": []}}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    payload = get_review_result_payload(run_id=run_id, outputs_root=tmp_path)
+
+    assert payload["artifact_paths"]["prd_v1"].endswith("prd_v1.md")
+    assert payload["artifact_paths"]["task_bundle_v1"].endswith("task_bundle_v1.json")
