@@ -1,4 +1,4 @@
-# Multi-Agent Requirement Review 面试题（V3）
+# prd-pal 面试题（V3）
 
 ## 目录
 - [变更说明](#sec-changelog)

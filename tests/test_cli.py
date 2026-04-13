@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from requirement_review_v1 import main as cli
+from prd_pal import main as cli
 from requirement_review_v1.service.review_service import ReviewResultSummary
 
 

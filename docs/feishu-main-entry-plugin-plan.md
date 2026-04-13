@@ -140,7 +140,7 @@ H5 结果页负责：
 ### Prompt 1
 
 ```text
-你正在 D:\Backup\Career\Projects\AgentProject\PRDReview 仓库中工作。
+你正在 <repo-root> 仓库中工作。
 
 任务目标：
 为当前 Review Engine 增加“飞书主入口适配层”，但不要修改核心 review 主链路。飞书层只负责协议转换、签名校验、事件接入和提交入口封装。
@@ -210,7 +210,7 @@ H5 结果页负责：
 ### Prompt 2
 
 ```text
-你正在 D:\Backup\Career\Projects\AgentProject\PRDReview 仓库中工作。
+你正在 <repo-root> 仓库中工作。
 
 任务目标：
 设计并实现一个“飞书主入口提交页”的最小版本。它不需要替代完整结果页，只需要让用户在飞书内完成发起评审。
@@ -271,7 +271,7 @@ H5 结果页负责：
 ### Prompt 3
 
 ```text
-你正在 D:\Backup\Career\Projects\AgentProject\PRDReview 仓库中工作。
+你正在 <repo-root> 仓库中工作。
 
 任务目标：
 把当前 FeishuNotifier 从“dry-run payload renderer”演进成可用于飞书主入口方案的通知模块，但要保持分层清晰。
@@ -324,7 +324,7 @@ H5 结果页负责：
 ### Prompt 4
 
 ```text
-你正在 D:\Backup\Career\Projects\AgentProject\PRDReview 仓库中工作。
+你正在 <repo-root> 仓库中工作。
 
 任务目标：
 为飞书主入口方案补齐“卡片内回答澄清问题”的能力，直接复用当前 clarification service，不复制业务逻辑。
@@ -380,7 +380,7 @@ H5 结果页负责：
 ### Prompt 5
 
 ```text
-你正在 D:\Backup\Career\Projects\AgentProject\PRDReview 仓库中工作。
+你正在 <repo-root> 仓库中工作。
 
 任务目标：
 把现有结果页改造成“既能独立 Web 使用，也能作为飞书内 H5 页面使用”的双模式页面。
@@ -435,7 +435,7 @@ H5 结果页负责：
 ### Prompt 6
 
 ```text
-你正在 D:\Backup\Career\Projects\AgentProject\PRDReview 仓库中工作。
+你正在 <repo-root> 仓库中工作。
 
 任务目标：
 为飞书主入口方案补齐最小可上线的身份、权限和审计边界。
@@ -484,7 +484,7 @@ H5 结果页负责：
 ### Prompt 7
 
 ```text
-你正在 D:\Backup\Career\Projects\AgentProject\PRDReview 仓库中工作。
+你正在 <repo-root> 仓库中工作。
 
 任务目标：
 补齐“飞书主入口插件化改造”的部署和运维文档，让工程团队可以按文档完成配置和联调。

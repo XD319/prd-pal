@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "prd-pal"
 version = "0.6.0"
-description = "PRD-Pal review engine for requirement analysis, handoff preparation, and delivery support"
+description = "prd-pal review engine for requirement analysis, handoff preparation, and delivery support"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -38,11 +38,11 @@ test = [
 ]
 
 [project.scripts]
-prd-pal = "requirement_review_v1.main:run_cli"
+prd-pal = "prd_pal.main:run_cli"
 prd-review = "requirement_review_v1.main:run_cli"
 
 [tool.setuptools.packages.find]
-include = ["requirement_review_v1*", "review_runtime*"]
+include = ["prd_pal*", "requirement_review_v1*", "review_runtime*"]
 
 [tool.setuptools]
 license-files = ["LICENSE", "NOTICE"]

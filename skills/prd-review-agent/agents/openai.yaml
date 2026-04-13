@@ -1,4 +1,4 @@
 interface:
   display_name: "PRD Review Agent"
-  short_description: "Review PRD drafts via PRDReview CLI."
-  default_prompt: "Use $prd-review-agent to review this PRD draft with the local PRDReview project."
+  short_description: "Review PRD drafts via prd-pal CLI."
+  default_prompt: "Use $prd-review-agent to review this PRD draft with the local prd-pal project."

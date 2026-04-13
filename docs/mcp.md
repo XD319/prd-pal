@@ -25,7 +25,7 @@ As a default boundary:
 ## Start The MCP Server
 
 ```powershell
-python -m requirement_review_v1.mcp_server.server
+python -m prd_pal.mcp_server.server
 ```
 
 The server uses stdio transport and is normally launched by an MCP client.
@@ -56,7 +56,7 @@ These are the primary tools to emphasize:
 Recommended input choice:
 
 - Use `prd_text` for strong callers that already fetched the requirement content.
-- Use `source` for weak callers that need PRD-Pal to fetch and normalize the source document.
+- Use `source` for weak callers that need prd-pal to fetch and normalize the source document.
 
 Recommended first integration flow:
 
@@ -194,7 +194,7 @@ This is optional and should not be confused with the main review architecture.
 ## Notes For Client Authors
 
 - Prefer `prd_text` for strong clients that can already fetch and normalize source content.
-- Prefer `source` when the client is intentionally delegating document fetch and normalization to PRD-Pal.
+- Prefer `source` when the client is intentionally delegating document fetch and normalization to prd-pal.
 - Keep `prd_text` and `prd_path` for backward compatibility.
 - Treat `review_requirement` as the review-only facade.
 - Treat `review_prd` as the richer compatibility surface when you intentionally need bundle-adjacent artifact paths in the same response.

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide describes the two recommended adoption paths for PRD-Pal.
+This guide describes the two recommended adoption paths for prd-pal.
 
 ## Path 1: Local Skill + Local Repository
 
@@ -13,8 +13,8 @@ Use this when:
 Recommended entrypoints:
 
 - local skill: `skills/prd-review-agent/`
-- CLI: `python -m requirement_review_v1.main review --input <file> --json`
-- MCP: `python -m requirement_review_v1.mcp_server.server`
+- CLI: `python -m prd_pal.main review --input <file> --json`
+- MCP: `python -m prd_pal.mcp_server.server`
 - preferred caller contract: `prd_text` / local files first, connector-backed `source` only when explicitly needed
 
 ## Path 2: Shared Service + Remote Skill

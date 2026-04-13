@@ -1,6 +1,6 @@
-# PRD-Pal
+# prd-pal
 
-PRD-Pal is a multi-agent requirement review engine that turns requirement sources into stable review artifacts.
+prd-pal is a multi-agent requirement review engine that turns requirement sources into stable review artifacts.
 
 ## System Position
 
@@ -36,7 +36,7 @@ flowchart LR
 
 ## Recommended Boundary
 
-Treat PRD-Pal primarily as a review kernel that turns requirement content into stable review artifacts.
+Treat prd-pal primarily as a review kernel that turns requirement content into stable review artifacts.
 
 - Core path: `prd_text`, `prd_path`, and local text files flowing into review results.
 - Optional integration path: connector-backed `source` intake, clarification writeback, and downstream agent handoff preparation.
@@ -88,7 +88,8 @@ When deciding whether to use connector-backed `source` intake:
 
 ## Repository Layout
 
-- `requirement_review_v1/`: current Python implementation package for the PRD-Pal backend, CLI, MCP server, and review pipeline
+- `prd_pal/`: stable public Python entrypoint namespace for CLI and MCP usage
+- `requirement_review_v1/`: current Python implementation package for the prd-pal backend, CLI, MCP server, and review pipeline
 - `review_runtime/`: shared runtime config and model provider utilities used by the main package
 - `frontend/`: Vite + React web client for run submission, result browsing, and comparisons
 - `docs/`: architecture notes, API docs, MCP docs, and implementation plans
@@ -96,7 +97,7 @@ When deciding whether to use connector-backed `source` intake:
 - `tests/`: automated test suite
 - `data/`: local knowledge and runtime data
 
-The internal package name remains `requirement_review_v1` for now to preserve import stability. The public product name is `PRD-Pal`.
+The public product name is `prd-pal`. The stable public Python namespace is `prd_pal`, while the current implementation still lives in `requirement_review_v1` for import compatibility during the migration.
 
 ## Installation
 
@@ -225,6 +226,12 @@ Prepare downstream agent handoff requests from an existing run:
 prd-pal prepare-handoff --run-id 20260309T000000Z --agent all --json
 ```
 
+Preferred module entrypoint:
+
+```bash
+python -m prd_pal.main review --input docs/sample_prd.md
+```
+
 Compatibility entrypoints such as `python -m requirement_review_v1.main ...` are still supported.
 
 ### Review Engine Entry Points
@@ -258,7 +265,7 @@ Supporting governance endpoints:
 Run the MCP server in stdio mode:
 
 ```bash
-python -m requirement_review_v1.mcp_server.server
+python -m prd_pal.mcp_server.server
 ```
 
 Core review tools:

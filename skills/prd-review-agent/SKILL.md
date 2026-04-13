@@ -1,13 +1,13 @@
 ---
 name: prd-review-agent
-description: Review PRD drafts with the local PRDReview project. Use when the user asks to assess a PRD draft for completeness, ambiguity, open questions, risks, or readiness for downstream coding-agent handoff. This skill saves PRD text to a file when needed, runs the PRDReview CLI, reads the generated JSON report, and optionally prepares Codex, Claude Code, or OpenClaw handoff requests.
+description: Review PRD drafts with the local prd-pal project. Use when the user asks to assess a PRD draft for completeness, ambiguity, open questions, risks, or readiness for downstream coding-agent handoff. This skill saves PRD text to a file when needed, runs the prd-pal CLI, reads the generated JSON report, and optionally prepares Codex, Claude Code, or OpenClaw handoff requests.
 ---
 
 # Prd Review Agent
 
 ## Overview
 
-Use the local PRDReview repository as the source of truth. Run the CLI from the repository root, prefer JSON output, summarize review results first, and only prepare downstream execution requests when the user asks for them.
+Use the local prd-pal repository as the source of truth. Run the CLI from the repository root, prefer JSON output, summarize review results first, and only prepare downstream execution requests when the user asks for them.
 
 ## Workflow
 
@@ -19,7 +19,7 @@ Use the workspace directory that contains:
 - `requirement_review_v1/main.py`
 - `docs/mcp.md`
 
-If the current workspace does not contain those files, stop and ask for the PRDReview repository path.
+If the current workspace does not contain those files, stop and ask for the prd-pal repository path.
 
 ### 2. Prepare the PRD input
 

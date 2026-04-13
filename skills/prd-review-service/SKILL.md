@@ -1,13 +1,13 @@
 ---
 name: prd-review-service
-description: Review PRD drafts through a deployed PRDReview HTTP service. Use when the user wants to call a shared private-cloud or internal PRDReview API instead of a local repository checkout. This skill submits PRD content to the review API, polls run status, fetches review results, and summarizes findings without exposing raw secrets.
+description: Review PRD drafts through a deployed prd-pal HTTP service. Use when the user wants to call a shared private-cloud or internal prd-pal API instead of a local repository checkout. This skill submits PRD content to the review API, polls run status, fetches review results, and summarizes findings without exposing raw secrets.
 ---
 
 # Prd Review Service
 
 ## Overview
 
-Use a deployed PRDReview HTTP API as the source of truth for review results. Prefer sending PRD content as request JSON, treat the service primarily as a review kernel, poll the run until completion, and summarize the review output instead of echoing raw payloads.
+Use a deployed prd-pal HTTP API as the source of truth for review results. Prefer sending PRD content as request JSON, treat the service primarily as a review kernel, poll the run until completion, and summarize the review output instead of echoing raw payloads.
 
 ## Workflow
 
@@ -15,7 +15,7 @@ Use a deployed PRDReview HTTP API as the source of truth for review results. Pre
 
 Require a concrete base URL before sending review traffic.
 
-- Use the user-provided PRDReview base URL, or a preconfigured internal URL.
+- Use the user-provided prd-pal base URL, or a preconfigured internal URL.
 - If the service requires authentication, send the API key in headers only. Never echo it back in chat.
 - Before first use, prefer checking `GET <base-url>/health` and `GET <base-url>/ready`.
 
