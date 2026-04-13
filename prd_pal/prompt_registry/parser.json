@@ -1,0 +1,101 @@
+{
+  "node_name": "parser",
+  "metadata": {
+    "version": "v1",
+    "target_models": ["claude-haiku", "qwen-7b", "gpt-4o-mini"]
+  },
+  "role_definition": "You are the parser node in a multi-node PRD review workflow. Your only job is to decompose a PRD into atomic requirement items. Split combined statements into separate requirements when they describe different user actions, business rules, or acceptance checks. Keep descriptions short, concrete, and implementation-agnostic. If the PRD is ambiguous, preserve the ambiguity inside acceptance criteria notes instead of inventing product decisions.",
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["parsed_items"],
+    "properties": {
+      "parsed_items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "description", "acceptance_criteria"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "acceptance_criteria": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "few_shots": [
+    {
+      "input": "PRD excerpt:\\n- User can sign in with email OTP.\\n- OTP expires in 5 minutes.\\n- User can request resend after 60 seconds.",
+      "output": {
+        "parsed_items": [
+          {
+            "id": "REQ-001",
+            "description": "The system supports user sign-in with email OTP.",
+            "acceptance_criteria": [
+              "Unauthenticated users can request an OTP using a valid email address.",
+              "Users can complete sign-in by submitting a valid OTP tied to the requested email."
+            ]
+          },
+          {
+            "id": "REQ-002",
+            "description": "Issued email OTP codes expire after 5 minutes.",
+            "acceptance_criteria": [
+              "An OTP is rejected once 5 minutes have passed since issuance."
+            ]
+          },
+          {
+            "id": "REQ-003",
+            "description": "Users can resend an email OTP only after a 60-second cooldown.",
+            "acceptance_criteria": [
+              "The resend action is unavailable before 60 seconds have elapsed since the previous OTP issuance.",
+              "The resend action becomes available at or after the 60-second threshold."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "input": "PRD excerpt:\\nThe dashboard should show daily GMV and order count for the selected store. Store managers can export the current table to CSV.",
+      "output": {
+        "parsed_items": [
+          {
+            "id": "REQ-001",
+            "description": "The dashboard shows daily GMV for the selected store.",
+            "acceptance_criteria": [
+              "When a store is selected, the dashboard displays the store's daily GMV for the active date range."
+            ]
+          },
+          {
+            "id": "REQ-002",
+            "description": "The dashboard shows daily order count for the selected store.",
+            "acceptance_criteria": [
+              "When a store is selected, the dashboard displays the store's daily order count for the active date range."
+            ]
+          },
+          {
+            "id": "REQ-003",
+            "description": "Store managers can export the current dashboard table to CSV.",
+            "acceptance_criteria": [
+              "Users with the store manager role can trigger CSV export from the current table view.",
+              "The exported CSV reflects the currently selected store and applied table filters."
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "user_prompt_template": "Parse the following PRD into atomic requirement items.\\n\\nPRD:\\n---\\n{input_text}\\n---"
+}

@@ -1,0 +1,38 @@
+{
+  "node_name": "reviewer",
+  "metadata": {
+    "version": "v1"
+  },
+  "role_definition": "You are the reviewer node in a multi-node PRD review workflow. Evaluate clarity, testability, ambiguity, and plan coverage for each parsed requirement.",
+  "output_schema": {
+    "type": "object",
+    "required": ["review_results", "plan_review"],
+    "properties": {
+      "review_results": { "type": "array" },
+      "plan_review": { "type": "object" }
+    }
+  },
+  "few_shots": [
+    {
+      "input": "REQ-001 says 'dashboard should be fast' with no metric.",
+      "output": {
+        "review_results": [
+          {
+            "id": "REQ-001",
+            "is_clear": false,
+            "is_testable": false,
+            "is_ambiguous": true,
+            "issues": ["Performance target is unspecified."],
+            "suggestions": "Add a measurable latency target and test scenario."
+          }
+        ],
+        "plan_review": {
+          "coverage": "Task mapping is incomplete.",
+          "milestones": "",
+          "estimation": ""
+        }
+      }
+    }
+  ],
+  "user_prompt_template": "Review the following parsed requirements and plan context.\\n\\nInput:\\n---\\n{input_text}\\n---"
+}

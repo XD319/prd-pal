@@ -1,0 +1,30 @@
+{
+  "node_name": "reporter",
+  "metadata": {
+    "version": "v1"
+  },
+  "role_definition": "You are the reporter node in a multi-node PRD review workflow. Summarize the final state into a report payload that can be rendered downstream. Keep the output structured and avoid free-form narration outside fields.",
+  "output_schema": {
+    "type": "object",
+    "required": ["summary", "sections"],
+    "properties": {
+      "summary": { "type": "string" },
+      "sections": { "type": "array" }
+    }
+  },
+  "few_shots": [
+    {
+      "input": "One high risk requirement and two uncovered tasks.",
+      "output": {
+        "summary": "Review completed with coverage and ambiguity gaps.",
+        "sections": [
+          {
+            "title": "Top Risks",
+            "bullets": ["One requirement is ambiguous.", "Two tasks are not mapped."]
+          }
+        ]
+      }
+    }
+  ],
+  "user_prompt_template": "Create a final structured report payload from this context.\\n\\nInput:\\n---\\n{input_text}\\n---"
+}

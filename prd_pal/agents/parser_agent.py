@@ -10,6 +10,8 @@ from typing import Any
 
 from review_runtime.config.config import Config
 
+from ..prompt_quality.context_trimmer import trim_context_for_node
+from ..prompt_registry import load_prompt_template
 from ..prompts import (
     CLARIFY_PARSER_SYSTEM_PROMPT,
     CLARIFY_PARSER_USER_PROMPT,
@@ -51,9 +53,21 @@ async def run(state: ReviewState) -> ReviewState:
         user_prompt = CLARIFY_PARSER_USER_PROMPT
     else:
         prompt_template = PARSER_REVIEW_PROMPT
-        system_prompt = PARSER_SYSTEM_PROMPT
-        user_prompt = PARSER_USER_PROMPT
+        try:
+            record = load_prompt_template(_AGENT)
+            system_prompt = record.system_prompt
+            user_prompt = record.user_prompt_template.replace("{input_text}", "{requirement_doc}")
+        except Exception:
+            system_prompt = PARSER_SYSTEM_PROMPT
+            user_prompt = PARSER_USER_PROMPT
     span.set_template(prompt_template)
+
+    trimmed_context = trim_context_for_node(_AGENT, requirement_doc)
+    if trimmed_context.was_trimmed:
+        span.set_attr("trimmed_context", True)
+        span.set_attr("original_input_chars", trimmed_context.original_chars)
+        span.set_attr("trimmed_input_chars", trimmed_context.trimmed_chars)
+        requirement_doc = trimmed_context.text
 
     prompt = (
         f"{system_prompt}\n\n"

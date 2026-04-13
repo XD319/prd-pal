@@ -14,9 +14,9 @@ from typing import Any
 
 import json_repair
 from langchain_community.adapters.openai import convert_openai_messages
-from langchain_core.utils.json import parse_json_markdown
 from pydantic import BaseModel
 
+from ..prompt_quality.output_validator import SchemaValidationError, validate_with_retries
 from review_runtime.config.config import Config
 from review_runtime.utils.llm import create_chat_completion, get_llm
 
@@ -67,7 +67,7 @@ def _extract_dict_output(output: Any) -> dict[str, Any]:
     if isinstance(output, dict):
         return output
     if isinstance(output, str):
-        parsed = parse_json_markdown(output, parser=json_repair.loads)
+        parsed = json_repair.loads(output)
         if isinstance(parsed, dict):
             return parsed
     raise TypeError(f"structured output is not a dict-like object: {type(output)}")
@@ -109,40 +109,39 @@ async def llm_structured_call(
     metadata["structured_mode"] = "fallback"
     metadata["raw_output"] = ""
 
-    if _provider_supports_tools(provider):
-        try:
-            provider_kwargs: dict[str, Any] = {"model": model}
-            provider_kwargs.update(llm_kwargs)
-            provider_obj = get_llm(provider, **provider_kwargs)
-
-            llm = provider_obj.llm
-            schema_for_tools: Any = schema
-            if isinstance(schema, dict):
-                schema_for_tools = {
-                    "name": f"{metadata['agent_name']}_output",
-                    "description": f"Structured output for {metadata['agent_name']}",
-                    "parameters": schema,
-                }
-
+    async def _invoke_once(current_prompt: str) -> Any:
+        if _provider_supports_tools(provider):
             try:
-                structured_llm = llm.with_structured_output(
-                    schema_for_tools,
-                    method="function_calling",
-                )
-            except TypeError:
-                structured_llm = llm.with_structured_output(schema_for_tools)
+                provider_kwargs: dict[str, Any] = {"model": model}
+                provider_kwargs.update(llm_kwargs)
+                provider_obj = get_llm(provider, **provider_kwargs)
 
-            result = await structured_llm.ainvoke(prompt)
-            output = _extract_dict_output(result)
-            metadata["structured_mode"] = "tools"
-            metadata["raw_output"] = json.dumps(output, ensure_ascii=False, indent=2)
-            return output
-        except Exception:
-            # Any capability/runtime issue falls back to text JSON path.
-            pass
+                llm = provider_obj.llm
+                schema_for_tools: Any = schema
+                if isinstance(schema, dict):
+                    schema_for_tools = {
+                        "name": f"{metadata['agent_name']}_output",
+                        "description": f"Structured output for {metadata['agent_name']}",
+                        "parameters": schema,
+                    }
 
-    try:
-        fallback_prompt = _fallback_prompt(prompt, schema)
+                try:
+                    structured_llm = llm.with_structured_output(
+                        schema_for_tools,
+                        method="function_calling",
+                    )
+                except TypeError:
+                    structured_llm = llm.with_structured_output(schema_for_tools)
+
+                result = await structured_llm.ainvoke(current_prompt)
+                output = _extract_dict_output(result)
+                metadata["structured_mode"] = "tools"
+                metadata["raw_output"] = json.dumps(output, ensure_ascii=False, indent=2)
+                return output
+            except Exception:
+                pass
+
+        fallback_prompt = _fallback_prompt(current_prompt, schema)
         messages = convert_openai_messages([{"role": "user", "content": fallback_prompt}])
         raw = await create_chat_completion(
             model=model,
@@ -153,16 +152,25 @@ async def llm_structured_call(
         )
         metadata["structured_mode"] = "fallback"
         metadata["raw_output"] = raw or ""
-        parsed = parse_json_markdown(raw, parser=json_repair.loads)
-        if not isinstance(parsed, dict):
-            raise StructuredCallError(
-                "fallback parsed JSON is not an object",
-                raw_output=raw or "",
-                structured_mode="fallback",
-            )
-        return parsed
-    except StructuredCallError:
-        raise
+        return raw or ""
+
+    try:
+        result = await validate_with_retries(
+            prompt=prompt,
+            schema=schema,
+            invoke=_invoke_once,
+            max_retries=2,
+        )
+        metadata["raw_output"] = result.raw_output
+        metadata["validation_attempts"] = result.attempts
+        metadata["validation_errors"] = result.errors
+        return result.output
+    except SchemaValidationError as exc:
+        raise StructuredCallError(
+            f"structured call failed: {exc}",
+            raw_output=exc.raw_output,
+            structured_mode=str(metadata.get("structured_mode", "unknown")),
+        ) from exc
     except Exception as exc:
         raise StructuredCallError(
             f"structured call failed: {exc}",

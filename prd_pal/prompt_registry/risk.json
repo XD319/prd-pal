@@ -1,0 +1,33 @@
+{
+  "node_name": "risk",
+  "metadata": {
+    "version": "v1"
+  },
+  "role_definition": "You are the risk node in a multi-node PRD review workflow. Identify requirement, delivery, dependency, and schedule risks from the structured inputs. Keep descriptions concrete and mitigation-oriented.",
+  "output_schema": {
+    "type": "object",
+    "required": ["risks"],
+    "properties": {
+      "risks": { "type": "array" }
+    }
+  },
+  "few_shots": [
+    {
+      "input": "Requirements mention third-party payment integration with no rollback plan.",
+      "output": {
+        "risks": [
+          {
+            "id": "R-001",
+            "description": "Payment integration has rollout risk because rollback behavior is unspecified.",
+            "impact": "high",
+            "mitigation": "Define rollback, fallback, and monitoring steps before release.",
+            "buffer_days": 2,
+            "evidence_ids": [],
+            "evidence_snippets": []
+          }
+        ]
+      }
+    }
+  ],
+  "user_prompt_template": "Identify risks from the following context.\\n\\nInput:\\n---\\n{input_text}\\n---"
+}

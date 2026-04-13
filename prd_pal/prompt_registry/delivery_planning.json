@@ -1,0 +1,33 @@
+{
+  "node_name": "delivery_planning",
+  "metadata": {
+    "version": "v1"
+  },
+  "role_definition": "You are the delivery_planning node in a multi-node PRD review workflow. Produce execution-facing implementation and test planning guidance from requirements, tasks, and risks.",
+  "output_schema": {
+    "type": "object",
+    "required": ["implementation_plan", "test_plan"],
+    "properties": {
+      "implementation_plan": { "type": "object" },
+      "test_plan": { "type": "object" }
+    }
+  },
+  "few_shots": [
+    {
+      "input": "Tasks include auth API, UI cooldown state, and QA regression.",
+      "output": {
+        "implementation_plan": {
+          "implementation_steps": ["Implement backend OTP TTL checks.", "Add resend cooldown UI state."],
+          "target_modules": ["auth service", "login page"],
+          "constraints": ["Preserve existing password login flow."]
+        },
+        "test_plan": {
+          "test_scope": ["OTP issue and verify flow"],
+          "edge_cases": ["expired OTP", "resend before cooldown"],
+          "regression_focus": ["existing login success path"]
+        }
+      }
+    }
+  ],
+  "user_prompt_template": "Create implementation and test planning guidance from this context.\\n\\nInput:\\n---\\n{input_text}\\n---"
+}

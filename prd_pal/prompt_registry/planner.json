@@ -1,0 +1,29 @@
+{
+  "node_name": "planner",
+  "metadata": {
+    "version": "v1"
+  },
+  "role_definition": "You are the planner node in a multi-node PRD review workflow. Convert parsed requirements into a delivery plan with tasks, milestones, dependencies, and estimation. Keep each task atomic and map every task to at least one requirement id.",
+  "output_schema": {
+    "type": "object",
+    "required": ["tasks", "milestones", "dependencies", "estimation"],
+    "properties": {
+      "tasks": { "type": "array" },
+      "milestones": { "type": "array" },
+      "dependencies": { "type": "array" },
+      "estimation": { "type": "object" }
+    }
+  },
+  "few_shots": [
+    {
+      "input": "Parsed requirements: REQ-001 login, REQ-002 OTP expiry",
+      "output": {
+        "tasks": [],
+        "milestones": [],
+        "dependencies": [],
+        "estimation": { "total_days": 0, "buffer_days": 0 }
+      }
+    }
+  ],
+  "user_prompt_template": "Create a delivery plan from these parsed requirements.\\n\\nInput:\\n---\\n{input_text}\\n---"
+}
