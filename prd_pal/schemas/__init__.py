@@ -9,6 +9,7 @@ from .planner_schema import (
     Task,
     validate_planner_output,
 )
+from .roadmap_schema import RoadmapDiffOutput, RoadmapItem, RoadmapOutput
 from .risk_schema import RiskItem, RiskOutput, validate_risk_output
 from .reviewer_schema import (
     PlanReview,
@@ -22,6 +23,9 @@ __all__ = [
     "PlannerOutput",
     "RiskOutput",
     "ReviewerOutput",
+    "RoadmapItem",
+    "RoadmapOutput",
+    "RoadmapDiffOutput",
     "validate_parser_output",
     "validate_planner_output",
     "validate_risk_output",

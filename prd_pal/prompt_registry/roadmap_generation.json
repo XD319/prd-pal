@@ -1,0 +1,47 @@
+{
+  "node_name": "roadmap_generation",
+  "metadata": {
+    "version": "v1"
+  },
+  "role_definition": "You are a roadmap planner. Produce stable constrained roadmap items for downstream execution.",
+  "output_schema": {
+    "type": "object",
+    "required": ["version", "roadmap_items"],
+    "properties": {
+      "version": { "type": "string" },
+      "roadmap_items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "title",
+            "priority_score",
+            "effort_score",
+            "risk_score",
+            "dependency_ids",
+            "target_window",
+            "why_now",
+            "why_later",
+            "de_scope_candidate"
+          ],
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "priority_score": { "type": "number" },
+            "effort_score": { "type": "number" },
+            "risk_score": { "type": "number" },
+            "dependency_ids": { "type": "array", "items": { "type": "string" } },
+            "target_window": { "type": "string", "enum": ["now", "next", "later"] },
+            "why_now": { "type": "string" },
+            "why_later": { "type": "string" },
+            "de_scope_candidate": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "additionalProperties": false
+  },
+  "user_prompt_template": "Build constrained roadmap items from this input and return JSON only.\\n\\nInput:\\n---\\n{input_json}\\n---"
+}

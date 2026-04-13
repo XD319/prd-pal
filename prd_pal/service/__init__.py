@@ -27,6 +27,13 @@ from .review_service import (
     review_prd_text_async,
     review_requirement_for_mcp_async,
 )
+from .roadmap_service import (
+    build_roadmap_prompt,
+    diff_roadmap_versions,
+    generate_constrained_roadmap,
+    integrate_with_execution_plan,
+    validate_roadmap_result,
+)
 
 __all__ = [
     "append_execution_event",
@@ -50,5 +57,10 @@ __all__ = [
     "review_prd_text",
     "review_prd_text_async",
     "review_requirement_for_mcp_async",
+    "build_roadmap_prompt",
+    "diff_roadmap_versions",
+    "generate_constrained_roadmap",
+    "integrate_with_execution_plan",
+    "validate_roadmap_result",
     "update_execution_task_for_mcp",
 ]
