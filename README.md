@@ -1,6 +1,6 @@
-# Multi-Agent Requirement Review Engine
+# PRD-Pal
 
-A LangGraph-based requirement review engine that turns requirement sources into normalized review artifacts.
+PRD-Pal is a multi-agent requirement review engine that turns requirement sources into stable review artifacts.
 
 ## System Position
 
@@ -36,7 +36,7 @@ flowchart LR
 
 ## Recommended Boundary
 
-Treat PRDReview primarily as a review kernel that turns requirement content into stable review artifacts.
+Treat PRD-Pal primarily as a review kernel that turns requirement content into stable review artifacts.
 
 - Core path: `prd_text`, `prd_path`, and local text files flowing into review results.
 - Optional integration path: connector-backed `source` intake, clarification writeback, and downstream agent handoff preparation.
@@ -88,12 +88,15 @@ When deciding whether to use connector-backed `source` intake:
 
 ## Repository Layout
 
-- `requirement_review_v1/`: review engine, service layer, API, MCP server, connectors, and supporting modules
-- `review_runtime/`: shared runtime config and model provider utilities
+- `requirement_review_v1/`: current Python implementation package for the PRD-Pal backend, CLI, MCP server, and review pipeline
+- `review_runtime/`: shared runtime config and model provider utilities used by the main package
+- `frontend/`: Vite + React web client for run submission, result browsing, and comparisons
 - `docs/`: architecture notes, API docs, MCP docs, and implementation plans
-- `eval/`: evaluation scripts
-- `tests/`: automated tests
+- `eval/`: evaluation and comparison scripts
+- `tests/`: automated test suite
 - `data/`: local knowledge and runtime data
+
+The internal package name remains `requirement_review_v1` for now to preserve import stability. The public product name is `PRD-Pal`.
 
 ## Installation
 
@@ -207,20 +210,22 @@ curl -X POST "http://127.0.0.1:8000/api/feishu/clarification" \
 Run one review from a local file:
 
 ```bash
-python -m requirement_review_v1.main review --input docs/sample_prd.md
+prd-pal review --input docs/sample_prd.md
 ```
 
 Legacy single-command usage remains available:
 
 ```bash
-python -m requirement_review_v1.main --input docs/sample_prd.md
+prd-pal --input docs/sample_prd.md
 ```
 
 Prepare downstream agent handoff requests from an existing run:
 
 ```bash
-python -m requirement_review_v1.main prepare-handoff --run-id 20260309T000000Z --agent all --json
+prd-pal prepare-handoff --run-id 20260309T000000Z --agent all --json
 ```
+
+Compatibility entrypoints such as `python -m requirement_review_v1.main ...` are still supported.
 
 ### Review Engine Entry Points
 

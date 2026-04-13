@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "multi-agent-requirement-review-system"
+name = "prd-pal"
 version = "0.6.0"
-description = "LangGraph-based requirement review, delivery planning, and coding-agent handoff system"
+description = "PRD-Pal review engine for requirement analysis, handoff preparation, and delivery support"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -38,6 +38,7 @@ test = [
 ]
 
 [project.scripts]
+prd-pal = "requirement_review_v1.main:run_cli"
 prd-review = "requirement_review_v1.main:run_cli"
 
 [tool.setuptools.packages.find]

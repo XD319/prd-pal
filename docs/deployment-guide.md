@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide describes the two recommended adoption paths for PRDReview.
+This guide describes the two recommended adoption paths for PRD-Pal.
 
 ## Path 1: Local Skill + Local Repository
 

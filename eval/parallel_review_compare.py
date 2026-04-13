@@ -1,7 +1,7 @@
-﻿"""Compare single-review and parallel-review outputs on representative PRDs.
+"""Compare single-review and parallel-review outputs on representative PRDs.
 
 Usage:
-    python eval/parallel-review_compare.py
+    python eval/parallel_review_compare.py
 """
 
 from __future__ import annotations
