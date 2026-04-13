@@ -11,12 +11,23 @@ from .models import (
     FeishuClarificationRequest,
     FeishuEventEnvelope,
     FeishuSubmitRequest,
+    FeishuWorkspaceClarificationRequest,
+    FeishuWorkspaceDeriveRequest,
+    FeishuWorkspaceRoadmapUpdateRequest,
 )
 from .security import FeishuSignatureVerificationError, verify_feishu_signature
 
 
 SubmitReviewRun = Callable[..., Awaitable[dict[str, str]]]
 SubmitClarification = Callable[..., dict[str, Any]]
+ListWorkspaceOverviews = Callable[..., Awaitable[dict[str, Any]]]
+GetWorkspaceOverview = Callable[..., Awaitable[dict[str, Any]]]
+ListWorkspaceVersions = Callable[..., Awaitable[dict[str, Any]]]
+StartWorkspaceReview = Callable[..., Awaitable[dict[str, Any]]]
+SubmitWorkspaceClarification = Callable[..., Awaitable[dict[str, Any]]]
+DeriveWorkspaceVersion = Callable[..., Awaitable[dict[str, Any]]]
+GetWorkspaceDiff = Callable[..., Awaitable[dict[str, Any]]]
+UpdateWorkspaceRoadmap = Callable[..., Awaitable[dict[str, Any]]]
 
 
 def _invalid_signature_response(exc: FeishuSignatureVerificationError) -> JSONResponse:
@@ -30,6 +41,14 @@ def create_feishu_router(
     *,
     submit_review_run: SubmitReviewRun,
     submit_clarification: SubmitClarification,
+    list_workspace_overviews: ListWorkspaceOverviews,
+    get_workspace_overview: GetWorkspaceOverview,
+    list_workspace_versions: ListWorkspaceVersions,
+    start_workspace_review: StartWorkspaceReview,
+    submit_workspace_clarification: SubmitWorkspaceClarification,
+    derive_workspace_version: DeriveWorkspaceVersion,
+    get_workspace_diff: GetWorkspaceDiff,
+    update_workspace_roadmap: UpdateWorkspaceRoadmap,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/feishu", tags=["feishu"])
 
@@ -61,6 +80,124 @@ def create_feishu_router(
         return await submit_review_run(
             **review_payload,
             audit_context=payload.build_audit_context(),
+        )
+
+    @router.get("/workspaces", response_model=None)
+    async def list_feishu_workspaces(
+        request: Request,
+        limit: int = 20,
+    ) -> Any:
+        return await list_workspace_overviews(request=request, limit=limit)
+
+    @router.get("/workspaces/{workspace_id}", response_model=None)
+    async def get_feishu_workspace(workspace_id: str, request: Request) -> Any:
+        return await get_workspace_overview(workspace_id=workspace_id, request=request)
+
+    @router.get("/workspaces/{workspace_id}/artifacts/{artifact_key}/versions", response_model=None)
+    async def get_feishu_workspace_versions(workspace_id: str, artifact_key: str, request: Request) -> Any:
+        return await list_workspace_versions(workspace_id=workspace_id, artifact_key=artifact_key, request=request)
+
+    @router.post("/workspaces/{workspace_id}/artifacts/{artifact_key}/versions/{version_id}/review", response_model=None)
+    async def review_feishu_workspace_version(
+        workspace_id: str,
+        artifact_key: str,
+        version_id: str,
+        request: Request,
+    ) -> Any:
+        body = await request.body()
+        try:
+            verify_feishu_signature(headers=request.headers, body=body)
+        except FeishuSignatureVerificationError as exc:
+            return _invalid_signature_response(exc)
+        return await start_workspace_review(
+            workspace_id=workspace_id,
+            artifact_key=artifact_key,
+            version_id=version_id,
+            request=request,
+        )
+
+    @router.post("/workspaces/{workspace_id}/clarification", response_model=None)
+    async def submit_feishu_workspace_clarification(
+        workspace_id: str,
+        payload: FeishuWorkspaceClarificationRequest,
+        request: Request,
+    ) -> Any:
+        body = await request.body()
+        try:
+            verify_feishu_signature(headers=request.headers, body=body)
+        except FeishuSignatureVerificationError as exc:
+            return _invalid_signature_response(exc)
+        try:
+            return await submit_workspace_clarification(
+                workspace_id=workspace_id,
+                request=request,
+                payload=payload,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail={"code": "run_not_found", "message": str(exc)}) from exc
+        except PermissionError as exc:
+            message = str(exc)
+            code = "feishu_context_required" if "requires" in message else "run_access_denied"
+            raise HTTPException(status_code=403, detail={"code": code, "message": message}) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "clarification_unavailable", "message": str(exc), "run_id": payload.run_id},
+            ) from exc
+        except TypeError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "invalid_clarification_payload", "message": str(exc), "run_id": payload.run_id},
+            ) from exc
+
+    @router.post("/workspaces/{workspace_id}/versions/{version_id}/derive", response_model=None)
+    async def derive_feishu_workspace_version(
+        workspace_id: str,
+        version_id: str,
+        payload: FeishuWorkspaceDeriveRequest,
+        request: Request,
+    ) -> Any:
+        body = await request.body()
+        try:
+            verify_feishu_signature(headers=request.headers, body=body)
+        except FeishuSignatureVerificationError as exc:
+            return _invalid_signature_response(exc)
+        return await derive_workspace_version(
+            workspace_id=workspace_id,
+            version_id=version_id,
+            request=request,
+            payload=payload,
+        )
+
+    @router.get("/workspaces/{workspace_id}/diff", response_model=None)
+    async def get_feishu_workspace_version_diff(
+        workspace_id: str,
+        request: Request,
+        from_version: str,
+        to_version: str,
+    ) -> Any:
+        return await get_workspace_diff(
+            workspace_id=workspace_id,
+            from_version=from_version,
+            to_version=to_version,
+            request=request,
+        )
+
+    @router.post("/workspaces/{workspace_id}/roadmap", response_model=None)
+    async def update_feishu_workspace_roadmap(
+        workspace_id: str,
+        payload: FeishuWorkspaceRoadmapUpdateRequest,
+        request: Request,
+    ) -> Any:
+        body = await request.body()
+        try:
+            verify_feishu_signature(headers=request.headers, body=body)
+        except FeishuSignatureVerificationError as exc:
+            return _invalid_signature_response(exc)
+        return await update_workspace_roadmap(
+            workspace_id=workspace_id,
+            request=request,
+            payload=payload,
         )
 
     @router.post("/clarification", response_model=None)

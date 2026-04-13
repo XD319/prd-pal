@@ -116,6 +116,58 @@ class FeishuClarificationRequest(BaseModel):
         )
 
 
+class FeishuWorkspaceClarificationRequest(FeishuClarificationRequest):
+    workspace_id: str | None = None
+
+
+class FeishuWorkspaceDeriveRequest(BaseModel):
+    open_id: str | None = None
+    user_id: str | None = None
+    tenant_key: str | None = None
+    trigger_source: str | None = Field(default="feishu")
+    metadata: dict[str, Any] | None = None
+
+    def build_audit_context(self) -> dict[str, Any]:
+        return _build_feishu_audit_context(
+            open_id=self.open_id,
+            user_id=self.user_id,
+            tenant_key=self.tenant_key,
+            trigger_source=self.trigger_source,
+            metadata=self.metadata,
+            tool_name="feishu.workspace.derive",
+        )
+
+
+class FeishuWorkspaceRoadmapUpdateRequest(BaseModel):
+    tasks: list[dict[str, Any]] = Field(default_factory=list)
+    dependencies: list[dict[str, Any]] | None = None
+    risk_items: list[dict[str, Any]] | None = None
+    acceptance_criteria_coverage: dict[str, Any] | list[dict[str, Any]] | None = None
+    business_priority_hints: dict[str, Any] | None = None
+    milestones: list[dict[str, Any]] | None = None
+    open_id: str | None = None
+    user_id: str | None = None
+    tenant_key: str | None = None
+    trigger_source: str | None = Field(default="feishu")
+    metadata: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _validate_input(self) -> "FeishuWorkspaceRoadmapUpdateRequest":
+        if not self.tasks:
+            raise ValueError("tasks is required.")
+        return self
+
+    def build_audit_context(self) -> dict[str, Any]:
+        return _build_feishu_audit_context(
+            open_id=self.open_id,
+            user_id=self.user_id,
+            tenant_key=self.tenant_key,
+            trigger_source=self.trigger_source,
+            metadata=self.metadata,
+            tool_name="feishu.workspace.roadmap.update",
+        )
+
+
 def _build_feishu_audit_context(
     *,
     open_id: str | None,

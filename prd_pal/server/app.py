@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -53,6 +54,7 @@ from prd_pal.server.security import (
 )
 from prd_pal.server.sse import ProgressBroadcaster
 from prd_pal.service.comparison_service import compare_runs, get_run_stats_summary, get_trend_data
+from prd_pal.service.roadmap_service import diff_roadmap_versions, generate_constrained_roadmap
 from prd_pal.service.report_service import RUN_ID_PATTERN
 from prd_pal.service.review_service import (
     ReviewArtifactNotFoundError,
@@ -65,10 +67,13 @@ from prd_pal.service.review_service import (
 )
 from prd_pal.templates import TemplateRegistryError, list_template_records
 from prd_pal.utils.logging import get_logger
+from prd_pal.workspace import ArtifactRepository, ArtifactVersion, ArtifactVersionStatus, WorkspaceRepository, WorkspaceState
 
 OUTPUTS_ROOT = Path("outputs")
+WORKSPACE_DB_PATH = Path("data") / "workspace.sqlite3"
 FRONTEND_DIST_ROOT = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 RUN_ENTRY_CONTEXT_FILENAME = "entry_context.json"
+ARTIFACT_REVIEW_RUN_TABLE = "artifact_review_runs"
 log = get_logger("server.http")
 
 
@@ -313,6 +318,372 @@ def _enforce_run_access(request: Request | None, run_id: str) -> None:
         message = str(exc)
         code = "feishu_context_required" if "requires" in message else "run_access_denied"
         raise HTTPException(status_code=403, detail={"code": code, "message": message}) from exc
+
+
+def _workspace_context_from_request(request: Request | None) -> dict[str, str]:
+    return _resolve_request_feishu_context(request)
+
+
+def _extract_workspace_entry_context(workspace: WorkspaceState) -> dict[str, str]:
+    metadata = workspace.metadata if isinstance(workspace.metadata, dict) else {}
+    expected_open_id = str(
+        metadata.get("submitter_open_id")
+        or metadata.get("open_id")
+        or "",
+    ).strip()
+    expected_tenant_key = str(metadata.get("tenant_key") or "").strip()
+    if (not expected_open_id or not expected_tenant_key) and workspace.current_run_id:
+        run_entry = _read_run_entry_context(OUTPUTS_ROOT / str(workspace.current_run_id).strip())
+        expected_open_id = expected_open_id or str(run_entry.get("submitter_open_id") or "").strip()
+        expected_tenant_key = expected_tenant_key or str(run_entry.get("tenant_key") or "").strip()
+    return {
+        "open_id": expected_open_id,
+        "tenant_key": expected_tenant_key,
+    }
+
+
+def _validate_feishu_workspace_access(*, workspace: WorkspaceState, context: dict[str, Any] | None) -> None:
+    provided = dict(context) if isinstance(context, dict) else {}
+    provided_open_id = str(provided.get("open_id") or "").strip()
+    provided_tenant_key = str(provided.get("tenant_key") or "").strip()
+    if not provided_tenant_key:
+        raise PermissionError("This workspace requires the originating Feishu identity context.")
+
+    expected = _extract_workspace_entry_context(workspace)
+    expected_open_id = str(expected.get("open_id") or "").strip()
+    expected_tenant_key = str(expected.get("tenant_key") or "").strip()
+    if expected_tenant_key and provided_tenant_key != expected_tenant_key:
+        raise PermissionError("This workspace is not accessible from the current Feishu tenant context.")
+    if expected_open_id and provided_open_id != expected_open_id:
+        raise PermissionError("This workspace is not accessible to the current Feishu user.")
+
+
+def _enforce_workspace_access_http(*, workspace: WorkspaceState, context: dict[str, Any] | None) -> None:
+    try:
+        _validate_feishu_workspace_access(workspace=workspace, context=context)
+    except PermissionError as exc:
+        message = str(exc)
+        code = "feishu_context_required" if "requires" in message else "run_access_denied"
+        raise HTTPException(status_code=403, detail={"code": code, "message": message}) from exc
+
+
+async def _load_workspace_or_404(workspace_id: str) -> WorkspaceState:
+    repository = WorkspaceRepository(WORKSPACE_DB_PATH)
+    await repository.initialize()
+    workspace_result = await repository.get_workspace(workspace_id)
+    if workspace_result.ok and workspace_result.value is not None:
+        return workspace_result.value
+    raise HTTPException(
+        status_code=404,
+        detail={"code": "workspace_not_found", "message": f"workspace_id not found: {workspace_id}"},
+    )
+
+
+def _workspace_version_payload(version: ArtifactVersion) -> dict[str, Any]:
+    return {
+        "version_id": version.version_id,
+        "artifact_key": version.artifact_key,
+        "artifact_type": version.artifact_type,
+        "version_number": version.version_number,
+        "status": str(version.status),
+        "title": version.title,
+        "parent_version_id": version.parent_version_id,
+        "source_run_id": version.source_run_id,
+        "created_at": version.created_at,
+        "updated_at": version.updated_at,
+    }
+
+
+def _list_recent_workspace_runs(workspace_id: str, *, limit: int = 5) -> list[dict[str, str]]:
+    if not WORKSPACE_DB_PATH.exists():
+        return []
+    query = f"""
+        SELECT run_id, artifact_version_id, review_result_version_id, updated_at
+        FROM {ARTIFACT_REVIEW_RUN_TABLE}
+        WHERE workspace_id = ?
+        ORDER BY updated_at DESC, run_id DESC
+        LIMIT ?
+    """
+    try:
+        with sqlite3.connect(WORKSPACE_DB_PATH) as connection:
+            rows = connection.execute(query, (workspace_id, max(1, int(limit)))).fetchall()
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "run_id": str(row[0] or ""),
+            "artifact_version_id": str(row[1] or ""),
+            "review_result_version_id": str(row[2] or ""),
+            "updated_at": str(row[3] or ""),
+            "result_url": f"/run/{str(row[0] or '')}",
+        }
+        for row in rows
+        if str(row[0] or "").strip()
+    ]
+
+
+async def _list_feishu_workspace_overviews(*, request: Request, limit: int = 20) -> dict[str, Any]:
+    repository = WorkspaceRepository(WORKSPACE_DB_PATH)
+    await repository.initialize()
+    result = await repository.list_workspaces()
+    workspaces = result.value if result.ok and isinstance(result.value, list) else []
+    context = _workspace_context_from_request(request)
+
+    overviews: list[dict[str, Any]] = []
+    for workspace in workspaces:
+        try:
+            _validate_feishu_workspace_access(workspace=workspace, context=context)
+        except PermissionError:
+            continue
+        current_versions = {
+            key: version_id
+            for key, version_id in workspace.current_version_ids.items()
+            if str(key).strip() and str(version_id).strip()
+        }
+        overviews.append(
+            {
+                "workspace_id": workspace.workspace_id,
+                "name": workspace.name,
+                "status": str(workspace.status),
+                "current_run_id": workspace.current_run_id,
+                "current_version_ids": current_versions,
+                "recent_reviews": _list_recent_workspace_runs(workspace.workspace_id, limit=3),
+            }
+        )
+        if len(overviews) >= max(1, int(limit)):
+            break
+    return {"count": len(overviews), "workspaces": overviews}
+
+
+async def _get_feishu_workspace_overview(*, workspace_id: str, request: Request) -> dict[str, Any]:
+    workspace = await _load_workspace_or_404(workspace_id)
+    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    return {
+        "workspace_id": workspace.workspace_id,
+        "name": workspace.name,
+        "status": str(workspace.status),
+        "current_run_id": workspace.current_run_id,
+        "current_version_ids": workspace.current_version_ids,
+        "versions": [_workspace_version_payload(version) for version in workspace.versions],
+        "recent_reviews": _list_recent_workspace_runs(workspace.workspace_id, limit=5),
+    }
+
+
+async def _list_feishu_workspace_versions(*, workspace_id: str, artifact_key: str, request: Request) -> dict[str, Any]:
+    workspace = await _load_workspace_or_404(workspace_id)
+    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    versions = workspace.list_versions(artifact_key)
+    versions.sort(key=lambda item: item.version_number, reverse=True)
+    return {
+        "workspace_id": workspace_id,
+        "artifact_key": artifact_key,
+        "count": len(versions),
+        "versions": [_workspace_version_payload(version) for version in versions],
+    }
+
+
+async def _start_feishu_workspace_review(
+    *,
+    workspace_id: str,
+    artifact_key: str,
+    version_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    workspace = await _load_workspace_or_404(workspace_id)
+    context = _workspace_context_from_request(request)
+    _enforce_workspace_access_http(workspace=workspace, context=context)
+    version = next((item for item in workspace.versions if item.version_id == version_id), None)
+    if version is None or version.artifact_key != artifact_key:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "version_not_found", "message": f"version_id not found: {version_id}"},
+        )
+    run_response = await _enqueue_review_run(
+        prd_path=version.content_path,
+        audit_context={
+            "source": "feishu",
+            "tool_name": "feishu.workspace.review",
+            "actor": str(context.get("open_id") or "feishu").strip() or "feishu",
+            "client_metadata": {
+                **context,
+                "workspace_id": workspace_id,
+                "artifact_key": artifact_key,
+                "version_id": version_id,
+                "trigger_source": "feishu",
+            },
+        },
+    )
+    run_id = str(run_response.get("run_id") or "").strip()
+    return {
+        "run_id": run_id,
+        "workspace_id": workspace_id,
+        "artifact_key": artifact_key,
+        "version_id": version_id,
+        "result_page": {"path": f"/run/{run_id}", "url": f"/run/{run_id}"},
+    }
+
+
+async def _submit_feishu_workspace_clarification(
+    *,
+    workspace_id: str,
+    request: Request,
+    payload: Any,
+) -> dict[str, Any]:
+    run_id = str(payload.run_id or "").strip()
+    workspace = None
+    if run_id:
+        candidates = [item for item in _list_recent_workspace_runs(workspace_id=str(workspace_id or ""), limit=50)]
+        if any(str(item.get("run_id") or "").strip() == run_id for item in candidates):
+            workspace = await _load_workspace_or_404(workspace_id)
+    if workspace is not None:
+        _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    result_payload = _submit_review_clarification_internal(
+        run_id=run_id,
+        answers=payload.to_answers_payload(),
+        audit_context=payload.build_audit_context(),
+    )
+    clarification = result_payload.get("clarification", {}) if isinstance(result_payload, dict) else {}
+    has_pending_questions = bool(
+        isinstance(clarification, dict)
+        and clarification.get("triggered")
+        and clarification.get("status") == "pending"
+    )
+    return {
+        "workspace_id": workspace_id,
+        "run_id": run_id,
+        "clarification_status": str(clarification.get("status", "") or "not_needed"),
+        "has_pending_questions": has_pending_questions,
+        "clarification": clarification,
+        "result_page": {"path": f"/run/{run_id}", "url": f"/run/{run_id}"},
+    }
+
+
+async def _derive_feishu_workspace_version(
+    *,
+    workspace_id: str,
+    version_id: str,
+    request: Request,
+    payload: Any,
+) -> dict[str, Any]:
+    workspace = await _load_workspace_or_404(workspace_id)
+    context = _workspace_context_from_request(request)
+    _enforce_workspace_access_http(workspace=workspace, context=context)
+    source_version = next((item for item in workspace.versions if item.version_id == version_id), None)
+    if source_version is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "version_not_found", "message": f"version_id not found: {version_id}"},
+        )
+    same_artifact_versions = workspace.list_versions(source_version.artifact_key)
+    next_version_number = max((item.version_number for item in same_artifact_versions), default=0) + 1
+    timestamp = datetime.now(timezone.utc).isoformat()
+    derived_version = ArtifactVersion(
+        version_id=f"{source_version.artifact_key}-v{next_version_number}-{uuid.uuid4().hex[:8]}",
+        workspace_id=source_version.workspace_id,
+        artifact_key=source_version.artifact_key,
+        artifact_type=source_version.artifact_type,
+        status=ArtifactVersionStatus.draft,
+        version_number=next_version_number,
+        title=source_version.title or source_version.artifact_key,
+        parent_version_id=source_version.version_id,
+        source_run_id=source_version.source_run_id,
+        created_at=timestamp,
+        updated_at=timestamp,
+        content_path=source_version.content_path,
+        content_checksum=source_version.content_checksum,
+        change_summary=f"Derived from {source_version.version_id}",
+        metadata={
+            **source_version.metadata,
+            "derived_from_version_id": source_version.version_id,
+            "derived_by_open_id": str(context.get("open_id") or "").strip(),
+            "trigger_source": "feishu",
+        },
+    )
+
+    artifact_repository = ArtifactRepository(WORKSPACE_DB_PATH)
+    workspace_repository = WorkspaceRepository(WORKSPACE_DB_PATH)
+    await artifact_repository.initialize()
+    await workspace_repository.initialize()
+    await artifact_repository.upsert_version(derived_version)
+    workspace.register_version(derived_version, make_current=True)
+    workspace.metadata = {
+        **(workspace.metadata if isinstance(workspace.metadata, dict) else {}),
+        "last_derive_audit": payload.build_audit_context(),
+    }
+    workspace.updated_at = timestamp
+    await workspace_repository.upsert_workspace(workspace)
+    return {
+        "workspace_id": workspace_id,
+        "artifact_key": derived_version.artifact_key,
+        "source_version_id": source_version.version_id,
+        "derived_version_id": derived_version.version_id,
+        "version_number": derived_version.version_number,
+    }
+
+
+async def _get_feishu_workspace_diff(
+    *,
+    workspace_id: str,
+    from_version: str,
+    to_version: str,
+    request: Request,
+) -> dict[str, Any]:
+    workspace = await _load_workspace_or_404(workspace_id)
+    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    left = next((item for item in workspace.versions if item.version_id == from_version), None)
+    right = next((item for item in workspace.versions if item.version_id == to_version), None)
+    if left is None or right is None:
+        raise HTTPException(status_code=404, detail={"code": "version_not_found", "message": "diff versions not found."})
+    return {
+        "workspace_id": workspace_id,
+        "from_version": _workspace_version_payload(left),
+        "to_version": _workspace_version_payload(right),
+        "diff_summary": {
+            "artifact_key_changed": left.artifact_key != right.artifact_key,
+            "content_path_changed": left.content_path != right.content_path,
+            "status_changed": str(left.status) != str(right.status),
+            "version_number_delta": right.version_number - left.version_number,
+        },
+        "h5_diff_url": f"/?workspace={workspace_id}&from={from_version}&to={to_version}",
+    }
+
+
+async def _update_feishu_workspace_roadmap(
+    *,
+    workspace_id: str,
+    request: Request,
+    payload: Any,
+) -> dict[str, Any]:
+    workspace = await _load_workspace_or_404(workspace_id)
+    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    existing_metadata = workspace.metadata if isinstance(workspace.metadata, dict) else {}
+    old_roadmap = existing_metadata.get("roadmap")
+    old_payload = old_roadmap if isinstance(old_roadmap, dict) else {"version": "v0", "roadmap_items": []}
+    new_version_label = f"v{int(time.time())}"
+    new_payload = generate_constrained_roadmap(
+        tasks=payload.tasks,
+        milestones=payload.milestones,
+        dependencies=payload.dependencies,
+        risk_items=payload.risk_items,
+        acceptance_criteria_coverage=payload.acceptance_criteria_coverage,
+        business_priority_hints=payload.business_priority_hints,
+        version=new_version_label,
+    )
+    roadmap_diff = diff_roadmap_versions(old_payload, new_payload)
+    workspace.metadata = {
+        **existing_metadata,
+        "roadmap": new_payload,
+        "roadmap_diff": roadmap_diff,
+        "roadmap_updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    repository = WorkspaceRepository(WORKSPACE_DB_PATH)
+    await repository.initialize()
+    await repository.upsert_workspace(workspace)
+    return {
+        "workspace_id": workspace_id,
+        "roadmap": new_payload,
+        "diff": roadmap_diff,
+    }
 
 
 @app.middleware("http")
@@ -710,6 +1081,14 @@ app.include_router(
     create_feishu_router(
         submit_review_run=_enqueue_review_run,
         submit_clarification=_submit_review_clarification_internal,
+        list_workspace_overviews=_list_feishu_workspace_overviews,
+        get_workspace_overview=_get_feishu_workspace_overview,
+        list_workspace_versions=_list_feishu_workspace_versions,
+        start_workspace_review=_start_feishu_workspace_review,
+        submit_workspace_clarification=_submit_feishu_workspace_clarification,
+        derive_workspace_version=_derive_feishu_workspace_version,
+        get_workspace_diff=_get_feishu_workspace_diff,
+        update_workspace_roadmap=_update_feishu_workspace_roadmap,
     )
 )
 
