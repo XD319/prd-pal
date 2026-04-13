@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from prd_pal.packs.delivery_bundle import ApprovalEvent, BundleStatus, DeliveryBundle
-from prd_pal.workspace import ApprovalRecord, workspace_status_from_bundle_status
+
+if TYPE_CHECKING:
+    from prd_pal.workspace.models import ApprovalRecord
 
 
 class InvalidTransitionError(ValueError):
@@ -55,6 +58,9 @@ def _transition(bundle: DeliveryBundle, to_status: BundleStatus, reviewer: str, 
 
 def build_approval_record(bundle: DeliveryBundle, event: ApprovalEvent, action: str = "") -> ApprovalRecord:
     """Convert one bundle approval event into a persisted workspace approval record."""
+
+    from prd_pal.workspace.models import ApprovalRecord
+    from prd_pal.workspace.repository import workspace_status_from_bundle_status
 
     return ApprovalRecord(
         record_id=event.event_id,
