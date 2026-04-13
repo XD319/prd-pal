@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from requirement_review_v1.templates import (
+from prd_pal.templates import (
     ReviewPromptTemplate,
     TemplateNotFoundError,
     TemplateTypeNotFoundError,

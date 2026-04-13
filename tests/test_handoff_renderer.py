@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from requirement_review_v1.handoff import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
-from requirement_review_v1.packs import ExecutionPackBuilder
-from requirement_review_v1.service.review_service import build_handoff_prompts
+from prd_pal.handoff import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
+from prd_pal.packs import ExecutionPackBuilder
+from prd_pal.service.review_service import build_handoff_prompts
 
 
 SAMPLE_REQUIREMENTS = [
@@ -35,7 +35,7 @@ SAMPLE_RISKS = [
 
 IMPLEMENTATION_PLAN = {
     "implementation_steps": ["Inspect auth flow", "Add SSO callback handler", "Preserve legacy login flow"],
-    "target_modules": ["requirement_review_v1/server/app.py", "frontend/src/auth.ts"],
+    "target_modules": ["prd_pal/server/app.py", "frontend/src/auth.ts"],
     "constraints": ["Do not break existing password login"],
 }
 
@@ -85,7 +85,7 @@ def test_render_codex_prompt_contains_required_sections() -> None:
     ):
         assert section in prompt
     assert "Add SSO callback handler" in prompt
-    assert "`requirement_review_v1/server/app.py`" in prompt
+    assert "`prd_pal/server/app.py`" in prompt
     assert "Legacy auth session may regress" in prompt
 
 

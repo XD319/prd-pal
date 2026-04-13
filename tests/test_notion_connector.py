@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from requirement_review_v1.connectors import ConnectorRegistry, NotionConnector, SourceType, get_connector_error_payload
-from requirement_review_v1.connectors.errors import ConnectorRateLimitError, ConnectorValidationError
-from requirement_review_v1.connectors.notion import (
+from prd_pal.connectors import ConnectorRegistry, NotionConnector, SourceType, get_connector_error_payload
+from prd_pal.connectors.errors import ConnectorRateLimitError, ConnectorValidationError
+from prd_pal.connectors.notion import (
     NotionAuthenticationError,
     NotionHTTPResponse,
     NotionPageNotFoundError,

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
+from prd_pal.server import app as app_module
 
 
 def _utc_timestamp(year: int, month: int, day: int, hour: int, minute: int, second: int = 0) -> float:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from requirement_review_v1.service.review_service import ReviewResultSummary
+from prd_pal.service.review_service import ReviewResultSummary
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "eval" / "compare_review_modes.py"
 

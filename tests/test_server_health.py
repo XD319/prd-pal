@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
+from prd_pal.server import app as app_module
 
 
 def test_health_endpoint_returns_healthy_payload() -> None:

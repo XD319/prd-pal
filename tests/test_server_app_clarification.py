@@ -4,7 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
+from prd_pal.server import app as app_module
 
 
 def test_submit_review_clarification_updates_findings_and_returns_refreshed_result(tmp_path, monkeypatch):

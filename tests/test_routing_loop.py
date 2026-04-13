@@ -14,13 +14,13 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from requirement_review_v1.workflow import (
+from prd_pal.workflow import (
     _route_decider_node,
     _route_next,
     _HIGH_RISK_THRESHOLD,
     _MAX_REVISION_ROUNDS,
 )
-from requirement_review_v1.state import ReviewState
+from prd_pal.state import ReviewState
 
 
 # ═══════════════════════════════════════════════════════════════════════════

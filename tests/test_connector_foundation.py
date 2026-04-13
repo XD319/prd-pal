@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from requirement_review_v1.connectors import ConnectorAuthConfig, ConnectorAuthType, get_connector_error_payload
-from requirement_review_v1.connectors.errors import (
+from prd_pal.connectors import ConnectorAuthConfig, ConnectorAuthType, get_connector_error_payload
+from prd_pal.connectors.errors import (
     ConnectorAuthError,
     ConnectorErrorCode,
     ConnectorNetworkError,

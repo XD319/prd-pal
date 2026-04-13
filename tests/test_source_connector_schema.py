@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
 import pytest
 
-from requirement_review_v1.connectors import (
+from prd_pal.connectors import (
     BaseConnector,
     SourceDocument,
     SourceMetadata,

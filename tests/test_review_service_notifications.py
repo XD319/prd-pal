@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from requirement_review_v1.notifications import NotificationType
-from requirement_review_v1.service import review_service
+from prd_pal.notifications import NotificationType
+from prd_pal.service import review_service
 
 
 @pytest.mark.asyncio

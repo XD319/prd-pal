@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from requirement_review_v1.mcp_server import server as mcp_server
+from prd_pal.mcp_server import server as mcp_server
 
 
 def test_answer_review_clarification_tool_updates_review_payload(tmp_path):

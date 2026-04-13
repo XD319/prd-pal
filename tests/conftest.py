@@ -10,7 +10,7 @@ from typing import Any, Callable, Iterator
 
 import pytest
 
-from requirement_review_v1.state import ParsedItemState, ReviewState, create_initial_state
+from prd_pal.state import ParsedItemState, ReviewState, create_initial_state
 
 
 _TMP_ROOT = Path(__file__).resolve().parents[1] / ".test-tmp"

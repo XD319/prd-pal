@@ -5,8 +5,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
-from requirement_review_v1.server.sse import ProgressBroadcaster
+from prd_pal.server import app as app_module
+from prd_pal.server.sse import ProgressBroadcaster
 
 
 def _read_sse_payloads(response) -> list[dict[str, object]]:

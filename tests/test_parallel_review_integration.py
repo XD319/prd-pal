@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
 import pytest
 
-from requirement_review_v1.run_review import run_review
-from requirement_review_v1.review.parallel_review_manager import ParallelReviewResult
+from prd_pal.run_review import run_review
+from prd_pal.review.parallel_review_manager import ParallelReviewResult
 
 
 def _trace_span(status: str = "ok") -> dict[str, object]:
@@ -68,12 +68,12 @@ async def test_run_review_can_skip_when_prd_is_too_sparse(monkeypatch, tmp_path)
         trace["reporter"] = _trace_span()
         return {"final_report": "# Requirement Review Report\n\nSingle mode.", "metrics": {}, "trace": trace}
 
-    monkeypatch.setattr("requirement_review_v1.agents.parser_agent.run", fake_parser)
-    monkeypatch.setattr("requirement_review_v1.agents.planner_agent.run", fake_planner)
-    monkeypatch.setattr("requirement_review_v1.workflow.run_risk_analysis_from_review_state", fake_risk)
-    monkeypatch.setattr("requirement_review_v1.agents.delivery_planning_agent.run", fake_delivery)
-    monkeypatch.setattr("requirement_review_v1.agents.reviewer_agent.run", fake_reviewer)
-    monkeypatch.setattr("requirement_review_v1.agents.reporter_agent.run", fake_reporter)
+    monkeypatch.setattr("prd_pal.agents.parser_agent.run", fake_parser)
+    monkeypatch.setattr("prd_pal.agents.planner_agent.run", fake_planner)
+    monkeypatch.setattr("prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk)
+    monkeypatch.setattr("prd_pal.agents.delivery_planning_agent.run", fake_delivery)
+    monkeypatch.setattr("prd_pal.agents.reviewer_agent.run", fake_reviewer)
+    monkeypatch.setattr("prd_pal.agents.reporter_agent.run", fake_reporter)
 
     run_output = await run_review("Simple login PRD", outputs_root=tmp_path)
 
@@ -169,13 +169,13 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
         trace["reporter"] = _trace_span()
         return {"final_report": "# Requirement Review Report\n\nParallel mode.", "metrics": {}, "trace": trace}
 
-    monkeypatch.setattr("requirement_review_v1.agents.parser_agent.run", fake_parser)
-    monkeypatch.setattr("requirement_review_v1.agents.planner_agent.run", fake_planner)
-    monkeypatch.setattr("requirement_review_v1.workflow.run_risk_analysis_from_review_state", fake_risk)
-    monkeypatch.setattr("requirement_review_v1.agents.delivery_planning_agent.run", fake_delivery)
-    monkeypatch.setattr("requirement_review_v1.agents.reviewer_agent.run", fail_reviewer)
-    monkeypatch.setattr("requirement_review_v1.workflow.run_parallel_review_async", fake_parallel_review)
-    monkeypatch.setattr("requirement_review_v1.agents.reporter_agent.run", fake_reporter)
+    monkeypatch.setattr("prd_pal.agents.parser_agent.run", fake_parser)
+    monkeypatch.setattr("prd_pal.agents.planner_agent.run", fake_planner)
+    monkeypatch.setattr("prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk)
+    monkeypatch.setattr("prd_pal.agents.delivery_planning_agent.run", fake_delivery)
+    monkeypatch.setattr("prd_pal.agents.reviewer_agent.run", fail_reviewer)
+    monkeypatch.setattr("prd_pal.workflow.run_parallel_review_async", fake_parallel_review)
+    monkeypatch.setattr("prd_pal.agents.reporter_agent.run", fake_reporter)
 
     run_output = await run_review(
         "Complex export PRD",

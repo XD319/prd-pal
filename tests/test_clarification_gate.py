@@ -1,4 +1,4 @@
-from requirement_review_v1.review.clarification_gate import apply_clarification_answers, build_clarification_payload
+from prd_pal.review.clarification_gate import apply_clarification_answers, build_clarification_payload
 
 
 def test_build_clarification_payload_limits_to_three_high_unanswerable_questions():

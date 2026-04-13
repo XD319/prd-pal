@@ -1,7 +1,7 @@
 import json
 
-from requirement_review_v1.packs import TaskBundleBuilder, TaskBundleV1
-from requirement_review_v1.task_bundle_generator import generate_task_bundle_v1_artifact, validate_task_bundle_v1_payload
+from prd_pal.packs import TaskBundleBuilder, TaskBundleV1
+from prd_pal.task_bundle_generator import generate_task_bundle_v1_artifact, validate_task_bundle_v1_payload
 
 
 def test_task_bundle_builder_groups_tasks_by_role_and_source_type() -> None:

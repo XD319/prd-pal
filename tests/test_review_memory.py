@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from requirement_review_v1.review.memory_store import FileBackedMemoryStore
-from requirement_review_v1.review.normalizer import normalize_requirement
+from prd_pal.review.memory_store import FileBackedMemoryStore
+from prd_pal.review.normalizer import normalize_requirement
 
 
 def test_file_backed_memory_store_imports_seeds_retrieves_similar_and_persists_history(tmp_path):

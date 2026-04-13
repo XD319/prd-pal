@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.mcp_server import server as mcp_server
-from requirement_review_v1.server import app as app_module
-from requirement_review_v1.monitoring import read_audit_events
-from requirement_review_v1.service import review_service
+from prd_pal.mcp_server import server as mcp_server
+from prd_pal.server import app as app_module
+from prd_pal.monitoring import read_audit_events
+from prd_pal.service import review_service
 
 
 @pytest.mark.asyncio

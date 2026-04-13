@@ -1,4 +1,4 @@
-"""Schema validation tests for requirement_review_v1 Pydantic v2 models.
+"""Schema validation tests for prd_pal Pydantic v2 models.
 
 Covers success / failure / coercion paths for all four agent output schemas,
 with mocked llm_structured_call so no real API calls are made.
@@ -10,15 +10,15 @@ import pytest
 from pydantic import ValidationError
 from unittest.mock import AsyncMock, patch
 
-from requirement_review_v1.schemas.parser_schema import (
+from prd_pal.schemas.parser_schema import (
     ParserOutput,
     validate_parser_output,
 )
-from requirement_review_v1.schemas.planner_schema import (
+from prd_pal.schemas.planner_schema import (
     PlannerOutput,
     validate_planner_output,
 )
-from requirement_review_v1.schemas.planning_skill_schema import (
+from prd_pal.schemas.planning_skill_schema import (
     CodingAgentPromptOutput,
     ImplementationPlanOutput,
     QaPlanningOutput,
@@ -26,20 +26,20 @@ from requirement_review_v1.schemas.planning_skill_schema import (
     validate_implementation_plan_output,
     validate_test_plan_generate_output,
 )
-from requirement_review_v1.schemas.risk_schema import (
+from prd_pal.schemas.risk_schema import (
     RiskOutput,
     validate_risk_output,
 )
-from requirement_review_v1.schemas.reviewer_schema import (
+from prd_pal.schemas.reviewer_schema import (
     ReviewerOutput,
     validate_reviewer_output,
 )
-from requirement_review_v1.state import create_initial_state
+from prd_pal.state import create_initial_state
 
 
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 # Parser schema
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 
 
 class TestParserValidation:
@@ -94,9 +94,9 @@ class TestParserValidation:
         assert not hasattr(out.parsed_items[0], "unknown_field")
 
 
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 # Planner schema
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 
 
 class TestPlannerValidation:
@@ -149,9 +149,9 @@ class TestPlannerValidation:
             validate_planner_output({"milestones": [{"title": "no id"}]})
 
 
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 # Risk schema
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 
 
 class TestRiskValidation:
@@ -193,9 +193,9 @@ class TestRiskValidation:
             validate_risk_output({"risks": [{"description": "orphan"}]})
 
 
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 # Reviewer schema
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 
 
 class TestReviewerValidation:
@@ -250,9 +250,9 @@ class TestReviewerValidation:
             validate_reviewer_output({"review_results": [{"is_clear": True}]})
 
 
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 # End-to-end with mocked LLM: parser agent returns validated schema
-# ══════════════════════════════════════════════════════════════════════════�?
+# ══════════════════════════════════════════════════════════════════════════�?
 
 
 class TestParserAgentMocked:
@@ -270,11 +270,11 @@ class TestParserAgentMocked:
             ]
         }
         with patch(
-            "requirement_review_v1.agents.parser_agent.llm_structured_call",
+            "prd_pal.agents.parser_agent.llm_structured_call",
             new_callable=AsyncMock,
             return_value=mock_llm_output,
-        ), patch("requirement_review_v1.agents.parser_agent.Config"):
-            from requirement_review_v1.agents import parser_agent
+        ), patch("prd_pal.agents.parser_agent.Config"):
+            from prd_pal.agents import parser_agent
 
             state = create_initial_state("# Sample PRD\nUser login via OAuth.")
             result = await parser_agent.run(state)
@@ -287,11 +287,11 @@ class TestParserAgentMocked:
     async def test_parser_schema_failure_returns_empty(self):
         bad_output = {"parsed_items": [{"description": "missing id"}]}
         with patch(
-            "requirement_review_v1.agents.parser_agent.llm_structured_call",
+            "prd_pal.agents.parser_agent.llm_structured_call",
             new_callable=AsyncMock,
             return_value=bad_output,
-        ), patch("requirement_review_v1.agents.parser_agent.Config"):
-            from requirement_review_v1.agents import parser_agent
+        ), patch("prd_pal.agents.parser_agent.Config"):
+            from prd_pal.agents import parser_agent
 
             state = create_initial_state("# PRD")
             result = await parser_agent.run(state)

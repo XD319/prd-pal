@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from requirement_review_v1.execution import ExecutionMode, ExecutionTask, TraceabilityMap
-from requirement_review_v1.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
+from prd_pal.execution import ExecutionMode, ExecutionTask, TraceabilityMap
+from prd_pal.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
 
 
 def _bundle_with_report(tmp_path) -> DeliveryBundle:

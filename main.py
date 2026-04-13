@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from requirement_review_v1.utils.logging import build_formatter, setup_logging
+from prd_pal.utils.logging import build_formatter, setup_logging
 
 load_dotenv()
 
@@ -22,7 +22,7 @@ logging.getLogger().addHandler(file_handler)
 # Create logger instance
 logger = logging.getLogger(__name__)
 
-from requirement_review_v1.server.app import app
+from prd_pal.server.app import app
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
+from prd_pal.server import app as app_module
 
 
 def _write_progress_snapshot(run_dir, run_id: str, *, status: str = 'running') -> None:

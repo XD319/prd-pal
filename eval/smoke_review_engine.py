@@ -24,9 +24,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from requirement_review_v1.main import main as cli_main
-import requirement_review_v1.main as cli_module
-from requirement_review_v1.server import app as app_module
+from prd_pal.main import main as cli_main
+import prd_pal.main as cli_module
+from prd_pal.server import app as app_module
 
 
 async def _run_cli_smoke(workspace: Path) -> dict[str, object]:
@@ -49,7 +49,7 @@ async def _run_cli_smoke(workspace: Path) -> dict[str, object]:
     buffer = io.StringIO()
     try:
         cli_module.review_prd_text_async = AsyncMock(return_value=summary)
-        sys.argv = ["requirement_review_v1.main", "--input", str(input_path)]
+        sys.argv = ["prd_pal.main", "--input", str(input_path)]
         with redirect_stdout(buffer):
             await cli_main()
     finally:

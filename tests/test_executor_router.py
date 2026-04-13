@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from requirement_review_v1.execution import BundleNotApprovedError, ExecutionMode, ExecutionTask, ExecutorRouter
-from requirement_review_v1.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
+from prd_pal.execution import BundleNotApprovedError, ExecutionMode, ExecutionTask, ExecutorRouter
+from prd_pal.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
 
 
 def _make_bundle(tmp_path, *, status: BundleStatus = BundleStatus.approved, high_risk: bool = False) -> DeliveryBundle:

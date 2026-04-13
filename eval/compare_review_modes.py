@@ -1,4 +1,4 @@
-﻿"""Run a minimal A/B comparison for single_review vs parallel_review.
+"""Run a minimal A/B comparison for single_review vs parallel_review.
 
 Usage:
     python eval/compare_review_modes.py
@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from requirement_review_v1.service import review_service
+from prd_pal.service import review_service
 
 DEFAULT_CASE_IDS = ("prd_case_08", "prd_case_11")
 MODES = ("single_review", "parallel_review")

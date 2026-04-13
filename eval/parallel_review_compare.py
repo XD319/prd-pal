@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from requirement_review_v1.service.review_service import review_prd_text
+from prd_pal.service.review_service import review_prd_text
 
 CASES = [
     {

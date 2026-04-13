@@ -4,8 +4,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
-from requirement_review_v1.service.comparison_service import compare_runs, get_run_stats_summary, get_trend_data
+from prd_pal.server import app as app_module
+from prd_pal.service.comparison_service import compare_runs, get_run_stats_summary, get_trend_data
 
 
 def _write_report(tmp_path, run_id: str, payload: dict) -> None:

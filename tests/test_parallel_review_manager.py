@@ -3,9 +3,9 @@ import json
 
 import pytest
 
-from requirement_review_v1.review import parallel_review_manager as manager
-from requirement_review_v1.review.parallel_review_manager import run_parallel_review_async
-from requirement_review_v1.review.reviewer_agents.base import EvidenceItem, ReviewerResult, RiskItem, ToolCall
+from prd_pal.review import parallel_review_manager as manager
+from prd_pal.review.parallel_review_manager import run_parallel_review_async
+from prd_pal.review.reviewer_agents.base import EvidenceItem, ReviewerResult, RiskItem, ToolCall
 
 
 _MANUAL_REVIEW_TEXT = 'Manual review required'

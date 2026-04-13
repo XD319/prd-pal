@@ -39,7 +39,7 @@ test = [
 
 [project.scripts]
 prd-pal = "prd_pal.main:run_cli"
-prd-review = "requirement_review_v1.main:run_cli"
+prd-review = "prd_pal.main:run_cli"
 
 [tool.setuptools.packages.find]
 include = ["prd_pal*", "requirement_review_v1*", "review_runtime*"]

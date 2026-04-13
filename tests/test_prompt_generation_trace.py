@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from requirement_review_v1.run_review import run_review
-from requirement_review_v1.skills.executor import SkillExecutor
+from prd_pal.run_review import run_review
+from prd_pal.skills.executor import SkillExecutor
 
 
 class _FakeConfig:
@@ -145,15 +145,15 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monk
     monkeypatch.setenv("RISK_AGENT_ENABLE_CATALOG_TOOL", "false")
 
     with (
-        patch("requirement_review_v1.agents.parser_agent.Config", _FakeConfig),
-        patch("requirement_review_v1.agents.planner_agent.Config", _FakeConfig),
-        patch("requirement_review_v1.agents.reviewer_agent.Config", _FakeConfig),
-        patch("requirement_review_v1.subflows.risk_analysis.Config", _FakeConfig),
-        patch("requirement_review_v1.agents.parser_agent.llm_structured_call", side_effect=fake_parser_call),
-        patch("requirement_review_v1.agents.planner_agent.llm_structured_call", side_effect=fake_planner_call),
-        patch("requirement_review_v1.subflows.risk_analysis.llm_structured_call", side_effect=fake_risk_call),
-        patch("requirement_review_v1.agents.reviewer_agent.llm_structured_call", side_effect=fake_reviewer_call),
-        patch("requirement_review_v1.skills.delivery_planning.llm_structured_call", side_effect=fake_delivery_skill_call),
+        patch("prd_pal.agents.parser_agent.Config", _FakeConfig),
+        patch("prd_pal.agents.planner_agent.Config", _FakeConfig),
+        patch("prd_pal.agents.reviewer_agent.Config", _FakeConfig),
+        patch("prd_pal.subflows.risk_analysis.Config", _FakeConfig),
+        patch("prd_pal.agents.parser_agent.llm_structured_call", side_effect=fake_parser_call),
+        patch("prd_pal.agents.planner_agent.llm_structured_call", side_effect=fake_planner_call),
+        patch("prd_pal.subflows.risk_analysis.llm_structured_call", side_effect=fake_risk_call),
+        patch("prd_pal.agents.reviewer_agent.llm_structured_call", side_effect=fake_reviewer_call),
+        patch("prd_pal.skills.delivery_planning.llm_structured_call", side_effect=fake_delivery_skill_call),
     ):
         result = await run_review(requirement_doc=sample_prd_text, outputs_root=tmp_path)
 

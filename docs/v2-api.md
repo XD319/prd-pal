@@ -24,7 +24,7 @@ python main.py
 Or directly:
 
 ```bash
-uvicorn requirement_review_v1.server.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn prd_pal.server.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Shared-Environment Hardening

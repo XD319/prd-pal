@@ -1,8 +1,0 @@
-"""Markdown prompt templates for coding-agent handoff."""
-
-from requirement_review_v1.templates import BASE_SECTION_ORDER, AdapterPromptTemplate, get_adapter_prompt_template
-
-PromptTemplate = AdapterPromptTemplate
-CODEX_PROMPT_TEMPLATE = get_adapter_prompt_template("adapter.codex.handoff_markdown")
-CLAUDE_CODE_PROMPT_TEMPLATE = get_adapter_prompt_template("adapter.claude_code.handoff_markdown")
-OPENCLAW_PROMPT_TEMPLATE = get_adapter_prompt_template("adapter.openclaw.handoff_markdown")

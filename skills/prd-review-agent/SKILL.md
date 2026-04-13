@@ -16,7 +16,7 @@ Use the local prd-pal repository as the source of truth. Run the CLI from the re
 Use the workspace directory that contains:
 
 - `pyproject.toml`
-- `requirement_review_v1/main.py`
+- `prd_pal/main.py`
 - `docs/mcp.md`
 
 If the current workspace does not contain those files, stop and ask for the prd-pal repository path.
@@ -31,7 +31,7 @@ Prefer file input.
 
 Prefer:
 
-`python -m requirement_review_v1.main review --input <prd-file> --json`
+`python -m prd_pal.main review --input <prd-file> --json`
 
 Avoid `--text` for long drafts unless file creation is blocked.
 
@@ -39,7 +39,7 @@ Avoid `--text` for long drafts unless file creation is blocked.
 
 From the project root, run:
 
-`python -m requirement_review_v1.main review --input <prd-file> --json`
+`python -m prd_pal.main review --input <prd-file> --json`
 
 Read:
 
@@ -57,7 +57,7 @@ Prefer the JSON artifact path returned by the review command.
 
 If needed, run:
 
-`python -m requirement_review_v1.main report --run-id <run_id> --format json --json`
+`python -m prd_pal.main report --run-id <run_id> --format json --json`
 
 Extract and summarize:
 
@@ -103,7 +103,7 @@ Do not paste the full PRD or the full report JSON back into chat unless the user
 
 When the user wants execution prep, run:
 
-`python -m requirement_review_v1.main prepare-handoff --run-id <run_id> --agent all --json`
+`python -m prd_pal.main prepare-handoff --run-id <run_id> --agent all --json`
 
 Available agents:
 

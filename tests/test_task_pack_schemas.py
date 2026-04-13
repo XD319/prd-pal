@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from requirement_review_v1.packs import (
+from prd_pal.packs import (
     ExecutionPack,
     ImplementationPack,
     TaskBundleV1,
@@ -18,7 +18,7 @@ def test_implementation_pack_validates_required_fields() -> None:
             "title": "Add task pack schemas",
             "summary": "Define structured handoff payloads for coding agents.",
             "context": "Used by Codex and Claude Code handoff flows.",
-            "target_modules": ["requirement_review_v1/packs/schemas.py"],
+            "target_modules": ["prd_pal/packs/schemas.py"],
             "implementation_steps": ["Define models", "Export builders"],
             "constraints": ["Do not break existing workflow"],
             "acceptance_criteria": ["Schemas validate nested execution packs"],

@@ -1,4 +1,4 @@
-from requirement_review_v1.review.reviewer_agents.base import EvidenceItem, ReviewFinding, ReviewerResult, ToolCall
+from prd_pal.review.reviewer_agents.base import EvidenceItem, ReviewFinding, ReviewerResult, ToolCall
 
 
 def test_reviewer_result_to_dict_exposes_evidence_tool_calls_and_status_fields():

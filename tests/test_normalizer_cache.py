@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from requirement_review_v1.review.normalizer_cache import FileBackedNormalizerCache, InMemoryNormalizerCache, normalize_requirement_with_cache
+from prd_pal.review.normalizer_cache import FileBackedNormalizerCache, InMemoryNormalizerCache, normalize_requirement_with_cache
 
 
 def test_in_memory_normalizer_cache_reuses_identical_prd():

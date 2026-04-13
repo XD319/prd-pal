@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from prd_pal import main as cli
-from requirement_review_v1.service.review_service import ReviewResultSummary
+from prd_pal.service.review_service import ReviewResultSummary
 
 
 def test_cli_review_legacy_mode_emits_json(monkeypatch, capsys) -> None:

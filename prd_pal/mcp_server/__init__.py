@@ -1,1 +1,2 @@
-"""Public MCP package namespace for prd-pal."""
+"""Minimal MCP server package for prd_pal."""
+

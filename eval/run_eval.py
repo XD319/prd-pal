@@ -1,4 +1,4 @@
-"""Minimal regression evaluator for requirement_review_v1 workflow.
+"""Minimal regression evaluator for prd_pal workflow.
 
 Usage:
     python eval/run_eval.py
@@ -21,8 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from requirement_review_v1.metrics import build_runtime_trace_summary
-from requirement_review_v1.workflow import build_review_graph
+from prd_pal.metrics import build_runtime_trace_summary
+from prd_pal.workflow import build_review_graph
 
 REQUIRED_TRACE_AGENTS = ("parser", "planner", "risk", "reviewer", "reporter")
 REQUIRED_TRACE_FIELDS = (
@@ -168,7 +168,7 @@ def _build_report_json(result: dict[str, Any], run_id: str) -> dict[str, Any]:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "provider": provider,
-        "project": "requirement_review_v1",
+        "project": "prd_pal",
     }
     report_data.update(result)
     return report_data

@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from requirement_review_v1.mcp_server import server as mcp_server
-from requirement_review_v1.notifications import BaseNotifier, dispatch_notification, read_notification_records
-from requirement_review_v1.service import execution_service, review_service
-from requirement_review_v1.service.review_service import ReviewResultSummary
+from prd_pal.mcp_server import server as mcp_server
+from prd_pal.notifications import BaseNotifier, dispatch_notification, read_notification_records
+from prd_pal.service import execution_service, review_service
+from prd_pal.service.review_service import ReviewResultSummary
 
 
 @pytest.mark.asyncio

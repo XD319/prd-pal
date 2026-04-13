@@ -1,12 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from requirement_review_v1.connectors.schemas import SourceMetadata
-from requirement_review_v1.packs.delivery_bundle import DeliveryBundle
-from requirement_review_v1.service import review_service
-from requirement_review_v1.service.review_service import build_delivery_handoff_outputs, get_review_result_payload
+from prd_pal.connectors.schemas import SourceMetadata
+from prd_pal.packs.delivery_bundle import DeliveryBundle
+from prd_pal.service import review_service
+from prd_pal.service.review_service import build_delivery_handoff_outputs, get_review_result_payload
 
 
 def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_report_json: dict):
@@ -319,6 +319,39 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_prd_draft_fails(t
 
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
     assert report_payload["trace"]["draft_generator"]["status"] == "failed"
+    assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
+
+
+def test_build_delivery_handoff_outputs_skips_prd_draft_when_requirement_doc_missing(tmp_path, sample_report_json: dict):
+    report_json_path = tmp_path / "report.json"
+    trace_path = tmp_path / "run_trace.json"
+    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    run_output = {
+        "run_dir": str(tmp_path),
+        "run_id": "20260307T010210Z",
+        "report_paths": {
+            "report_json": str(report_json_path),
+            "run_trace": str(trace_path),
+        },
+        "result": {
+            **sample_report_json,
+        },
+    }
+
+    artifact_paths = build_delivery_handoff_outputs(run_output)
+
+    assert "delivery_bundle" in artifact_paths
+    assert "prd_v1" not in artifact_paths
+
+    trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    assert trace_payload["draft_generator"]["status"] == "skipped"
+    assert trace_payload["draft_generator"]["error_message"] == "requirement_doc_missing"
+    assert trace_payload["bundle_builder"]["status"] == "ok"
+
+    report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
+    assert report_payload["trace"]["draft_generator"]["status"] == "skipped"
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
 
 

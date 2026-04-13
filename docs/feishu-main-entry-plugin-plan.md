@@ -15,9 +15,9 @@
 
 当前仓库已经具备比较完整的后端主链路，飞书入口更像是增加一个“前台”而不是重写系统：
 
-- `requirement_review_v1/server/app.py`
+- `prd_pal/server/app.py`
   - 已有提交、查询状态、拉取结果、回填澄清等异步 API
-- `requirement_review_v1/connectors/feishu.py`
+- `prd_pal/connectors/feishu.py`
   - 已支持飞书/Lark 文档作为输入源
 - `frontend/src/pages/HomePage.jsx`
   - 当前 Web 首页主要是提审表单和历史列表
@@ -119,10 +119,10 @@ H5 结果页负责：
 
 建议新增文件：
 
-- `requirement_review_v1/integrations/feishu/__init__.py`
-- `requirement_review_v1/integrations/feishu/models.py`
-- `requirement_review_v1/integrations/feishu/security.py`
-- `requirement_review_v1/integrations/feishu/router.py`
+- `prd_pal/integrations/feishu/__init__.py`
+- `prd_pal/integrations/feishu/models.py`
+- `prd_pal/integrations/feishu/security.py`
+- `prd_pal/integrations/feishu/router.py`
 
 关键设计：
 
@@ -146,18 +146,18 @@ H5 结果页负责：
 为当前 Review Engine 增加“飞书主入口适配层”，但不要修改核心 review 主链路。飞书层只负责协议转换、签名校验、事件接入和提交入口封装。
 
 请先检查以下文件：
-- requirement_review_v1/server/app.py
-- requirement_review_v1/service/review_service.py
-- requirement_review_v1/connectors/feishu.py
+- prd_pal/server/app.py
+- prd_pal/service/review_service.py
+- prd_pal/connectors/feishu.py
 - tests/test_server_app_source_input.py
 - tests/test_server_app_security.py
 
 实现要求：
 1. 新增一个飞书集成模块目录：
-   - requirement_review_v1/integrations/feishu/__init__.py
-   - requirement_review_v1/integrations/feishu/models.py
-   - requirement_review_v1/integrations/feishu/security.py
-   - requirement_review_v1/integrations/feishu/router.py
+   - prd_pal/integrations/feishu/__init__.py
+   - prd_pal/integrations/feishu/models.py
+   - prd_pal/integrations/feishu/security.py
+   - prd_pal/integrations/feishu/router.py
 
 2. 在 FastAPI 中挂载飞书入口：
    - POST /api/feishu/events
@@ -256,7 +256,7 @@ H5 结果页负责：
 
 结合当前仓库，优先升级：
 
-- `requirement_review_v1/notifications/feishu.py`
+- `prd_pal/notifications/feishu.py`
 
 当前它只是 dry-run payload renderer，可以在这个基础上演进为真正的发送器或“发送器 + renderer”分层。
 
@@ -277,10 +277,10 @@ H5 结果页负责：
 把当前 FeishuNotifier 从“dry-run payload renderer”演进成可用于飞书主入口方案的通知模块，但要保持分层清晰。
 
 请先检查以下文件：
-- requirement_review_v1/notifications/feishu.py
-- requirement_review_v1/notifications/base.py
-- requirement_review_v1/notifications/models.py
-- requirement_review_v1/service/review_service.py
+- prd_pal/notifications/feishu.py
+- prd_pal/notifications/base.py
+- prd_pal/notifications/models.py
+- prd_pal/service/review_service.py
 
 实现要求：
 1. 保留“payload 构造”和“实际发送”分层，不要把所有逻辑堆在一个类里。
@@ -330,8 +330,8 @@ H5 结果页负责：
 为飞书主入口方案补齐“卡片内回答澄清问题”的能力，直接复用当前 clarification service，不复制业务逻辑。
 
 请先检查以下文件：
-- requirement_review_v1/service/review_service.py
-- requirement_review_v1/server/app.py
+- prd_pal/service/review_service.py
+- prd_pal/server/app.py
 - frontend/src/components/ClarificationPanel.jsx
 - frontend/src/hooks/useReviewRun.js
 
@@ -441,9 +441,9 @@ H5 结果页负责：
 为飞书主入口方案补齐最小可上线的身份、权限和审计边界。
 
 请先检查以下文件：
-- requirement_review_v1/server/app.py
-- requirement_review_v1/monitoring/audit.py
-- requirement_review_v1/service/review_service.py
+- prd_pal/server/app.py
+- prd_pal/monitoring/audit.py
+- prd_pal/service/review_service.py
 - outputs/ 目录下现有运行产物结构
 
 实现要求：

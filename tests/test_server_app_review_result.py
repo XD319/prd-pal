@@ -4,7 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
+from prd_pal.server import app as app_module
 
 
 def test_get_review_result_returns_parsed_report_and_gating_metadata(tmp_path, monkeypatch):

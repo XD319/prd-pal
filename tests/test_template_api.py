@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server.app import app
+from prd_pal.server.app import app
 
 
 client = TestClient(app)

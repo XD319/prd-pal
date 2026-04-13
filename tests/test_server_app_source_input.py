@@ -5,8 +5,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.monitoring import read_audit_events
-from requirement_review_v1.server import app as app_module
+from prd_pal.monitoring import read_audit_events
+from prd_pal.server import app as app_module
 
 
 def _build_client() -> TestClient:

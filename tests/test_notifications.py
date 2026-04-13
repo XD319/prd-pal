@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from requirement_review_v1.monitoring import read_audit_events
-from requirement_review_v1.notifications import (
+from prd_pal.monitoring import read_audit_events
+from prd_pal.notifications import (
     BaseNotifier,
     FeishuCardRenderer,
     FeishuNotifier,

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from requirement_review_v1.packs.artifact_splitter import ArtifactSplitter
-from requirement_review_v1.packs.bundle_builder import DeliveryBundleBuilder
-from requirement_review_v1.packs.delivery_bundle import BundleStatus, DeliveryBundle
+from prd_pal.packs.artifact_splitter import ArtifactSplitter
+from prd_pal.packs.bundle_builder import DeliveryBundleBuilder
+from prd_pal.packs.delivery_bundle import BundleStatus, DeliveryBundle
 
 
 def test_bundle_builder_builds_bundle_from_mock_data(tmp_path, sample_report_json: dict):

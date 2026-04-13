@@ -15,11 +15,11 @@ import os
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from requirement_review_v1.skills.executor import SkillExecutor
-from requirement_review_v1.skills.registry import get_skill_spec
-from requirement_review_v1.subflows.risk_analysis import run_risk_analysis_subflow
-from requirement_review_v1.tools.risk_catalog_search import search_risk_catalog
-from requirement_review_v1.state import ReviewState
+from prd_pal.skills.executor import SkillExecutor
+from prd_pal.skills.registry import get_skill_spec
+from prd_pal.subflows.risk_analysis import run_risk_analysis_subflow
+from prd_pal.tools.risk_catalog_search import search_risk_catalog
+from prd_pal.state import ReviewState
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -145,7 +145,7 @@ class TestSkillExecutorCache:
         ]
 
         with patch(
-            "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+            "prd_pal.skills.risk_catalog.search_risk_catalog",
             return_value=mock_hits,
         ) as mock_search:
             first = await executor.execute(
@@ -215,18 +215,18 @@ class TestRiskAgentToolEnabled:
         ]
         with (
             patch(
-                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                "prd_pal.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch("prd_pal.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=catalog_hits,
             ),
             patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
         ):
-            from requirement_review_v1.agents import risk_agent
+            from prd_pal.agents import risk_agent
 
             result = await risk_agent.run(base_state)
 
@@ -243,18 +243,18 @@ class TestRiskAgentToolEnabled:
     async def test_tool_miss_returns_risks_without_evidence(self, base_state: ReviewState):
         with (
             patch(
-                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                "prd_pal.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch("prd_pal.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=[],
             ),
             patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
         ):
-            from requirement_review_v1.agents import risk_agent
+            from prd_pal.agents import risk_agent
 
             result = await risk_agent.run(base_state)
 
@@ -271,18 +271,18 @@ class TestRiskAgentToolEnabled:
         mock_search = MagicMock(return_value=catalog_hits)
         with (
             patch(
-                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                "prd_pal.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch("prd_pal.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
             patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
         ):
-            from requirement_review_v1.agents import risk_agent
+            from prd_pal.agents import risk_agent
 
             first = await risk_agent.run(base_state)
             second = await risk_agent.run(base_state)
@@ -307,18 +307,18 @@ class TestRiskAgentToolDisabled:
         mock_search = MagicMock(return_value=[])
         with (
             patch(
-                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                "prd_pal.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch("prd_pal.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
             patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "false", "SKILLS_CACHE_ENABLED": "true"}),
         ):
-            from requirement_review_v1.agents import risk_agent
+            from prd_pal.agents import risk_agent
 
             result = await risk_agent.run(base_state)
 
@@ -333,18 +333,18 @@ class TestRiskAgentToolDisabled:
         mock_search = MagicMock(return_value=[])
         with (
             patch(
-                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                "prd_pal.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch("prd_pal.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
             patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "0", "SKILLS_CACHE_ENABLED": "true"}),
         ):
-            from requirement_review_v1.agents import risk_agent
+            from prd_pal.agents import risk_agent
 
             result = await risk_agent.run(base_state)
 
@@ -364,18 +364,18 @@ class TestRiskAgentToolError:
     async def test_tool_error_degrades_gracefully(self, base_state: ReviewState):
         with (
             patch(
-                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                "prd_pal.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch("prd_pal.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                "prd_pal.skills.risk_catalog.search_risk_catalog",
                 side_effect=RuntimeError("catalog file missing"),
             ),
             patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
         ):
-            from requirement_review_v1.agents import risk_agent
+            from prd_pal.agents import risk_agent
 
             result = await risk_agent.run(base_state)
 
@@ -404,7 +404,7 @@ class TestRiskAgentEmptyTasks:
             "trace": {},
             "run_dir": "",
         }
-        from requirement_review_v1.agents import risk_agent
+        from prd_pal.agents import risk_agent
 
         result = await risk_agent.run(state)
         assert result["risks"] == []
@@ -417,13 +417,13 @@ class TestRiskAnalysisSubflowContract:
     async def test_subflow_returns_contract_fields(self, base_state: ReviewState):
         with (
             patch(
-                "requirement_review_v1.subflows.risk_analysis.llm_structured_call",
+                "prd_pal.subflows.risk_analysis.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("requirement_review_v1.subflows.risk_analysis.Config"),
+            patch("prd_pal.subflows.risk_analysis.Config"),
             patch(
-                "requirement_review_v1.skills.risk_catalog.search_risk_catalog",
+                "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=[],
             ),
             patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),

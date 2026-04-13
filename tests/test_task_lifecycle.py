@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from requirement_review_v1.execution import (
+from prd_pal.execution import (
     ExecutionMode,
     ExecutionTask,
     ExecutionTaskStatus,

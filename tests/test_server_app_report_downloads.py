@@ -6,7 +6,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from requirement_review_v1.server import app as app_module
+from prd_pal.server import app as app_module
 
 
 def test_get_report_html_returns_browser_openable_document(tmp_path, monkeypatch):

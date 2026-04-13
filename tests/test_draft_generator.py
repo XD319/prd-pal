@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from requirement_review_v1.draft_generator import (
+from prd_pal.draft_generator import (
     GENERATOR_VERSION,
     build_draft_generator_input,
     generate_prd_v1_artifact,

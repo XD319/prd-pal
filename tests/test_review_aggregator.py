@@ -1,7 +1,7 @@
-﻿import json
+import json
 
-from requirement_review_v1.review.aggregator import aggregate_review_results
-from requirement_review_v1.review.reviewer_agents.base import EvidenceItem, ReviewFinding, ReviewerResult, RiskItem, ToolCall
+from prd_pal.review.aggregator import aggregate_review_results
+from prd_pal.review.reviewer_agents.base import EvidenceItem, ReviewFinding, ReviewerResult, RiskItem, ToolCall
 
 
 _MANUAL_REVIEW_TEXT = "Manual review required"

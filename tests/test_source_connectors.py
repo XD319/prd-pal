@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from requirement_review_v1.connectors import ConnectorRegistry, LocalFileConnector, SourceType, URLConnector
+from prd_pal.connectors import ConnectorRegistry, LocalFileConnector, SourceType, URLConnector
 
 
 def test_local_file_connector_reads_markdown(tmp_path: Path) -> None:

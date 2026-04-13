@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from requirement_review_v1.packs.approval import (
+from prd_pal.packs.approval import (
     InvalidTransitionError,
     approve_bundle,
     block_by_risk,
@@ -10,7 +10,7 @@ from requirement_review_v1.packs.approval import (
     request_more_info,
     reset_to_draft,
 )
-from requirement_review_v1.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
+from prd_pal.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
 
 
 def _bundle(status: BundleStatus = BundleStatus.draft) -> DeliveryBundle:

@@ -1,9 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
-from requirement_review_v1.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
-from requirement_review_v1.workspace import (
+from prd_pal.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
+from prd_pal.workspace import (
     ApprovalRecord,
     ReviewWorkspaceRepository,
     StatusSnapshot,

@@ -88,8 +88,8 @@ When deciding whether to use connector-backed `source` intake:
 
 ## Repository Layout
 
-- `prd_pal/`: stable public Python entrypoint namespace for CLI and MCP usage
-- `requirement_review_v1/`: current Python implementation package for the prd-pal backend, CLI, MCP server, and review pipeline
+- `prd_pal/`: canonical Python implementation package for the prd-pal backend, CLI, MCP server, and review pipeline
+- `requirement_review_v1/`: backward-compatible import shim kept temporarily during the package migration
 - `review_runtime/`: shared runtime config and model provider utilities used by the main package
 - `frontend/`: Vite + React web client for run submission, result browsing, and comparisons
 - `docs/`: architecture notes, API docs, MCP docs, and implementation plans
@@ -97,7 +97,7 @@ When deciding whether to use connector-backed `source` intake:
 - `tests/`: automated test suite
 - `data/`: local knowledge and runtime data
 
-The public product name is `prd-pal`. The stable public Python namespace is `prd_pal`, while the current implementation still lives in `requirement_review_v1` for import compatibility during the migration.
+The public product name is `prd-pal`. The canonical Python package is `prd_pal`, while `requirement_review_v1` is retained as a temporary compatibility alias during the migration.
 
 ## Installation
 
