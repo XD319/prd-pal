@@ -175,7 +175,13 @@ def test_feishu_submit_successfully_reuses_review_submission(tmp_path, monkeypat
     )
 
     assert response.status_code == 200
-    assert response.json() == {"run_id": "20260308T020305Z"}
+    assert response.json() == {
+        "run_id": "20260308T020305Z",
+        "result_page": {
+            "path": "/run/20260308T020305Z?trigger_source=feishu&open_id=ou_test_user&tenant_key=tenant-test&embed=feishu",
+            "url": "/run/20260308T020305Z?trigger_source=feishu&open_id=ou_test_user&tenant_key=tenant-test&embed=feishu",
+        },
+    }
     assert captured["prd_text"] is None
     assert captured["prd_path"] is None
     assert captured["source"] == "feishu://docx/doc-token"
@@ -198,6 +204,11 @@ def test_feishu_submit_successfully_reuses_review_submission(tmp_path, monkeypat
         "submitter_open_id": "ou_test_user",
         "tenant_key": "tenant-test",
         "trigger_source": "feishu",
+        "result_page_context": {
+            "trigger_source": "feishu",
+            "open_id": "ou_test_user",
+            "tenant_key": "tenant-test",
+        },
         "submitted_by": "ou_test_user",
         "tool_name": "feishu.submit",
         "created_at": entry_context["created_at"],

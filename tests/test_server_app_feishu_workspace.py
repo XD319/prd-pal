@@ -104,6 +104,10 @@ def test_feishu_workspace_list_returns_workspace_context(tmp_path, monkeypatch):
     assert payload["count"] == 1
     assert payload["workspaces"][0]["workspace_id"] == "ws-1"
     assert payload["workspaces"][0]["recent_reviews"][0]["run_id"] == "run-123"
+    assert (
+        payload["workspaces"][0]["recent_reviews"][0]["result_url"]
+        == "/run/run-123?open_id=ou_owner&tenant_key=tenant-a&trigger_source=feishu&embed=feishu"
+    )
 
 
 def test_feishu_workspace_review_uses_artifact_version_content(tmp_path, monkeypatch):
@@ -129,3 +133,6 @@ def test_feishu_workspace_review_uses_artifact_version_content(tmp_path, monkeyp
     assert payload["artifact_key"] == "prd_doc"
     assert payload["version_id"] == "artifact-v1"
     assert payload["run_id"]
+    assert payload["result_page"]["url"].endswith("&embed=feishu")
+    assert "open_id=ou_owner" in payload["result_page"]["url"]
+    assert "tenant_key=tenant-a" in payload["result_page"]["url"]

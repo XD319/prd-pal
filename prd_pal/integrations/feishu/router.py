@@ -19,7 +19,7 @@ from .security import FeishuSignatureVerificationError, verify_feishu_signature
 
 
 SubmitReviewRun = Callable[..., Awaitable[dict[str, str]]]
-SubmitClarification = Callable[..., dict[str, Any]]
+SubmitClarification = Callable[..., Awaitable[dict[str, Any]]]
 ListWorkspaceOverviews = Callable[..., Awaitable[dict[str, Any]]]
 GetWorkspaceOverview = Callable[..., Awaitable[dict[str, Any]]]
 ListWorkspaceVersions = Callable[..., Awaitable[dict[str, Any]]]
@@ -208,12 +208,10 @@ def create_feishu_router(
         except FeishuSignatureVerificationError as exc:
             return _invalid_signature_response(exc)
 
-        run_id = str(payload.run_id or "").strip()
         try:
-            result_payload = submit_clarification(
-                run_id=run_id,
-                answers=payload.to_answers_payload(),
-                audit_context=payload.build_audit_context(),
+            return await submit_clarification(
+                request=request,
+                payload=payload,
             )
         except FileNotFoundError as exc:
             raise HTTPException(
@@ -230,29 +228,12 @@ def create_feishu_router(
         except ValueError as exc:
             raise HTTPException(
                 status_code=409,
-                detail={"code": "clarification_unavailable", "message": str(exc), "run_id": run_id},
+                detail={"code": "clarification_unavailable", "message": str(exc), "run_id": payload.run_id},
             ) from exc
         except TypeError as exc:
             raise HTTPException(
                 status_code=422,
-                detail={"code": "invalid_clarification_payload", "message": str(exc), "run_id": run_id},
+                detail={"code": "invalid_clarification_payload", "message": str(exc), "run_id": payload.run_id},
             ) from exc
-
-        clarification = result_payload.get("clarification", {}) if isinstance(result_payload, dict) else {}
-        has_pending_questions = bool(
-            isinstance(clarification, dict)
-            and clarification.get("triggered")
-            and clarification.get("status") == "pending"
-        )
-        return {
-            "run_id": run_id,
-            "clarification_status": str(clarification.get("status", "") or "not_needed"),
-            "has_pending_questions": has_pending_questions,
-            "clarification": clarification,
-            "result_page": {
-                "path": f"/run/{run_id}",
-                "url": f"/run/{run_id}",
-            },
-        }
 
     return router

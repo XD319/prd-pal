@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -143,7 +143,7 @@ async def _enqueue_review_run(
     mode: str | None = None,
     llm_options: dict[str, Any] | None = None,
     audit_context: dict[str, Any] | None = None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     run_id = make_run_id()
     run_dir = OUTPUTS_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -177,7 +177,10 @@ async def _enqueue_review_run(
     )
     job.task = task
     await _job_registry.register(job)
-    return {"run_id": run_id}
+    payload: dict[str, Any] = {"run_id": run_id}
+    if _is_feishu_audit_context(audit_context):
+        payload["result_page"] = _build_result_page_payload(run_id, audit_context=audit_context, run_dir=run_dir)
+    return payload
 
 
 def _submit_review_clarification_internal(
@@ -197,6 +200,22 @@ def _submit_review_clarification_internal(
         outputs_root=OUTPUTS_ROOT,
         audit_context=audit_context,
     )
+
+
+def _merge_audit_context_with_request(
+    audit_context: dict[str, Any] | None,
+    request_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    base = dict(audit_context) if isinstance(audit_context, dict) else {}
+    merged_client_metadata = _merge_result_page_context(
+        request_context,
+        resolve_audit_client_metadata(audit_context),
+    )
+    if merged_client_metadata:
+        base["client_metadata"] = merged_client_metadata
+    if not str(base.get("actor") or "").strip():
+        base["actor"] = str(merged_client_metadata.get("open_id") or "feishu").strip() or "feishu"
+    return base
 
 
 def _entry_context_path(run_dir: Path) -> Path:
@@ -226,6 +245,7 @@ def _build_run_entry_context(audit_context: dict[str, Any] | None) -> dict[str, 
         "submitter_open_id": submitter_open_id,
         "tenant_key": tenant_key,
         "trigger_source": str(client_metadata.get("trigger_source") or "feishu").strip() or "feishu",
+        "result_page_context": _extract_result_page_context(client_metadata),
         "submitted_by": actor,
         "tool_name": str(audit_context.get("tool_name") or "").strip(),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -268,6 +288,78 @@ def _extract_feishu_context_from_url(raw_url: str | None) -> dict[str, str]:
     return resolved
 
 
+def _extract_result_page_context(context: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(context, dict):
+        return {}
+
+    preserved: dict[str, str] = {}
+    for key, value in context.items():
+        normalized_key = str(key or "").strip()
+        if not normalized_key:
+            continue
+        if normalized_key.startswith("_"):
+            continue
+        if normalized_key in {"open_id", "tenant_key"} or normalized_key.endswith("_token"):
+            scalar = str(value or "").strip()
+            if scalar:
+                preserved[normalized_key] = scalar
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            scalar = str(value).strip()
+            if scalar:
+                preserved[normalized_key] = scalar
+    return preserved
+
+
+def _merge_result_page_context(*contexts: dict[str, Any] | None) -> dict[str, str]:
+    merged: dict[str, str] = {}
+    for context in contexts:
+        extracted = _extract_result_page_context(context)
+        for key, value in extracted.items():
+            if value:
+                merged[key] = value
+    return merged
+
+
+def _build_result_page_payload(
+    run_id: str,
+    *,
+    audit_context: dict[str, Any] | None = None,
+    request_context: dict[str, Any] | None = None,
+    run_dir: Path | None = None,
+) -> dict[str, str]:
+    run_id = str(run_id or "").strip()
+    base_path = f"/run/{run_id}"
+
+    client_metadata = resolve_audit_client_metadata(audit_context)
+    entry_context = _read_run_entry_context(run_dir) if run_dir is not None else {}
+    entry_result_context = entry_context.get("result_page_context")
+    if not isinstance(entry_result_context, dict):
+        entry_result_context = {}
+
+    is_feishu_entry = (
+        str(entry_context.get("source_origin") or "").strip().lower() == "feishu"
+        or str(client_metadata.get("trigger_source") or "").strip().lower() == "feishu"
+        or str((request_context or {}).get("trigger_source") or "").strip().lower() == "feishu"
+    )
+    if not is_feishu_entry:
+        return {"path": base_path, "url": base_path}
+
+    query_params = _merge_result_page_context(entry_result_context, client_metadata, request_context)
+    query_params["embed"] = "feishu"
+
+    open_id = str(query_params.get("open_id") or "").strip()
+    tenant_key = str(query_params.get("tenant_key") or "").strip()
+    if not open_id:
+        query_params.pop("open_id", None)
+    if not tenant_key:
+        query_params.pop("tenant_key", None)
+
+    query_string = urlencode(query_params)
+    url = f"{base_path}?{query_string}" if query_string else base_path
+    return {"path": url, "url": url}
+
+
 def _resolve_request_feishu_context(request: Request | None) -> dict[str, str]:
     if request is None:
         return {}
@@ -286,6 +378,12 @@ def _resolve_request_feishu_context(request: Request | None) -> dict[str, str]:
     referer_context = _extract_feishu_context_from_url(request.headers.get("referer"))
     for key, value in referer_context.items():
         resolved.setdefault(key, value)
+    if "embed" in request.query_params:
+        embed = str(request.query_params.get("embed", "") or "").strip()
+        if embed:
+            resolved.setdefault("embed", embed)
+    if resolved:
+        resolved.setdefault("trigger_source", "feishu")
     return resolved
 
 
@@ -394,7 +492,12 @@ def _workspace_version_payload(version: ArtifactVersion) -> dict[str, Any]:
     }
 
 
-def _list_recent_workspace_runs(workspace_id: str, *, limit: int = 5) -> list[dict[str, str]]:
+def _list_recent_workspace_runs(
+    workspace_id: str,
+    *,
+    limit: int = 5,
+    request_context: dict[str, Any] | None = None,
+) -> list[dict[str, str]]:
     if not WORKSPACE_DB_PATH.exists():
         return []
     query = f"""
@@ -415,7 +518,11 @@ def _list_recent_workspace_runs(workspace_id: str, *, limit: int = 5) -> list[di
             "artifact_version_id": str(row[1] or ""),
             "review_result_version_id": str(row[2] or ""),
             "updated_at": str(row[3] or ""),
-            "result_url": f"/run/{str(row[0] or '')}",
+            "result_url": _build_result_page_payload(
+                str(row[0] or ""),
+                request_context=request_context,
+                run_dir=OUTPUTS_ROOT / str(row[0] or "").strip(),
+            )["url"],
         }
         for row in rows
         if str(row[0] or "").strip()
@@ -447,7 +554,11 @@ async def _list_feishu_workspace_overviews(*, request: Request, limit: int = 20)
                 "status": str(workspace.status),
                 "current_run_id": workspace.current_run_id,
                 "current_version_ids": current_versions,
-                "recent_reviews": _list_recent_workspace_runs(workspace.workspace_id, limit=3),
+                "recent_reviews": _list_recent_workspace_runs(
+                    workspace.workspace_id,
+                    limit=3,
+                    request_context=context,
+                ),
             }
         )
         if len(overviews) >= max(1, int(limit)):
@@ -465,7 +576,11 @@ async def _get_feishu_workspace_overview(*, workspace_id: str, request: Request)
         "current_run_id": workspace.current_run_id,
         "current_version_ids": workspace.current_version_ids,
         "versions": [_workspace_version_payload(version) for version in workspace.versions],
-        "recent_reviews": _list_recent_workspace_runs(workspace.workspace_id, limit=5),
+        "recent_reviews": _list_recent_workspace_runs(
+            workspace.workspace_id,
+            limit=5,
+            request_context=_workspace_context_from_request(request),
+        ),
     }
 
 
@@ -519,7 +634,22 @@ async def _start_feishu_workspace_review(
         "workspace_id": workspace_id,
         "artifact_key": artifact_key,
         "version_id": version_id,
-        "result_page": {"path": f"/run/{run_id}", "url": f"/run/{run_id}"},
+        "result_page": _build_result_page_payload(
+            run_id,
+            request_context=context,
+            audit_context={
+                "source": "feishu",
+                "tool_name": "feishu.workspace.review",
+                "client_metadata": {
+                    **context,
+                    "workspace_id": workspace_id,
+                    "artifact_key": artifact_key,
+                    "version_id": version_id,
+                    "trigger_source": "feishu",
+                },
+            },
+            run_dir=OUTPUTS_ROOT / run_id,
+        ),
     }
 
 
@@ -537,10 +667,12 @@ async def _submit_feishu_workspace_clarification(
             workspace = await _load_workspace_or_404(workspace_id)
     if workspace is not None:
         _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    request_context = _workspace_context_from_request(request)
+    audit_context = _merge_audit_context_with_request(payload.build_audit_context(), request_context)
     result_payload = _submit_review_clarification_internal(
         run_id=run_id,
         answers=payload.to_answers_payload(),
-        audit_context=payload.build_audit_context(),
+        audit_context=audit_context,
     )
     clarification = result_payload.get("clarification", {}) if isinstance(result_payload, dict) else {}
     has_pending_questions = bool(
@@ -554,7 +686,41 @@ async def _submit_feishu_workspace_clarification(
         "clarification_status": str(clarification.get("status", "") or "not_needed"),
         "has_pending_questions": has_pending_questions,
         "clarification": clarification,
-        "result_page": {"path": f"/run/{run_id}", "url": f"/run/{run_id}"},
+        "result_page": _build_result_page_payload(
+            run_id,
+            request_context=request_context,
+            audit_context=audit_context,
+            run_dir=OUTPUTS_ROOT / run_id,
+        ),
+    }
+
+
+async def _submit_feishu_clarification(*, request: Request, payload: Any) -> dict[str, Any]:
+    run_id = str(payload.run_id or "").strip()
+    request_context = _resolve_request_feishu_context(request)
+    audit_context = _merge_audit_context_with_request(payload.build_audit_context(), request_context)
+    result_payload = _submit_review_clarification_internal(
+        run_id=run_id,
+        answers=payload.to_answers_payload(),
+        audit_context=audit_context,
+    )
+    clarification = result_payload.get("clarification", {}) if isinstance(result_payload, dict) else {}
+    has_pending_questions = bool(
+        isinstance(clarification, dict)
+        and clarification.get("triggered")
+        and clarification.get("status") == "pending"
+    )
+    return {
+        "run_id": run_id,
+        "clarification_status": str(clarification.get("status", "") or "not_needed"),
+        "has_pending_questions": has_pending_questions,
+        "clarification": clarification,
+        "result_page": _build_result_page_payload(
+            run_id,
+            request_context=request_context,
+            audit_context=audit_context,
+            run_dir=OUTPUTS_ROOT / run_id,
+        ),
     }
 
 
@@ -1080,7 +1246,7 @@ async def get_report(
 app.include_router(
     create_feishu_router(
         submit_review_run=_enqueue_review_run,
-        submit_clarification=_submit_review_clarification_internal,
+        submit_clarification=_submit_feishu_clarification,
         list_workspace_overviews=_list_feishu_workspace_overviews,
         get_workspace_overview=_get_feishu_workspace_overview,
         list_workspace_versions=_list_feishu_workspace_versions,

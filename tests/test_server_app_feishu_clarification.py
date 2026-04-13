@@ -125,7 +125,10 @@ def test_feishu_clarification_updates_and_returns_navigation(tmp_path, monkeypat
     assert payload["run_id"] == run_id
     assert payload["clarification_status"] == "answered"
     assert payload["has_pending_questions"] is False
-    assert payload["result_page"] == {"path": f"/run/{run_id}", "url": f"/run/{run_id}"}
+    assert payload["result_page"] == {
+        "path": f"/run/{run_id}?trigger_source=feishu&open_id=ou_test_user&tenant_key=tenant-test&embed=feishu",
+        "url": f"/run/{run_id}?trigger_source=feishu&open_id=ou_test_user&tenant_key=tenant-test&embed=feishu",
+    }
     assert payload["clarification"]["answers_applied"][0]["question_id"] == "clarify-123"
     audit_events = read_audit_events(tmp_path / run_id)
     clarification_event = next(event for event in audit_events if event["operation"] == "clarification_answer")
@@ -249,6 +252,125 @@ def test_feishu_clarification_accepts_repeat_answer_idempotently(tmp_path, monke
     assert payload["clarification_status"] == "answered"
     assert payload["has_pending_questions"] is False
     assert payload["clarification"]["answers_applied"][0]["answer"] == "Updated answer."
+
+
+def test_feishu_clarification_uses_request_context_when_payload_context_is_missing(tmp_path, monkeypatch):
+    run_id = "20260309T020211Z"
+    _write_run_payloads(
+        tmp_path,
+        run_id,
+        clarification={
+            "triggered": True,
+            "status": "pending",
+            "questions": [
+                {
+                    "id": "clarify-ctx",
+                    "question": "Which metric matters most?",
+                    "reviewer": "product",
+                    "ambiguity_type": "unanswerable",
+                    "finding_ids": ["finding-ctx-1"],
+                }
+            ],
+            "answers_applied": [],
+            "findings_updated": [],
+        },
+        findings=[
+            {
+                "finding_id": "finding-ctx-1",
+                "title": "Missing target metric",
+                "detail": "Metric is missing.",
+                "description": "Metric is missing.",
+                "severity": "high",
+                "category": "scope",
+                "source_reviewer": "product",
+                "reviewers": ["product"],
+                "ambiguity_type": "unanswerable",
+                "clarification_applied": False,
+                "original_severity": "",
+                "user_clarification": "",
+            }
+        ],
+        reviewer_summaries=[],
+    )
+    (tmp_path / run_id / "entry_context.json").write_text(
+        json.dumps(
+            {
+                "source_origin": "feishu",
+                "entry_mode": "plugin",
+                "submitter_open_id": "ou_request_user",
+                "tenant_key": "tenant-request",
+                "trigger_source": "feishu",
+                "result_page_context": {
+                    "trigger_source": "feishu",
+                    "open_id": "ou_request_user",
+                    "tenant_key": "tenant-request",
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_DISABLED", "true")
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    client = _build_client()
+
+    response = client.post(
+        f"/api/feishu/clarification?open_id=ou_request_user&tenant_key=tenant-request",
+        json={
+            "run_id": run_id,
+            "question_id": "clarify-ctx",
+            "answer": "Use weekly retained recruiters.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result_page"]["url"] == (
+        f"/run/{run_id}?trigger_source=feishu&open_id=ou_request_user&tenant_key=tenant-request&embed=feishu"
+    )
+
+
+def test_feishu_clarification_result_page_degrades_when_open_id_is_missing(tmp_path, monkeypatch):
+    run_id = "20260309T020212Z"
+    _write_run_payloads(
+        tmp_path,
+        run_id,
+        clarification={
+            "triggered": True,
+            "status": "answered",
+            "questions": [],
+            "answers_applied": [],
+            "findings_updated": [],
+        },
+        findings=[],
+        reviewer_summaries=[],
+    )
+    (tmp_path / run_id / "entry_context.json").write_text(
+        json.dumps(
+            {
+                "source_origin": "feishu",
+                "entry_mode": "plugin",
+                "submitter_open_id": "",
+                "tenant_key": "tenant-only",
+                "trigger_source": "feishu",
+                "result_page_context": {
+                    "trigger_source": "feishu",
+                    "tenant_key": "tenant-only",
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = app_module._build_result_page_payload(run_id, run_dir=tmp_path / run_id)
+    assert payload == {
+        "path": f"/run/{run_id}?trigger_source=feishu&tenant_key=tenant-only&embed=feishu",
+        "url": f"/run/{run_id}?trigger_source=feishu&tenant_key=tenant-only&embed=feishu",
+    }
 
 
 def test_feishu_clarification_rejects_invalid_payload(monkeypatch):
