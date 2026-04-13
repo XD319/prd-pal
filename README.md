@@ -1,174 +1,224 @@
 # prd-pal
 
-prd-pal is a multi-agent requirement review engine that turns requirement sources into stable review artifacts.
+[中文](./README.md) | [English](./README.en.md)
 
-## System Position
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react&logoColor=0A0A0A)
+![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?logo=docker&logoColor=white)
+![Feishu](https://img.shields.io/badge/Feishu-Integrated-3370FF)
+![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)
 
-The repository should be evaluated against this review-engine contract:
+`prd-pal` 是一个面向 PRD/需求文档的评审服务。它可以把本地文件、纯文本或 Feishu/Notion 文档转成结构化评审结果，包括 findings、risks、open questions 和可下载报告。
 
-`source input -> review mode gating -> normalizer -> parallel reviewers -> aggregator -> review artifacts`
+正式发布前，推荐把它当作一套“先本地跑通，再接入飞书”的评审服务来使用。
 
-That review-result-first flow is the main architecture and the primary adoption path.
+## 你会得到什么
 
-## User Flow
+- Web 提审页与结果页
+- FastAPI 服务接口
+- CLI 与 MCP 入口
+- Feishu 提交、澄清回写、H5 结果页接入能力
 
-```mermaid
-flowchart LR
-    A["User provides PRD<br/>text / file / source"] --> B["Agent triggers Skill or MCP"]
-    B --> C{"PRD input type"}
+## 30 秒看懂上手顺序
 
-    C -->|text/file| D["Enter Review Kernel"]
-    C -->|source| E["Connector fetches remote document<br/>Notion / Feishu / URL"]
-    E --> D
+1. 下载仓库
+2. 配置 `.env`
+3. 本地启动前后端
+4. 用 sample PRD 跑通一次
+5. 再配置 Feishu 回调与 H5 打开地址
 
-    D --> F["Generate review artifacts<br/>findings / risks / open questions / report"]
-    F --> G{"Clarification needed?"}
+## 环境要求
 
-    G -->|yes| H["User answers clarification questions"]
-    H --> I["Write clarification back<br/>refresh review result"]
-    I --> F
+- Python `3.11+`
+- Node.js `22+`
+- 一个可用的模型 API Key
+- Windows 本地开发可直接使用仓库内脚本；macOS/Linux 可用 `python` + `npm` 或 Docker
 
-    G -->|no| J{"Handoff needed?"}
-    F --> J
-    J -->|no| K["Return review result"]
-    J -->|yes| L["Generate optional handoff artifacts<br/>for Codex / Claude Code / OpenClaw"]
-```
+## 一、本地快速跑通
 
-## Recommended Boundary
-
-Treat prd-pal primarily as a review kernel that turns requirement content into stable review artifacts.
-
-- Core path: `prd_text`, `prd_path`, and local text files flowing into review results.
-- Optional integration path: connector-backed `source` intake, clarification writeback, and downstream agent handoff preparation.
-- Prefer `prd_text` or `prd_path` when the caller can already fetch and normalize source content.
-- Use connector-backed `source` mainly for weak callers that can identify a document location but cannot fetch its content themselves.
-
-## Package Status
-
-Package version `0.6.0` marks the current milestone baseline.
-
-The review flow is usable today, but this package should not yet be treated as a fully stabilized platform release.
-
-## Core Capabilities
-
-- Review-kernel intake through `prd_text`, `prd_path`, and local text files
-- Review mode gating to choose between `single_review` and `parallel_review`
-- Requirement normalization into reviewer-specific views
-- Multi-role review across product, engineering, QA, and security perspectives
-- Aggregation of reviewer findings, risks, open questions, and conflicts
-- Review artifact generation for both human-readable and machine-readable outputs
-- CLI, FastAPI, and MCP entrypoints centered on producing review results
-- Clarification writeback for human-in-the-loop review refinement
-- Agent handoff preparation for Codex, Claude Code, and OpenClaw
-- Optional connector-backed source intake for Feishu, Notion, and public URLs
-
-## Supported Input Boundaries
-
-- `prd_text`, `prd_path`, and local `.md` / `.txt` files remain the primary ingestion path.
-- `URLConnector` supports public `http/https` text pages.
-- `FeishuConnector` supports authenticated `feishu://...` inputs and recognized Feishu/Lark document URLs for supported `wiki`, `docx`, and legacy `docs` sources.
-- `NotionConnector` supports authenticated `notion://page/...` inputs and recognized Notion page URLs, returning normalized Markdown content from the Notion API.
-- Configure Feishu access with `MARRDP_FEISHU_APP_ID`, `MARRDP_FEISHU_APP_SECRET`, and optional `MARRDP_FEISHU_OPEN_BASE_URL`.
-- Configure Notion access with `MARRDP_NOTION_TOKEN`, and optionally override `MARRDP_NOTION_API_BASE_URL` plus `MARRDP_NOTION_API_VERSION`.
-- Controlled Feishu fetch failures are surfaced explicitly as authentication, permission, not-found, or unsupported-document-type errors in the API and MCP layers.
-- Controlled Notion fetch failures are surfaced explicitly as authentication, permission, not-found, rate-limit, or network errors in the API and MCP layers.
-- Local-file and public-URL ingestion behavior is unchanged.
-
-When deciding whether to use connector-backed `source` intake:
-
-- Prefer caller-side fetch plus `prd_text` when the caller already has access to the source system.
-- Prefer project-side `source` intake when you need one-hop review from document identifiers, centralized auth, or persisted source metadata in review artifacts.
-
-## Source Support
-
-- Local files: supported
-- Public URLs: supported
-- Feishu/Lark: supported
-- Notion: supported
-
-## Repository Layout
-
-- `prd_pal/`: canonical Python implementation package for the prd-pal backend, CLI, MCP server, and review pipeline
-- `requirement_review_v1/`: backward-compatible import shim kept temporarily during the package migration
-- `review_runtime/`: shared runtime config and model provider utilities used by the main package
-- `frontend/`: Vite + React web client for run submission, result browsing, and comparisons
-- `docs/`: architecture notes, API docs, MCP docs, and implementation plans
-- `eval/`: evaluation and comparison scripts
-- `tests/`: automated test suite
-- `data/`: local knowledge and runtime data
-
-The public product name is `prd-pal`. The canonical Python package is `prd_pal`, while `requirement_review_v1` is retained as a temporary compatibility alias during the migration.
-
-## Installation
+### 1. 下载仓库
 
 ```bash
+git clone <your-repo-url>
+cd prd-pal
+```
+
+### 2. 配置环境变量
+
+复制示例文件：
+
+```bash
+copy .env.example .env
+```
+
+本地最小可用配置只需要：
+
+```dotenv
+OPENAI_API_KEY=your-key
+SMART_LLM=openai:gpt-5-nano
+FAST_LLM=openai:gpt-5-nano
+STRATEGIC_LLM=openai:gpt-5-nano
+```
+
+第一次跑通时，不需要先填 Feishu、Notion、鉴权和限流相关变量。
+
+### 3. 安装依赖
+
+后端：
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
 pip install -e .
 ```
 
-`requirements.txt` remains as a thin compatibility wrapper around `pyproject.toml`, so package metadata and dependencies only need to be maintained in one place.
+前端：
 
-## Quick Start
+```bash
+cd frontend
+npm install
+cd ..
+```
 
-Use Docker to build and start the backend plus the production frontend bundle:
+### 4. 启动服务
+
+Windows 推荐直接运行：
+
+```bash
+start-dev.cmd
+```
+
+或 PowerShell：
+
+```powershell
+.\start-dev.ps1
+```
+
+如果你更习惯手动启动：
+
+```bash
+python main.py
+cd frontend
+npm run dev
+```
+
+默认地址：
+
+- 前端: `http://127.0.0.1:5173`
+- 后端: `http://127.0.0.1:8000`
+- 健康检查: `http://127.0.0.1:8000/health`
+- 就绪检查: `http://127.0.0.1:8000/ready`
+
+### 5. 验证本地链路
+
+推荐按这个顺序验证：
+
+1. 打开首页 `http://127.0.0.1:5173`
+2. 点击 `Load sample`
+3. 提交一次评审
+4. 打开结果页确认能看到进度、总结和报告下载
+
+也可以直接走 CLI：
+
+```bash
+prd-pal review --input docs/sample_prd.md
+```
+
+或：
+
+```bash
+python -m prd_pal.main review --input docs/sample_prd.md
+```
+
+## 二、Docker 跑通
+
+如果你想先快速启动完整服务，可以直接用 Docker：
 
 ```bash
 docker-compose up --build
 ```
 
-## Feishu Plugin Deployment
+这会启动：
 
-Use the Feishu plugin entry layer when you want users to submit and follow up on review runs from inside Feishu, while still reusing the existing review engine.
+- 后端服务
+- 生产版前端静态资源
 
-### What To Configure In Feishu
-
-Create one Feishu app and prepare these capabilities:
-
-1. Enable bot or event subscription delivery to the backend.
-2. Configure the backend callback URL for Feishu events:
-   - `POST https://<your-domain>/api/feishu/events`
-3. Configure the plugin-side review submit target:
-   - `POST https://<your-domain>/api/feishu/submit`
-4. Configure the plugin-side clarification answer target:
-   - `POST https://<your-domain>/api/feishu/clarification`
-5. Configure the in-Feishu H5 result page URL:
-   - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
-
-### Required Environment Variables
-
-The following variables must be present before Feishu plugin traffic is enabled:
-
-- `MARRDP_FEISHU_APP_ID`
-- `MARRDP_FEISHU_APP_SECRET`
-- `MARRDP_FEISHU_SIGNATURE_DISABLED`
-- `MARRDP_FEISHU_WEBHOOK_SECRET` when signature verification is enabled
-
-Recommended production values:
-
-- `MARRDP_FEISHU_SIGNATURE_DISABLED=false`
-- `MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300`
-- `MARRDP_API_AUTH_DISABLED=false`
-- Set `MARRDP_API_KEY` and/or `MARRDP_API_BEARER_TOKEN` for non-Feishu API usage
-
-### Local Bring-Up
-
-1. Copy `.env.example` to `.env`.
-2. Fill in `OPENAI_API_KEY` and any Feishu credentials you plan to exercise.
-3. For local backend-only mocking, keep `MARRDP_FEISHU_SIGNATURE_DISABLED=true`.
-4. Start the stack:
-
-```bash
-docker-compose up --build
-```
-
-5. For frontend H5 development, start the Vite profile in a second terminal:
+如果你还需要 Vite 开发模式前端：
 
 ```bash
 docker-compose --profile dev up dev
 ```
 
-### Local Mock Flow
+## 三、飞书接入全流程
 
-Challenge handshake:
+建议先完成“本地快速跑通”，再接飞书。飞书接入依赖两部分：
+
+- Feishu OpenAPI 凭证，用于抓取飞书文档
+- Feishu 回调与 H5 地址，用于提交评审、回答澄清、打开结果页
+
+### 1. 准备 Feishu 应用
+
+至少准备这些配置：
+
+- `App ID`
+- `App Secret`
+- 事件订阅回调
+- 一个 webhook 签名密钥
+- 一个可在飞书内打开的 H5 页面地址
+
+### 2. 填写 Feishu 环境变量
+
+在 `.env` 中补齐：
+
+```dotenv
+MARRDP_FEISHU_APP_ID=your-app-id
+MARRDP_FEISHU_APP_SECRET=your-app-secret
+MARRDP_FEISHU_SIGNATURE_DISABLED=false
+MARRDP_FEISHU_WEBHOOK_SECRET=your-webhook-secret
+MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300
+```
+
+本地联调时可以先关闭签名校验：
+
+```dotenv
+MARRDP_FEISHU_SIGNATURE_DISABLED=true
+```
+
+### 3. 配置飞书回调地址
+
+把飞书应用中的地址指向你的服务：
+
+- 事件回调:
+  - `POST https://<your-domain>/api/feishu/events`
+- 提交评审:
+  - `POST https://<your-domain>/api/feishu/submit`
+- 回答澄清:
+  - `POST https://<your-domain>/api/feishu/clarification`
+
+### 4. 配置飞书内打开的页面
+
+推荐两类页面：
+
+- 轻量提交页:
+  - `https://<your-domain>/feishu`
+- 结果页:
+  - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+
+其中结果页会根据 `embed=feishu` 切换成更适合飞书 WebView 的布局，并基于 `open_id` 与 `tenant_key` 做访问校验。
+
+### 5. 本地 mock 联调
+
+先把签名校验关掉：
+
+```dotenv
+MARRDP_FEISHU_SIGNATURE_DISABLED=true
+```
+
+然后验证三个关键接口。
+
+事件挑战：
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/feishu/events" \
@@ -176,7 +226,7 @@ curl -X POST "http://127.0.0.1:8000/api/feishu/events" \
   -d "{\"type\":\"url_verification\",\"challenge\":\"challenge-token\"}"
 ```
 
-Submit a review:
+提交评审：
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/feishu/submit" \
@@ -184,7 +234,7 @@ curl -X POST "http://127.0.0.1:8000/api/feishu/submit" \
   -d "{\"source\":\"feishu://docx/doc-token\",\"mode\":\"quick\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
 ```
 
-Answer a clarification:
+回答澄清：
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/feishu/clarification" \
@@ -192,83 +242,54 @@ curl -X POST "http://127.0.0.1:8000/api/feishu/clarification" \
   -d "{\"run_id\":\"20260309T000000Z\",\"question_id\":\"clarify-1\",\"answer\":\"Use 30-second dashboard arrival as the success metric.\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
 ```
 
-### Production Rollout Steps
+### 6. 生产环境上线前检查
 
-1. Deploy the backend behind HTTPS. Feishu callbacks should not target plain HTTP.
-2. Mount `./outputs` or an equivalent persistent volume so `report.json`, `entry_context.json`, and `audit_log.jsonl` survive restarts.
-3. Set `MARRDP_FEISHU_SIGNATURE_DISABLED=false`.
-4. Set `MARRDP_FEISHU_WEBHOOK_SECRET` to the same secret configured in the Feishu app.
-5. Set `MARRDP_FEISHU_APP_ID` and `MARRDP_FEISHU_APP_SECRET`.
-6. Register the Feishu event callback URL and complete the challenge handshake.
-7. Update the Feishu plugin or card action configuration to call `/api/feishu/submit` and `/api/feishu/clarification`.
-8. Use the H5 result URL form shown above so Feishu can open the compact result page with `embed=feishu`.
-9. Validate one end-to-end run and confirm that `outputs/<run_id>/entry_context.json` and `outputs/<run_id>/audit_log.jsonl` were written.
+上线前至少确认这些项：
 
-## Usage
+1. 服务已部署在 HTTPS 下
+2. `outputs/` 已持久化
+3. `MARRDP_FEISHU_SIGNATURE_DISABLED=false`
+4. Feishu 应用里的 webhook secret 与 `MARRDP_FEISHU_WEBHOOK_SECRET` 一致
+5. `App ID` / `App Secret` 已正确配置
+6. 能完成一次 challenge 握手
+7. 能从飞书提交一次真实文档评审
+8. 能在飞书里打开结果页
+9. `outputs/<run_id>/entry_context.json` 与 `outputs/<run_id>/audit_log.jsonl` 已写出
+
+## 四、常用入口
+
+### Web
+
+- 首页:
+  - `http://127.0.0.1:5173/`
+- 飞书提交入口:
+  - `http://127.0.0.1:5173/feishu`
 
 ### CLI
 
-Run one review from a local file:
-
 ```bash
 prd-pal review --input docs/sample_prd.md
-```
-
-Legacy single-command usage remains available:
-
-```bash
-prd-pal --input docs/sample_prd.md
-```
-
-Prepare downstream agent handoff requests from an existing run:
-
-```bash
 prd-pal prepare-handoff --run-id 20260309T000000Z --agent all --json
+prd-pal report --run-id 20260309T000000Z --format md
 ```
-
-Preferred module entrypoint:
-
-```bash
-python -m prd_pal.main review --input docs/sample_prd.md
-```
-
-Compatibility entrypoints such as `python -m requirement_review_v1.main ...` are still supported.
-
-### Review Engine Entry Points
-
-- Use `review_requirement` when the consumer needs structured review output only.
-- `review_prd` remains available as a compatibility surface in the current MCP implementation, but the mainline contract is the review result.
-- Treat `answer_review_clarification` and `prepare_agent_handoff` as optional follow-up interfaces rather than part of the minimum viable review contract.
 
 ### FastAPI
 
-Start the API server:
-
-```bash
-python main.py
-```
-
-Core review endpoints:
-
 - `POST /api/review`
 - `GET /api/review/{run_id}`
-- `GET /api/report/{run_id}?format=md|json`
-
-Supporting governance endpoints:
-
-- `GET /api/templates`
-- `GET /api/templates/{template_type}`
-- `GET /api/audit`
+- `GET /api/review/{run_id}/result`
+- `GET /api/report/{run_id}?format=md|json|html|csv`
+- `POST /api/feishu/events`
+- `POST /api/feishu/submit`
+- `POST /api/feishu/clarification`
 
 ### MCP
-
-Run the MCP server in stdio mode:
 
 ```bash
 python -m prd_pal.mcp_server.server
 ```
 
-Core review tools:
+核心工具：
 
 - `ping`
 - `review_requirement`
@@ -277,65 +298,39 @@ Core review tools:
 - `answer_review_clarification`
 - `prepare_agent_handoff`
 
-Use `review_requirement` when you want the review engine contract: `findings`, `open_questions`, `risk_items`, `conflicts`, `report_path`, and `review_mode`.
+## 五、输出物
 
-Use `answer_review_clarification` when a human answers pending clarification questions for an existing run and you want the refreshed review result without inventing local state.
+每次运行默认写到 `outputs/<run_id>/`。
 
-Use `prepare_agent_handoff` when you want adapter-specific request payloads for `codex`, `claude_code`, or `openclaw`, either from an existing `run_id` or directly from fresh PRD input.
-
-The MCP server may also expose compatibility or governance-oriented tools, but the stable review-engine contract is centered on the tools above.
-
-## Outputs
-
-Each run writes artifacts under `outputs/<run_id>/`.
-
-Treat the following files as the stable review-engine outputs:
+稳定输出：
 
 - `report.md`
 - `report.json`
 - `run_trace.json`
 
-When the multi-reviewer path is used, the run may also include:
+并行评审路径下通常还会有：
 
 - `review_report.json`
 - `risk_items.json`
 - `open_questions.json`
 - `review_summary.md`
 
-The run directory may contain additional compatibility artifacts produced by internal modules. Those files are not part of the main review-engine contract described in this README.
+飞书来源运行还会带上：
 
-When a run starts from connector-backed `source` input, the normalized `source_metadata` is also persisted where supported, including `report.json`, `run_trace.json`, and `delivery_bundle.json`.
+- `entry_context.json`
+- `audit_log.jsonl`
 
-## Main Flow
+## 六、推荐阅读顺序
 
-The main flow is intentionally defined as:
+- [docs/quick-start.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/quick-start.md)
+- [docs/feishu-setup.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/feishu-setup.md)
+- [docs/v2-api.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/v2-api.md)
+- [docs/mcp.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/mcp.md)
+- [docs/deployment-guide.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/deployment-guide.md)
 
-1. Source input
-2. Review mode gating
-3. Normalizer
-4. Parallel reviewers
-5. Aggregator
-6. Review artifacts
-
-In current code, surrounding workflow nodes such as parser, planner, risk analysis, and reporting still exist. They support or enrich the review flow, but the top-level system definition remains anchored on review result production.
-
-## Review Boundaries
-
-- A successful mainline run means the repository produced review artifacts.
-- The review-engine contract does not require approval, downstream orchestration, or external executor control to complete.
-- Input handling outside local files, plain text, and public text URLs should be treated as an explicit integration boundary unless documented otherwise.
-- Connector-backed enterprise sources such as Feishu and Notion are best treated as optional adapters, not the required entry path for every caller.
-
-## Related Docs
-
-- `docs/mcp.md`: MCP usage, with the review tools first
-- `docs/deployment-guide.md`: local-vs-cloud rollout and container deployment guidance
-- `docs/eval-validation.md`: eval and smoke-check usage
-- `docs/sample_prd.md`: sample PRD input for local review runs
-
-## Validation
+## 七、验证
 
 ```bash
-python eval/run_eval.py
 pytest -q
+python eval/run_eval.py
 ```

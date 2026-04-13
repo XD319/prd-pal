@@ -10,6 +10,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from .doctor import render_doctor_report, run_doctor
 from .service.report_service import get_report_for_mcp
 from .service.review_service import prepare_agent_handoff_for_mcp_async, review_prd_text_async
 from .utils.logging import setup_logging
@@ -53,6 +54,17 @@ def _build_modern_parser() -> argparse.ArgumentParser:
         default="agent_assisted",
         help="Execution mode for prepared handoff tasks",
     )
+
+    doctor_parser = subparsers.add_parser("doctor", help="Validate local setup and optional runtime health")
+    doctor_parser.add_argument("--outputs-root", type=str, default="outputs", help="Outputs directory")
+    doctor_parser.add_argument("--backend-url", type=str, default="http://127.0.0.1:8000", help="Backend base URL")
+    doctor_parser.add_argument("--frontend-url", type=str, default="http://127.0.0.1:5173", help="Frontend base URL")
+    doctor_parser.add_argument(
+        "--skip-runtime",
+        action="store_true",
+        help="Skip HTTP checks for backend and frontend runtime endpoints",
+    )
+    doctor_parser.add_argument("--json", action="store_true", help="Emit JSON output")
 
     return parser
 
@@ -164,6 +176,20 @@ def _run_report_command(args: argparse.Namespace) -> int:
     return 1 if "error" in payload else 0
 
 
+def _run_doctor_command(args: argparse.Namespace) -> int:
+    payload = run_doctor(
+        outputs_root=str(getattr(args, "outputs_root", "outputs") or "outputs"),
+        backend_url=str(getattr(args, "backend_url", "http://127.0.0.1:8000") or "http://127.0.0.1:8000"),
+        frontend_url=str(getattr(args, "frontend_url", "http://127.0.0.1:5173") or "http://127.0.0.1:5173"),
+        check_runtime=not bool(getattr(args, "skip_runtime", False)),
+    )
+    if args.json:
+        _emit_json(payload)
+    else:
+        print(render_doctor_report(payload))
+    return 1 if payload.get("status") == "fail" else 0
+
+
 async def _run_prepare_handoff_command(args: argparse.Namespace) -> int:
     if not str(getattr(args, "run_id", "") or "").strip():
         _resolve_review_inputs(args)
@@ -203,6 +229,8 @@ def run_cli(argv: list[str] | None = None) -> int:
         args = _parse_args(argv)
         if args.command == "report":
             return _run_report_command(args)
+        if args.command == "doctor":
+            return _run_doctor_command(args)
         return asyncio.run(_run_async_command(args))
     except (FileNotFoundError, TypeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

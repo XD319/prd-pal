@@ -2,6 +2,11 @@
 
 This document describes the current FastAPI surface with review-first positioning.
 
+For installation and Feishu rollout steps, read these first:
+
+- [quick-start.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/quick-start.md)
+- [feishu-setup.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/feishu-setup.md)
+
 ## Positioning
 
 The HTTP API is centered on review result generation.
