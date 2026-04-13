@@ -59,6 +59,7 @@ from prd_pal.service.review_service import (
     ReviewResultNotReadyError,
     ReviewRunNotFoundError,
     answer_review_clarification,
+    answer_review_clarification_async,
     get_review_artifact_preview_payload,
     get_review_result_payload,
 )
@@ -553,7 +554,7 @@ async def submit_review_clarification(run_id: str, payload: ClarificationAnswerR
     _enforce_run_access(request, run_id)
     request_context = _resolve_request_feishu_context(request)
     try:
-        return answer_review_clarification(
+        return await answer_review_clarification_async(
             run_id=run_id,
             answers=[item.model_dump(mode="python") for item in payload.answers],
             outputs_root=OUTPUTS_ROOT,
@@ -563,6 +564,8 @@ async def submit_review_clarification(run_id: str, payload: ClarificationAnswerR
                 "actor": str(request_context.get("open_id") or "web").strip() or "web",
                 "client_metadata": request_context,
             },
+            patch=payload.patch,
+            patch_context=payload.patch_context,
         )
     except FileNotFoundError as exc:
         raise HTTPException(

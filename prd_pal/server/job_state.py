@@ -84,6 +84,8 @@ class ClarificationAnswerItem(BaseModel):
 
 class ClarificationAnswerRequest(BaseModel):
     answers: list[ClarificationAnswerItem]
+    patch: dict[str, Any] | None = None
+    patch_context: dict[str, Any] | None = None
 
 
 @dataclass

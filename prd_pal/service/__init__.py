@@ -1,6 +1,10 @@
 """Shared service APIs for prd_pal entrypoints."""
 
 from .artifact_service import ArtifactReviewSummary, review_artifact_version_async
+from .artifact_patch_service import (
+    apply_artifact_patch_async,
+    build_clarification_to_patch_prompt,
+)
 from .execution_service import (
     append_execution_event,
     get_execution_status_for_mcp,
@@ -13,6 +17,7 @@ from .execution_service import (
 from .review_service import (
     ReviewResultSummary,
     answer_review_clarification,
+    answer_review_clarification_async,
     answer_review_clarification_for_mcp,
     get_review_workspace_for_mcp,
     prepare_agent_handoff_for_mcp_async,
@@ -28,7 +33,10 @@ __all__ = [
     "ArtifactReviewSummary",
     "ReviewResultSummary",
     "answer_review_clarification",
+    "answer_review_clarification_async",
     "answer_review_clarification_for_mcp",
+    "apply_artifact_patch_async",
+    "build_clarification_to_patch_prompt",
     "get_execution_status_for_mcp",
     "get_review_workspace_for_mcp",
     "get_traceability_for_mcp",

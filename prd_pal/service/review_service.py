@@ -26,6 +26,10 @@ from prd_pal.task_bundle_generator import generate_task_bundle_v1_artifact
 from prd_pal.templates import get_adapter_prompt_template
 from prd_pal.monitoring import append_audit_event, retry_metadata_for_status
 from prd_pal.notifications import NotificationType, dispatch_notification
+from prd_pal.service.artifact_patch_service import (
+    apply_artifact_patch_async,
+    build_clarification_to_patch_prompt,
+)
 from prd_pal.packs import (
     ArtifactSplitter,
     DeliveryBundle,
@@ -43,6 +47,7 @@ from prd_pal.run_review import make_run_id, run_review
 from review_runtime.config.config import runtime_config_overrides
 from prd_pal.service.report_service import RUN_ID_PATTERN
 from prd_pal.server.sse import ProgressBroadcaster
+from prd_pal.workspace import ArtifactRepository
 from prd_pal.workspace import ReviewWorkspaceRepository
 from prd_pal.utils.logging import RunLogContext, get_logger
 
@@ -208,6 +213,11 @@ def _resolve_review_result_artifact_paths(
     return artifact_paths
 
 
+def _derive_artifact_patch(report_payload: dict[str, Any]) -> dict[str, Any]:
+    artifact_patch = report_payload.get("artifact_patch")
+    return dict(artifact_patch) if isinstance(artifact_patch, dict) else {}
+
+
 def get_review_result_payload(
     *,
     run_id: str,
@@ -245,6 +255,7 @@ def get_review_result_payload(
         "mode": mode,
         "gating": gating,
         "clarification": _derive_clarification(result) if isinstance(result, dict) else {},
+        "artifact_patch": _derive_artifact_patch(result) if isinstance(result, dict) else {},
         "reviewers_used": reviewers_used,
         "reviewers_skipped": reviewers_skipped,
         "result": result,
@@ -1779,6 +1790,61 @@ def _persist_parallel_review_refresh(run_dir: Path, report_payload: dict[str, An
     review_summary_md_path.write_text(_render_summary(parallel_review), encoding="utf-8")
 
 
+def _extract_clarification_patch_context(report_payload: dict[str, Any]) -> dict[str, Any]:
+    direct = report_payload.get("clarification_patch_context")
+    if isinstance(direct, dict):
+        return dict(direct)
+    parallel_review = _extract_parallel_review_payload(report_payload)
+    direct = parallel_review.get("clarification_patch_context")
+    return dict(direct) if isinstance(direct, dict) else {}
+
+
+async def _load_patch_prompt_context_async(
+    *,
+    patch_context: dict[str, Any],
+) -> tuple[str, int, list[dict[str, Any]]] | None:
+    artifact_version_id = str(patch_context.get("artifact_version_id", "") or "").strip()
+    workspace_db_path = str(patch_context.get("workspace_db_path", "") or "").strip()
+    if not artifact_version_id or not workspace_db_path:
+        return None
+
+    artifact_repository = ArtifactRepository(workspace_db_path)
+    initialize_result = await artifact_repository.initialize()
+    if not initialize_result.ok:
+        return None
+    version_result = await artifact_repository.get_version(artifact_version_id)
+    if not version_result.ok or version_result.value is None:
+        return None
+
+    content_path = Path(str(version_result.value.content_path or "").strip())
+    if not content_path.exists() or not content_path.is_file():
+        return None
+    try:
+        artifact_payload = json.loads(content_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(artifact_payload, dict):
+        return None
+
+    blocks = artifact_payload.get("blocks")
+    if not isinstance(blocks, list):
+        return None
+    return (
+        str(artifact_payload.get("artifact_id") or version_result.value.artifact_key),
+        int(artifact_payload.get("version") or version_result.value.version_number),
+        [dict(item) for item in blocks if isinstance(item, dict)],
+    )
+
+
+def _write_clarification_patch_payload(run_dir: Path, report_payload: dict[str, Any], artifact_patch: dict[str, Any]) -> None:
+    report_payload["artifact_patch"] = artifact_patch
+    if isinstance(report_payload.get("parallel_review_meta"), dict):
+        report_payload["parallel_review_meta"]["artifact_patch_status"] = artifact_patch.get("status", "")
+    if isinstance(report_payload.get("parallel-review_meta"), dict):
+        report_payload["parallel-review_meta"]["artifact_patch_status"] = artifact_patch.get("status", "")
+    _write_json_object(run_dir / "report.json", report_payload)
+
+
 def answer_review_clarification(
     *,
     run_id: str,
@@ -1841,6 +1907,90 @@ def answer_review_clarification(
     return get_review_result_payload(run_id=run_id, outputs_root=outputs_root)
 
 
+async def answer_review_clarification_async(
+    *,
+    run_id: str,
+    answers: list[dict[str, Any]],
+    outputs_root: str | Path = "outputs",
+    audit_context: dict[str, Any] | None = None,
+    patch: dict[str, Any] | None = None,
+    patch_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result_payload = answer_review_clarification(
+        run_id=run_id,
+        answers=answers,
+        outputs_root=outputs_root,
+        audit_context=audit_context,
+    )
+
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    report_path = run_dir / "report.json"
+    report_payload = _load_json_object(report_path)
+    resolved_patch_context = {
+        **_extract_clarification_patch_context(report_payload),
+        **(dict(patch_context) if isinstance(patch_context, dict) else {}),
+    }
+    if not resolved_patch_context:
+        return result_payload
+
+    artifact_patch_payload: dict[str, Any] = {
+        "status": "context_available",
+        "context": resolved_patch_context,
+    }
+    prompt_context = await _load_patch_prompt_context_async(patch_context=resolved_patch_context)
+    if prompt_context is not None:
+        artifact_id, base_version, blocks = prompt_context
+        questions = [
+            dict(item)
+            for item in _derive_clarification(report_payload).get("questions", [])
+            if isinstance(item, dict)
+        ]
+        question_lookup = {str(item.get("id", "")).strip(): item for item in questions}
+        normalized_answers = _normalize_clarification_answers(answers)
+        prompt_questions = []
+        for item in normalized_answers:
+            question = question_lookup.get(str(item.get("question_id", "")).strip(), {})
+            prompt_questions.append(
+                {
+                    "question_id": item["question_id"],
+                    "question": str(question.get("question", "")).strip(),
+                    "answer": item["answer"],
+                }
+            )
+        merged_question = "\n".join(
+            f"- {entry['question_id']}: {entry['question']}" for entry in prompt_questions if entry["question"]
+        )
+        merged_answer = "\n".join(
+            f"- {entry['question_id']}: {entry['answer']}" for entry in prompt_questions if entry["answer"]
+        )
+        artifact_patch_payload["prompt"] = build_clarification_to_patch_prompt(
+            artifact_id=artifact_id,
+            base_version=base_version,
+            blocks=blocks,
+            clarification_question=merged_question or "See clarification answers.",
+            clarification_answer=merged_answer or "No answer provided.",
+        )
+
+    if isinstance(patch, dict):
+        apply_options = {
+            "workspace_db_path": resolved_patch_context.get("workspace_db_path"),
+            "artifact_output_root": resolved_patch_context.get("artifact_output_root"),
+            "failure_mode": resolved_patch_context.get("failure_mode"),
+        }
+        apply_result = await apply_artifact_patch_async(
+            str(resolved_patch_context.get("artifact_version_id", "") or ""),
+            patch,
+            {key: value for key, value in apply_options.items() if value is not None},
+        )
+        artifact_patch_payload["status"] = str(apply_result.status)
+        artifact_patch_payload["apply_result"] = apply_result.model_dump(mode="json")
+
+    _write_clarification_patch_payload(run_dir, report_payload, artifact_patch_payload)
+    refreshed = get_review_result_payload(run_id=run_id, outputs_root=outputs_root)
+    refreshed["artifact_patch"] = artifact_patch_payload
+    return refreshed
+
+
 def answer_review_clarification_for_mcp(
     *,
     run_id: str,
@@ -1851,7 +2001,26 @@ def answer_review_clarification_for_mcp(
     if not isinstance(resolved_options, dict):
         raise TypeError("options must be an object")
     outputs_root = resolved_options.get("outputs_root", "outputs")
-    answer_review_clarification(run_id=run_id, answers=answers, outputs_root=outputs_root)
+    patch = resolved_options.get("patch")
+    patch_context = resolved_options.get("patch_context")
+    if patch is not None or patch_context is not None:
+        answer_result = asyncio.run(
+            answer_review_clarification_async(
+                run_id=run_id,
+                answers=answers,
+                outputs_root=outputs_root,
+                audit_context=resolved_options.get("audit_context"),
+                patch=patch if isinstance(patch, dict) else None,
+                patch_context=patch_context if isinstance(patch_context, dict) else None,
+            )
+        )
+    else:
+        answer_result = answer_review_clarification(
+            run_id=run_id,
+            answers=answers,
+            outputs_root=outputs_root,
+            audit_context=resolved_options.get("audit_context"),
+        )
     summary = ReviewResultSummary(
         run_id=run_id,
         report_md_path=str(Path(outputs_root) / run_id / "report.md"),
@@ -1861,7 +2030,10 @@ def answer_review_clarification_for_mcp(
         revision_round=0,
         status="completed",
     )
-    return _build_review_requirement_payload(summary)
+    payload = _build_review_requirement_payload(summary)
+    if isinstance(answer_result, dict) and isinstance(answer_result.get("artifact_patch"), dict):
+        payload["artifact_patch"] = dict(answer_result["artifact_patch"])
+    return payload
 
 
 def _derive_review_conflicts(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2037,12 +2209,14 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
         "reviewers_used": reviewers_used,
         "reviewers_skipped": reviewers_skipped,
         "clarification": _derive_clarification(report_payload),
+        "artifact_patch": _derive_artifact_patch(report_payload),
         "meta": {
             "review_mode": _derive_review_mode(report_payload),
             "gating": gating,
             "reviewers_used": reviewers_used,
             "reviewers_skipped": reviewers_skipped,
             "clarification": _derive_clarification(report_payload),
+            "artifact_patch": _derive_artifact_patch(report_payload),
             "tool_calls": _derive_review_tool_calls(report_payload),
             "reviewer_insights": _derive_reviewer_insights(report_payload),
             "memory_hits": memory_hits,
