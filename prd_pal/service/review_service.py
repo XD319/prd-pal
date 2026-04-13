@@ -30,6 +30,7 @@ from prd_pal.service.artifact_patch_service import (
     apply_artifact_patch_async,
     build_clarification_to_patch_prompt,
 )
+from prd_pal.service.selective_rerun_service import build_rerun_plan_async
 from prd_pal.packs import (
     ArtifactSplitter,
     DeliveryBundle,
@@ -2228,6 +2229,68 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
             **meta,
         },
     }
+
+
+def _build_cached_node_outputs(report_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "parsed_items": report_payload.get("parsed_items", []),
+        "plan": report_payload.get("plan", {}),
+        "tasks": report_payload.get("tasks", []),
+        "risks": report_payload.get("risks", []),
+        "evidence": report_payload.get("evidence", {}),
+        "implementation_plan": report_payload.get("implementation_plan", {}),
+        "test_plan": report_payload.get("test_plan", {}),
+        "codex_prompt_handoff": report_payload.get("codex_prompt_handoff", {}),
+        "claude_code_prompt_handoff": report_payload.get("claude_code_prompt_handoff", {}),
+        "review_results": report_payload.get("review_results", []),
+        "parallel_review": report_payload.get("parallel_review", {}),
+        "parallel_review_meta": report_payload.get("parallel_review_meta", report_payload.get("parallel-review_meta", {})),
+        "review_open_questions": report_payload.get("review_open_questions", []),
+        "review_risk_items": report_payload.get("review_risk_items", []),
+        "final_report": report_payload.get("final_report", ""),
+    }
+
+
+def _read_optional_text(path: str) -> str:
+    resolved = str(path or "").strip()
+    if not resolved:
+        return ""
+    candidate = Path(resolved)
+    if candidate.exists() and candidate.is_file():
+        return candidate.read_text(encoding="utf-8")
+    return ""
+
+
+async def _attach_selective_rerun_plan_if_requested(
+    payload: dict[str, Any],
+    *,
+    summary: ReviewResultSummary,
+    prd_text: str | None,
+    options: dict[str, Any] | None,
+) -> dict[str, Any]:
+    resolved_options = dict(options or {})
+    selective = resolved_options.get("selective_rerun")
+    if not isinstance(selective, dict):
+        return payload
+
+    report_payload = _load_json_object(Path(summary.report_json_path))
+    prd_v1 = str(selective.get("prd_v1") or "").strip() or _read_optional_text(summary.prd_v1_path)
+    prd_v2 = str(selective.get("prd_v2") or "").strip() or str(prd_text or "").strip()
+    if not prd_v1 or not prd_v2:
+        return payload
+
+    rerun_plan = await build_rerun_plan_async(
+        prd_v1=prd_v1,
+        prd_v2=prd_v2,
+        cached_node_outputs=_build_cached_node_outputs(report_payload),
+        baseline_snapshot=report_payload,
+    )
+    payload["artifact_diff"] = dict(rerun_plan.get("artifact_diff", {}))
+    payload["rerun_plan"] = rerun_plan
+    meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+    meta["rerun_plan"] = rerun_plan
+    payload["meta"] = meta
+    return payload
 async def _review_summary_for_mcp_async(
     *,
     prd_text: str | None,
@@ -2326,7 +2389,13 @@ async def review_requirement_for_mcp_async(
         options=options,
         invocation_meta=invocation_meta,
     )
-    return _build_review_requirement_payload(summary)
+    payload = _build_review_requirement_payload(summary)
+    return await _attach_selective_rerun_plan_if_requested(
+        payload,
+        summary=summary,
+        prd_text=prd_text,
+        options=options,
+    )
 
 
 async def prepare_agent_handoff_for_mcp_async(
