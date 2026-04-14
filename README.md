@@ -151,110 +151,20 @@ docker-compose up --build
 docker-compose --profile dev up dev
 ```
 
-## 三、飞书接入全流程
+## 三、飞书入口（管理员与用户）
 
-建议先完成“本地快速跑通”，再接飞书。飞书接入依赖两部分：
+飞书相关文档已按角色拆分，便于直接作为主入口使用：
 
-- Feishu OpenAPI 凭证，用于抓取飞书文档
-- Feishu 回调与 H5 地址，用于提交评审、回答澄清、打开结果页
+- 管理员 / 部署者（应用配置、域名与上线检查）：
+  - [docs/feishu-setup.md](./docs/feishu-setup.md)
+- 普通用户（在飞书里提交、查看结果、回答澄清）：
+  - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
 
-### 1. 准备 Feishu 应用
+如果你是首次接入，推荐顺序：
 
-至少准备这些配置：
-
-- `App ID`
-- `App Secret`
-- 事件订阅回调
-- 一个 webhook 签名密钥
-- 一个可在飞书内打开的 H5 页面地址
-
-### 2. 填写 Feishu 环境变量
-
-在 `.env` 中补齐：
-
-```dotenv
-MARRDP_FEISHU_APP_ID=your-app-id
-MARRDP_FEISHU_APP_SECRET=your-app-secret
-MARRDP_FEISHU_SIGNATURE_DISABLED=false
-MARRDP_FEISHU_WEBHOOK_SECRET=your-webhook-secret
-MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300
-```
-
-本地联调时可以先关闭签名校验：
-
-```dotenv
-MARRDP_FEISHU_SIGNATURE_DISABLED=true
-```
-
-### 3. 配置飞书回调地址
-
-把飞书应用中的地址指向你的服务：
-
-- 事件回调:
-  - `POST https://<your-domain>/api/feishu/events`
-- 提交评审:
-  - `POST https://<your-domain>/api/feishu/submit`
-- 回答澄清:
-  - `POST https://<your-domain>/api/feishu/clarification`
-
-### 4. 配置飞书内打开的页面
-
-推荐两类页面：
-
-- 轻量提交页:
-  - `https://<your-domain>/feishu`
-- 结果页:
-  - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
-
-其中结果页会根据 `embed=feishu` 切换成更适合飞书 WebView 的布局，并基于 `open_id` 与 `tenant_key` 做访问校验。
-
-### 5. 本地 mock 联调
-
-先把签名校验关掉：
-
-```dotenv
-MARRDP_FEISHU_SIGNATURE_DISABLED=true
-```
-
-然后验证三个关键接口。
-
-事件挑战：
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/feishu/events" \
-  -H "Content-Type: application/json" \
-  -d "{\"type\":\"url_verification\",\"challenge\":\"challenge-token\"}"
-```
-
-提交评审：
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/feishu/submit" \
-  -H "Content-Type: application/json" \
-  -d "{\"source\":\"feishu://docx/doc-token\",\"mode\":\"quick\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
-```
-
-回答澄清：
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/feishu/clarification" \
-  -H "Content-Type: application/json" \
-  -d "{\"run_id\":\"20260309T000000Z\",\"question_id\":\"clarify-1\",\"answer\":\"Use 30-second dashboard arrival as the success metric.\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
-```
-
-### 6. 生产环境上线前检查
-
-上线前至少确认这些项：
-
-1. 服务已部署在 HTTPS 下
-2. `outputs/` 已持久化
-3. `MARRDP_FEISHU_SIGNATURE_DISABLED=false`
-4. Feishu 应用里的 webhook secret 与 `MARRDP_FEISHU_WEBHOOK_SECRET` 一致
-5. `App ID` / `App Secret` 已正确配置
-6. 能完成一次 challenge 握手
-7. 能从飞书提交一次真实文档评审
-8. 能在飞书里打开结果页
-9. `outputs/<run_id>/entry_context.json` 与 `outputs/<run_id>/audit_log.jsonl` 已写出
+1. 先完成“本地快速跑通”
+2. 按 `docs/feishu-setup.md` 完成管理员最小配置清单
+3. 按 `docs/feishu-user-guide.md` 验证普通用户流程
 
 ## 四、常用入口
 
@@ -263,7 +173,7 @@ curl -X POST "http://127.0.0.1:8000/api/feishu/clarification" \
 - 首页:
   - `http://127.0.0.1:5173/`
 - 飞书提交入口:
-  - `http://127.0.0.1:5173/feishu`
+  - `https://<your-domain>/feishu`
 
 ### CLI
 
@@ -322,11 +232,12 @@ python -m prd_pal.mcp_server.server
 
 ## 六、推荐阅读顺序
 
-- [docs/quick-start.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/quick-start.md)
-- [docs/feishu-setup.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/feishu-setup.md)
-- [docs/v2-api.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/v2-api.md)
-- [docs/mcp.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/mcp.md)
-- [docs/deployment-guide.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/deployment-guide.md)
+- [docs/quick-start.md](./docs/quick-start.md)
+- [docs/feishu-setup.md](./docs/feishu-setup.md)
+- [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
+- [docs/v2-api.md](./docs/v2-api.md)
+- [docs/mcp.md](./docs/mcp.md)
+- [docs/deployment-guide.md](./docs/deployment-guide.md)
 
 ## 七、验证
 

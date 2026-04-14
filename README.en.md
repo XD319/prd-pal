@@ -139,39 +139,14 @@ To run the Vite frontend in dev mode:
 docker-compose --profile dev up dev
 ```
 
-## Feishu Setup Flow
+## Feishu Entry Docs
 
-After the local flow works, connect Feishu in this order:
+Feishu docs are split by audience so each reader can find the right actions quickly:
 
-1. Prepare a Feishu app
-2. Fill Feishu environment variables in `.env`
-3. Configure callback URLs
-4. Configure the embedded H5 result page URL
-5. Run local mock requests
-6. Validate one real end-to-end Feishu review
-
-Required Feishu environment variables:
-
-```dotenv
-MARRDP_FEISHU_APP_ID=your-app-id
-MARRDP_FEISHU_APP_SECRET=your-app-secret
-MARRDP_FEISHU_SIGNATURE_DISABLED=false
-MARRDP_FEISHU_WEBHOOK_SECRET=your-webhook-secret
-MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300
-```
-
-Recommended Feishu URLs:
-
-- Event callback:
-  - `POST https://<your-domain>/api/feishu/events`
-- Review submit:
-  - `POST https://<your-domain>/api/feishu/submit`
-- Clarification submit:
-  - `POST https://<your-domain>/api/feishu/clarification`
-- Lightweight Feishu entry page:
-  - `https://<your-domain>/feishu`
-- Embedded result page:
-  - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+- Admin / deployer setup checklist:
+  - [docs/feishu-setup.md](./docs/feishu-setup.md)
+- End-user usage flow:
+  - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
 
 ## Common Entry Points
 
@@ -180,7 +155,7 @@ Recommended Feishu URLs:
 - Home:
   - `http://127.0.0.1:5173/`
 - Feishu entry:
-  - `http://127.0.0.1:5173/feishu`
+  - `https://<your-domain>/feishu`
 
 ### CLI
 
@@ -239,11 +214,12 @@ Feishu-origin runs also persist:
 
 ## Recommended Reading
 
-- [docs/quick-start.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/quick-start.md)
-- [docs/feishu-setup.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/feishu-setup.md)
-- [docs/v2-api.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/v2-api.md)
-- [docs/mcp.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/mcp.md)
-- [docs/deployment-guide.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/deployment-guide.md)
+- [docs/quick-start.md](./docs/quick-start.md)
+- [docs/feishu-setup.md](./docs/feishu-setup.md)
+- [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
+- [docs/v2-api.md](./docs/v2-api.md)
+- [docs/mcp.md](./docs/mcp.md)
+- [docs/deployment-guide.md](./docs/deployment-guide.md)
 
 ## Validation
 

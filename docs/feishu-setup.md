@@ -1,32 +1,43 @@
-# Feishu Setup
+# Feishu 管理员接入指南
 
-这份文档覆盖“本地已跑通后，如何把用户在飞书里的提审、澄清和结果查看打通”。
+本文面向管理员与部署者，目标是把 `prd-pal` 接入飞书并稳定上线。  
+普通用户如何在飞书中使用，请看 [feishu-user-guide.md](./feishu-user-guide.md)。
 
-## 最终要打通的链路
+## 适用范围
 
-1. 用户在飞书里提交文档或 PRD 内容
-2. 后端接收飞书请求并创建 `run_id`
-3. 用户在飞书里打开 H5 结果页
-4. 如需澄清，用户在飞书里提交答案
-5. 后端刷新结果并保留审计记录
+- 你负责飞书应用配置或服务部署
+- 你需要让团队成员可在飞书里提交评审、查看结果、回答澄清
+- 你需要一份可复用的最小上线清单
 
-## 一、接入前提
+## 接入目标（管理员视角）
 
-先完成本地验证：
+完成接入后，应满足以下结果：
 
-- [quick-start.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/quick-start.md)
+1. 用户可在飞书中发起评审
+2. 用户可在飞书中打开结果页
+3. 用户可在飞书中回答澄清问题
+4. 系统可保留必要审计信息（来源身份与交互记录）
 
-再准备：
+## 管理员最小配置清单
 
-- 一套可公网访问的 HTTPS 域名
-- 一个 Feishu 应用
-- Feishu 文档访问能力
-- 飞书事件订阅
-- 飞书内可打开的 H5 页面
+这是可上线的最小必需配置，建议逐项打勾：
 
-## 二、必须配置的环境变量
+### A. 基础条件
 
-在 `.env` 中至少补齐：
+- [ ] 服务已部署到可公网访问的 HTTPS 域名
+- [ ] `outputs/` 已配置持久化存储
+- [ ] 已完成 [quick-start.md](./quick-start.md) 的本地链路验证
+
+### B. 服务端环境变量
+
+- [ ] 已设置 `MARRDP_FEISHU_APP_ID`
+- [ ] 已设置 `MARRDP_FEISHU_APP_SECRET`
+- [ ] 已设置 `MARRDP_FEISHU_WEBHOOK_SECRET`
+- [ ] 已设置 `MARRDP_FEISHU_SIGNATURE_DISABLED=false`
+- [ ] 已设置 `MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300`（或更严格值）
+- [ ] 生产环境已开启 API 鉴权（推荐）
+
+参考：
 
 ```dotenv
 MARRDP_FEISHU_APP_ID=your-app-id
@@ -34,151 +45,73 @@ MARRDP_FEISHU_APP_SECRET=your-app-secret
 MARRDP_FEISHU_SIGNATURE_DISABLED=false
 MARRDP_FEISHU_WEBHOOK_SECRET=your-webhook-secret
 MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300
-```
 
-建议生产环境同时打开 API 鉴权：
-
-```dotenv
 MARRDP_API_AUTH_DISABLED=false
-MARRDP_API_KEY=replace-with-a-secret
+MARRDP_API_KEY=replace-with-a-strong-secret
 ```
 
-本地 mock 联调时，可先关闭飞书签名校验：
+### C. 飞书应用回调与页面地址
+
+- [ ] 事件回调地址：`POST https://<your-domain>/api/feishu/events`
+- [ ] 评审提交地址：`POST https://<your-domain>/api/feishu/submit`
+- [ ] 澄清提交地址：`POST https://<your-domain>/api/feishu/clarification`
+- [ ] 飞书提交页地址：`https://<your-domain>/feishu`
+- [ ] 飞书结果页可正常打开：`https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+
+## 推荐接入流程（管理员）
+
+1. 完成部署并确认 HTTPS 可用
+2. 写入并生效飞书相关环境变量
+3. 在飞书应用后台配置回调地址与入口页面
+4. 完成一次事件订阅 challenge 校验
+5. 用真实飞书文档完成一次提交与结果查看
+6. 完成一次澄清回答并验证结果刷新
+
+## 验收标准（上线前）
+
+满足以下项即可视为“可用首发版本”：
+
+- `GET /health` 与 `GET /ready` 正常
+- challenge 校验成功
+- 至少一次真实飞书评审提交成功
+- 飞书内可打开结果页
+- 至少一次澄清回答成功
+- `outputs/<run_id>/report.json` 已生成
+- `outputs/<run_id>/entry_context.json` 已生成
+- `outputs/<run_id>/audit_log.jsonl` 已生成
+
+## 常见问题
+
+### 1) 事件订阅验证失败怎么办？
+
+- 先确认 `MARRDP_FEISHU_WEBHOOK_SECRET` 与飞书应用后台一致
+- 再确认回调地址是 HTTPS 且可被公网访问
+- 最后确认服务端时间同步正常，避免签名时间窗口误差
+
+### 2) 用户能提交但打不开结果页怎么办？
+
+- 检查结果页地址是否为 `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>` 结构
+- 检查是否误删 `embed=feishu` 参数（会影响飞书内布局）
+- 检查是否正确传递了 `open_id` 与 `tenant_key`
+
+### 3) 用户回答澄清后结果不刷新怎么办？
+
+- 确认澄清提交地址配置正确
+- 检查服务日志中是否有对应 `run_id` 的澄清记录
+- 检查 `outputs/<run_id>/audit_log.jsonl` 是否新增澄清事件
+
+### 4) 是否可以先关闭签名校验？
+
+仅允许在本地联调阶段临时设置：
 
 ```dotenv
 MARRDP_FEISHU_SIGNATURE_DISABLED=true
 ```
 
-## 三、飞书应用里要配置什么
+生产环境必须改回 `false`。
 
-至少配置这些地址：
+## 相关文档
 
-- 事件回调:
-  - `POST https://<your-domain>/api/feishu/events`
-- 提交评审:
-  - `POST https://<your-domain>/api/feishu/submit`
-- 回答澄清:
-  - `POST https://<your-domain>/api/feishu/clarification`
-
-推荐的 H5 页面：
-
-- 轻量提交页:
-  - `https://<your-domain>/feishu`
-- 结果页:
-  - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
-
-## 四、本地联调顺序
-
-### 1. 先启动服务
-
-```bash
-start-dev.cmd
-```
-
-或：
-
-```bash
-docker-compose up --build
-```
-
-### 2. 验证事件挑战
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/feishu/events" \
-  -H "Content-Type: application/json" \
-  -d "{\"type\":\"url_verification\",\"challenge\":\"challenge-token\"}"
-```
-
-预期响应：
-
-```json
-{
-  "challenge": "challenge-token"
-}
-```
-
-### 3. 验证飞书提交
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/feishu/submit" \
-  -H "Content-Type: application/json" \
-  -d "{\"source\":\"feishu://docx/doc-token\",\"mode\":\"quick\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
-```
-
-预期响应：
-
-```json
-{
-  "run_id": "20260309T000000Z"
-}
-```
-
-### 4. 打开结果页
-
-在浏览器或飞书 WebView 中打开：
-
-```text
-http://127.0.0.1:5173/run/<run_id>?embed=feishu&open_id=ou_mock_user&tenant_key=tenant_mock
-```
-
-预期结果：
-
-- 页面能正常打开
-- 只显示适合飞书 H5 的紧凑布局
-- 能看到当前 run 的进度和结果
-
-### 5. 验证澄清回写
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/feishu/clarification" \
-  -H "Content-Type: application/json" \
-  -d "{\"run_id\":\"20260309T000000Z\",\"question_id\":\"clarify-1\",\"answer\":\"Use successful dashboard arrival within 30 seconds.\",\"open_id\":\"ou_mock_user\",\"tenant_key\":\"tenant_mock\"}"
-```
-
-预期响应会包含：
-
-- `clarification_status`
-- `has_pending_questions`
-- `result_page`
-
-## 五、生产环境上线清单
-
-1. 域名已启用 HTTPS
-2. `outputs/` 已挂载持久化存储
-3. `MARRDP_FEISHU_SIGNATURE_DISABLED=false`
-4. Feishu webhook secret 与服务端环境变量一致
-5. Feishu 应用已配置正确的 callback URL
-6. 至少完成一次 challenge 握手
-7. 至少成功提交一次真实飞书文档评审
-8. 至少成功在飞书里打开一次结果页
-9. 至少成功完成一次澄清回写
-
-## 六、上线后怎么排障
-
-先看这些文件是否存在：
-
-- `outputs/<run_id>/report.json`
-- `outputs/<run_id>/entry_context.json`
-- `outputs/<run_id>/audit_log.jsonl`
-
-它们分别说明：
-
-- `report.json`: 评审结果是否已成功产出
-- `entry_context.json`: 飞书身份上下文是否已落盘
-- `audit_log.jsonl`: 提交和澄清是否已记录
-
-再看这些接口：
-
-- `GET /health`
-- `GET /ready`
-- `GET /api/review/{run_id}`
-- `GET /api/review/{run_id}/result?open_id=<open_id>&tenant_key=<tenant_key>`
-
-## 七、推荐给业务用户的使用方式
-
-如果是第一次上线，建议只开放这两种操作：
-
-- 在飞书里发起评审
-- 在飞书里打开结果页
-
-把更复杂的工作台、历史对比、工作空间版本流转留在后续阶段。这样更容易保证首发体验稳定。
+- 普通用户使用说明：[feishu-user-guide.md](./feishu-user-guide.md)
+- 本地启动说明：[quick-start.md](./quick-start.md)
+- 部署说明：[deployment-guide.md](./deployment-guide.md)
