@@ -85,20 +85,52 @@ def route_review_profile(request: CanonicalReviewRequest | Mapping[str, Any]) ->
     )
 
 
-def load_profile_pack(profile: str) -> dict[str, Any]:
+def load_profile_pack(profile: str, secondary_profiles: tuple[str, ...] | list[str] | None = None) -> dict[str, Any]:
     requested = str(profile or "").strip().lower() or DEFAULT_PROFILE
     selected = requested if requested in _SUPPORTED_PROFILES else DEFAULT_PROFILE
-    root = Path(__file__).with_name("profile_packs") / selected
-    checklist = _read_optional_text(root / "checklist.md")
-    rules = _read_optional_text(root / "rules.md")
+    root = Path(__file__).with_name("profile_packs")
+    selected_root = root / selected
+
+    cleaned_secondary = _normalize_secondary_profiles(selected, secondary_profiles)
+    profile_sequence = [DEFAULT_PROFILE]
+    if selected != DEFAULT_PROFILE:
+        profile_sequence.append(selected)
+    profile_sequence.extend(cleaned_secondary)
+
+    checklist_items: list[dict[str, str]] = []
+    rules_items: list[dict[str, str]] = []
+    checklist_seen: set[str] = set()
+    rules_seen: set[str] = set()
+    checklist_sources: list[dict[str, str]] = []
+    rules_sources: list[dict[str, str]] = []
+
+    for profile_name in profile_sequence:
+        profile_root = root / profile_name
+        source = _source_for_profile(profile_name, selected)
+        checklist_path = profile_root / "checklist.md"
+        rules_path = profile_root / "rules.md"
+        checklist_sources.append({"source": source, "profile": profile_name, "path": str(checklist_path)})
+        rules_sources.append({"source": source, "profile": profile_name, "path": str(rules_path)})
+        checklist_items.extend(
+            _extract_sourced_items(checklist_path, source=source, profile=profile_name, seen=checklist_seen)
+        )
+        rules_items.extend(_extract_sourced_items(rules_path, source=source, profile=profile_name, seen=rules_seen))
+
+    checklist = _render_sourced_items(checklist_items)
+    rules = _render_sourced_items(rules_items)
     return {
         "profile": selected,
         "requested_profile": requested,
-        "pack_path": str(root),
-        "checklist_path": str(root / "checklist.md"),
-        "rules_path": str(root / "rules.md"),
+        "secondary_profiles": cleaned_secondary,
+        "pack_path": str(selected_root),
+        "checklist_path": str(selected_root / "checklist.md"),
+        "rules_path": str(selected_root / "rules.md"),
         "checklist": checklist,
         "rules": rules,
+        "checklist_items": checklist_items,
+        "rules_items": rules_items,
+        "checklist_sources": checklist_sources,
+        "rules_sources": rules_sources,
     }
 
 
@@ -143,3 +175,61 @@ def _read_optional_text(path: Path) -> str:
         return path.read_text(encoding="utf-8").strip()
     except OSError:
         return ""
+
+
+def _normalize_secondary_profiles(selected: str, secondary_profiles: tuple[str, ...] | list[str] | None) -> list[str]:
+    if not secondary_profiles:
+        return []
+    accepted: list[str] = []
+    seen: set[str] = set()
+    for raw in secondary_profiles:
+        profile = str(raw or "").strip().lower()
+        if not profile or profile in seen or profile == selected or profile == DEFAULT_PROFILE:
+            continue
+        if profile not in _SUPPORTED_PROFILES:
+            continue
+        accepted.append(profile)
+        seen.add(profile)
+    return accepted
+
+
+def _source_for_profile(profile: str, selected: str) -> str:
+    if profile == DEFAULT_PROFILE:
+        return "base"
+    if profile == selected:
+        return "selected_profile"
+    return "secondary_profile"
+
+
+def _extract_sourced_items(path: Path, *, source: str, profile: str, seen: set[str]) -> list[dict[str, str]]:
+    content = _read_optional_text(path)
+    if not content:
+        return []
+    rows: list[dict[str, str]] = []
+    for line in content.splitlines():
+        item = _normalize_line_item(line)
+        if not item:
+            continue
+        dedupe_key = _canonical_item_key(item)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        rows.append({"text": item, "source": source, "profile": profile})
+    return rows
+
+
+def _normalize_line_item(line: str) -> str:
+    normalized = line.strip()
+    if not normalized:
+        return ""
+    normalized = re.sub(r"^[-*]\s*", "", normalized).strip()
+    return normalized
+
+
+def _canonical_item_key(item: str) -> str:
+    compact = re.sub(r"[^a-z0-9]+", " ", item.lower()).strip()
+    return _WORD_RE.sub(" ", compact)
+
+
+def _render_sourced_items(items: list[dict[str, str]]) -> str:
+    return "\n".join(f"- [{row['source']}] {row['text']}" for row in items)

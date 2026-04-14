@@ -58,6 +58,40 @@ class RetrievedMemory:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class RejectedMemoryCandidate:
+    memory_id: str
+    title: str
+    reason: str
+    score: float
+    threshold: float
+    memory_type: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "memory_id": self.memory_id,
+            "title": self.title,
+            "reason": self.reason,
+            "score": round(self.score, 4),
+            "threshold": round(self.threshold, 4),
+            "memory_type": self.memory_type,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryRetrievalDiagnostics:
+    selected: tuple[RetrievedMemory, ...]
+    rejected_candidates: tuple[RejectedMemoryCandidate, ...]
+    considered_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "considered_count": int(self.considered_count),
+            "selected": [item.to_dict() for item in self.selected],
+            "rejected_candidates": [item.to_dict() for item in self.rejected_candidates],
+        }
+
+
 def format_memory_block_for_reviewer(
     reviewer: str,
     memories: list[RetrievedMemory],
@@ -90,19 +124,58 @@ async def retrieve_memories_async(
     memory_mode: str,
     limit: int = 3,
 ) -> list[RetrievedMemory]:
+    diagnostics = await retrieve_memories_with_diagnostics_async(
+        memory_service=memory_service,
+        canonical_review_request=canonical_review_request,
+        normalized_requirement=normalized_requirement,
+        memory_mode=memory_mode,
+        limit=limit,
+    )
+    return list(diagnostics.selected)
+
+
+async def retrieve_memories_with_diagnostics_async(
+    *,
+    memory_service: MemoryService,
+    canonical_review_request: dict[str, Any] | None,
+    normalized_requirement: dict[str, Any],
+    memory_mode: str,
+    limit: int = 3,
+) -> MemoryRetrievalDiagnostics:
     normalized_mode = str(memory_mode or "off").strip().lower() or "off"
     if normalized_mode == "off":
-        return []
+        return MemoryRetrievalDiagnostics(selected=(), rejected_candidates=(), considered_count=0)
 
     request = dict(canonical_review_request or {})
     candidates = await _load_candidates(memory_service, request)
+    rejected: list[RejectedMemoryCandidate] = []
     scored: list[RetrievedMemory] = []
     for memory in candidates:
         if normalized_mode == "strict" and str(memory.memory_type) != "team_rule":
+            rejected.append(
+                RejectedMemoryCandidate(
+                    memory_id=memory.memory_id,
+                    title=memory.title,
+                    reason="strict_mode_only_allows_team_rule",
+                    score=0.0,
+                    threshold=0.7,
+                    memory_type=str(memory.memory_type),
+                )
+            )
             continue
         score, reasons = _score_memory(memory, request=request, normalized_requirement=normalized_requirement, memory_mode=normalized_mode)
         threshold = 0.7 if normalized_mode == "strict" else 0.66 if normalized_mode == "assist" else 0.6
         if score < threshold:
+            rejected.append(
+                RejectedMemoryCandidate(
+                    memory_id=memory.memory_id,
+                    title=memory.title,
+                    reason="score_below_threshold",
+                    score=score,
+                    threshold=threshold,
+                    memory_type=str(memory.memory_type),
+                )
+            )
             continue
         scored.append(
             RetrievedMemory(
@@ -134,7 +207,14 @@ async def retrieve_memories_async(
             item.title,
         ),
     )
-    return ranked[: max(0, int(limit))]
+    selected = tuple(ranked[: max(0, int(limit))])
+    selected_ids = {item.memory_id for item in selected}
+    trimmed_rejected = [item for item in rejected if item.memory_id not in selected_ids]
+    return MemoryRetrievalDiagnostics(
+        selected=selected,
+        rejected_candidates=tuple(trimmed_rejected[:20]),
+        considered_count=len(candidates),
+    )
 
 
 async def _load_candidates(memory_service: MemoryService, request: dict[str, Any]) -> list[MemoryRecord]:

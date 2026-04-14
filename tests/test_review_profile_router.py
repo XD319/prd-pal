@@ -34,8 +34,35 @@ def test_profile_router_fallbacks_to_default_when_ambiguous() -> None:
 
 def test_load_profile_pack_returns_profile_paths() -> None:
     pack = load_profile_pack("approval_workflow")
+    checklist_path = str(pack["checklist_path"]).replace("\\", "/")
+    rules_path = str(pack["rules_path"]).replace("\\", "/")
 
     assert pack["profile"] == "approval_workflow"
-    assert pack["checklist_path"].endswith("approval_workflow/checklist.md")
-    assert pack["rules_path"].endswith("approval_workflow/rules.md")
+    assert checklist_path.endswith("approval_workflow/checklist.md")
+    assert rules_path.endswith("approval_workflow/rules.md")
     assert "approval" in pack["checklist"].lower()
+    assert any(item["source"] == "base" for item in pack["checklist_items"])
+    assert any(item["source"] == "selected_profile" for item in pack["checklist_items"])
+
+
+def test_load_profile_pack_expands_selected_and_secondary_with_sources() -> None:
+    pack = load_profile_pack("data_sensitive", secondary_profiles=["approval_workflow"])
+
+    checklist_sources = {item["source"] for item in pack["checklist_items"]}
+    rules_sources = {item["source"] for item in pack["rules_items"]}
+
+    assert pack["secondary_profiles"] == ["approval_workflow"]
+    assert checklist_sources == {"base", "selected_profile", "secondary_profile"}
+    assert rules_sources == {"base", "selected_profile", "secondary_profile"}
+    assert any("scope are explicit" in item["text"].lower() and item["source"] == "base" for item in pack["checklist_items"])
+    assert any("encryption" in item["text"].lower() and item["source"] == "selected_profile" for item in pack["checklist_items"])
+    assert any("approval states" in item["text"].lower() and item["source"] == "secondary_profile" for item in pack["checklist_items"])
+
+
+def test_load_profile_pack_filters_irrelevant_secondary_profiles() -> None:
+    pack = load_profile_pack(
+        "data_sensitive",
+        secondary_profiles=["data_sensitive", "default", "unknown_profile", "approval_workflow", "approval_workflow"],
+    )
+
+    assert pack["secondary_profiles"] == ["approval_workflow"]

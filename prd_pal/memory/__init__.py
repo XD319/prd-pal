@@ -10,9 +10,12 @@ from .extraction import (
     process_review_memory_extraction_async,
 )
 from .retrieval import (
+    MemoryRetrievalDiagnostics,
+    RejectedMemoryCandidate,
     RetrievedMemory,
     format_memory_block_for_reviewer,
     retrieve_memories_async,
+    retrieve_memories_with_diagnostics_async,
 )
 from .models import (
     MemoryApplicability,
@@ -36,16 +39,19 @@ __all__ = [
     "MemoryExtractionOutcome",
     "MemoryQuery",
     "MemoryRecord",
+    "MemoryRetrievalDiagnostics",
     "MemoryRepository",
     "MemoryScope",
     "MemoryScopeLevel",
     "MemoryService",
     "MemoryServiceError",
     "MemoryType",
+    "RejectedMemoryCandidate",
     "RetrievedMemory",
     "extract_memory_candidates",
     "format_memory_block_for_reviewer",
     "gatekeep_memory_candidates",
     "process_review_memory_extraction_async",
     "retrieve_memories_async",
+    "retrieve_memories_with_diagnostics_async",
 ]

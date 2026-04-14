@@ -529,8 +529,10 @@ def _aggregate_risks(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]
 
 
 def _aggregate_open_questions(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
+    reviewer_memory_refs = _reviewer_memory_refs(results)
     merged: dict[str, dict[str, Any]] = {}
     for result in results:
+        refs = reviewer_memory_refs.get(str(result.reviewer or "").strip(), [])
         for question in result.open_questions:
             key = _normalize_topic_key(question)
             bucket = merged.setdefault(
@@ -538,10 +540,29 @@ def _aggregate_open_questions(results: tuple[ReviewerResult, ...]) -> list[dict[
                 {
                     "question": question,
                     "reviewers": [],
+                    "memory_refs": [],
                 },
             )
             bucket["reviewers"] = _merge_unique(bucket["reviewers"], [result.reviewer])
+            bucket["memory_refs"] = _merge_unique(bucket["memory_refs"], refs)
     return list(merged.values())
+
+
+def _reviewer_memory_refs(results: tuple[ReviewerResult, ...]) -> dict[str, list[str]]:
+    mapping: dict[str, list[str]] = {}
+    for result in results:
+        reviewer = str(result.reviewer or "").strip()
+        if not reviewer:
+            continue
+        refs: list[str] = []
+        for evidence in result.evidence:
+            if str(evidence.source or "").strip().lower() != "review_memory":
+                continue
+            ref = str(evidence.ref or "").strip()
+            if ref:
+                refs.append(ref)
+        mapping[reviewer] = _merge_unique(mapping.get(reviewer, []), refs)
+    return mapping
 
 
 def _detect_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:

@@ -51,8 +51,24 @@ def build_report_data(result: dict[str, Any], run_id: str) -> dict[str, Any]:
         "provider": provider,
         "project": "prd_pal",
     }
-    report_data.update(result)
     parallel_review_meta = result.get("parallel_review_meta") if isinstance(result.get("parallel_review_meta"), dict) else {}
+    if not parallel_review_meta:
+        parallel_review_meta = result.get("parallel-review_meta") if isinstance(result.get("parallel-review_meta"), dict) else {}
+    if parallel_review_meta:
+        memory_influence = parallel_review_meta.get("memory_influence") if isinstance(parallel_review_meta.get("memory_influence"), dict) else {}
+        report_data["observability"] = {
+            "selected_profile": str(parallel_review_meta.get("selected_profile", "") or ""),
+            "profile_routing_reason": str(parallel_review_meta.get("profile_routing_reason", "") or ""),
+            "memory_mode": str(parallel_review_meta.get("memory_mode", "off") or "off"),
+            "retrieved_memories": list(parallel_review_meta.get("retrieved_memory_cards", []) or []),
+            "rejected_memory_candidates": list(parallel_review_meta.get("rejected_memory_candidates", []) or []),
+            "memory_influence": {
+                "findings": list(memory_influence.get("findings", []) or []),
+                "clarification_questions": list(memory_influence.get("clarification_questions", []) or []),
+                "open_questions": list(memory_influence.get("open_questions", []) or []),
+            },
+        }
+    report_data.update(result)
     if parallel_review_meta:
         report_data["parallel-review_meta"] = parallel_review_meta
     return report_data

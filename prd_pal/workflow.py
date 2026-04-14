@@ -15,7 +15,7 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 
 from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent, risk_agent
-from .memory import MemoryService, retrieve_memories_async
+from .memory import MemoryService, retrieve_memories_with_diagnostics_async
 from .review import decide_review_mode, run_parallel_review_async
 from .state import ReviewState, plan_from_state
 from .review.memory_store import FileBackedMemoryStore, NoopMemoryStore
@@ -301,20 +301,24 @@ async def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
         try:
             memory_service = MemoryService.from_db_path(memory_retrieval_config.get("db_path"))
             await memory_service.initialize()
-            retrieved = await retrieve_memories_async(
+            retrieval = await retrieve_memories_with_diagnostics_async(
                 memory_service=memory_service,
                 canonical_review_request=dict(state.get("canonical_review_request", {}) or {}),
                 normalized_requirement=asdict(cache_result.requirement),
                 memory_mode=memory_mode,
             )
-            structured_memory_hits_objects = list(retrieved)
-            structured_memory_hits = [item.to_dict() for item in retrieved]
+            structured_memory_hits_objects = list(retrieval.selected)
+            structured_memory_hits = [item.to_dict() for item in retrieval.selected]
+            rejected_memory_candidates = [item.to_dict() for item in retrieval.rejected_candidates]
             memory_usage_notes = [str(item.get("usage_note", "") or "").strip() for item in structured_memory_hits if str(item.get("usage_note", "") or "").strip()]
         except Exception:
             structured_memory_hits = []
             structured_memory_hits_objects = []
+            rejected_memory_candidates = []
             memory_usage_notes = []
             memory_mode = "off"
+    else:
+        rejected_memory_candidates = []
     return {
         "normalized_requirement_obj": cache_result.requirement,
         "normalized_requirement": asdict(cache_result.requirement),
@@ -324,6 +328,7 @@ async def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
         "structured_memory_hits": structured_memory_hits,
         "structured_memory_hits_objects": structured_memory_hits_objects,
         "memory_mode": memory_mode,
+        "rejected_memory_candidates": rejected_memory_candidates,
         "memory_usage_notes": memory_usage_notes,
         "normalizer_cache_hit": cache_result.cache_hit,
         "rag_enabled": not isinstance(memory_store, NoopMemoryStore),
@@ -334,6 +339,9 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
     memory_hits = [dict(item) for item in context.get("memory_hits", []) or [] if isinstance(item, dict)]
     similar_reviews_referenced = [str(item) for item in context.get("similar_reviews_referenced", []) or [] if str(item).strip()]
     structured_memory_hits = [dict(item) for item in context.get("structured_memory_hits", []) or [] if isinstance(item, dict)]
+    rejected_memory_candidates = [
+        dict(item) for item in context.get("rejected_memory_candidates", []) or [] if isinstance(item, dict)
+    ]
     memory_usage_notes = [str(item) for item in context.get("memory_usage_notes", []) or [] if str(item).strip()]
     memory_mode = str(context.get("memory_mode", "off") or "off").strip().lower() or "off"
     update["normalized_requirement"] = dict(context.get("normalized_requirement", {}) or {})
@@ -341,11 +349,15 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
     update["similar_reviews_referenced"] = similar_reviews_referenced
     update["structured_memory_hits"] = structured_memory_hits
     update["memory_mode"] = memory_mode
+    update["rejected_memory_candidates"] = rejected_memory_candidates
+    retrieved_memory_cards = _memory_cards(structured_memory_hits)
     update["memory_usage_notes"] = memory_usage_notes
     update["memory_usage"] = {
         "memory_mode": memory_mode,
         "retrieved_count": len(structured_memory_hits),
         "retrieved_memory_ids": [str(item.get("memory_id", "") or "").strip() for item in structured_memory_hits if str(item.get("memory_id", "") or "").strip()],
+        "retrieved_memories": retrieved_memory_cards,
+        "rejected_candidates": rejected_memory_candidates,
         "usage_notes": memory_usage_notes,
     }
     update["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
@@ -357,7 +369,10 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
     meta["similar_reviews_referenced"] = similar_reviews_referenced
     meta["memory_mode"] = memory_mode
     meta["retrieved_memories"] = structured_memory_hits
+    meta["retrieved_memory_cards"] = retrieved_memory_cards
+    meta["rejected_memory_candidates"] = rejected_memory_candidates
     meta["memory_usage_notes"] = memory_usage_notes
+    meta["memory_influence"] = _build_memory_influence(update, structured_memory_hits)
     meta["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
     meta["rag_enabled"] = bool(context.get("rag_enabled", False))
     update["parallel_review_meta"] = meta
@@ -368,12 +383,125 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
         parallel_review["similar_reviews_referenced"] = similar_reviews_referenced
         parallel_review["memory_mode"] = memory_mode
         parallel_review["retrieved_memories"] = structured_memory_hits
+        parallel_review["rejected_memory_candidates"] = rejected_memory_candidates
         parallel_review["memory_usage_notes"] = memory_usage_notes
         parallel_review["memory_usage"] = dict(update["memory_usage"])
+        parallel_review["memory_influence"] = dict(meta.get("memory_influence", {}))
         parallel_review["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
         parallel_review["rag_enabled"] = bool(context.get("rag_enabled", False))
         update["parallel_review"] = parallel_review
+    trace = dict(update.get("trace", {}) or {})
+    if trace:
+        trace[_PARALLEL_REVIEW_META_KEY] = dict(meta)
+        update["trace"] = trace
     return update
+
+
+def _memory_cards(structured_memory_hits: list[dict[str, Any]]) -> list[dict[str, str]]:
+    cards: list[dict[str, str]] = []
+    for item in structured_memory_hits:
+        memory_id = str(item.get("memory_id", "") or "").strip()
+        title = str(item.get("title", "") or "").strip()
+        if not memory_id and not title:
+            continue
+        cards.append({"memory_id": memory_id, "title": title})
+    return cards
+
+
+def _build_memory_influence(update: ReviewState, structured_memory_hits: list[dict[str, Any]]) -> dict[str, Any]:
+    known_memory_ids = {
+        str(item.get("memory_id", "") or "").strip()
+        for item in structured_memory_hits
+        if str(item.get("memory_id", "") or "").strip()
+    }
+    findings = []
+    open_questions = []
+    clarification_questions = []
+    parallel_review = dict(update.get("parallel_review", {}) or {})
+    for item in parallel_review.get("findings", []) or []:
+        if not isinstance(item, dict):
+            continue
+        refs = _extract_memory_refs(item.get("evidence"), known_memory_ids)
+        if not refs:
+            continue
+        findings.append(
+            {
+                "finding_id": str(item.get("finding_id", "") or "").strip(),
+                "title": str(item.get("title", "") or "").strip(),
+                "memory_refs": refs,
+            }
+        )
+    refs_by_finding_id = {
+        str(item.get("finding_id", "") or "").strip(): list(item.get("memory_refs", []) or [])
+        for item in findings
+        if str(item.get("finding_id", "") or "").strip()
+    }
+    for item in parallel_review.get("open_questions", []) or []:
+        if not isinstance(item, dict):
+            continue
+        refs = [str(ref).strip() for ref in item.get("memory_refs", []) or [] if str(ref).strip()]
+        if not refs:
+            continue
+        open_questions.append(
+            {
+                "question": str(item.get("question", "") or "").strip(),
+                "memory_refs": refs,
+            }
+        )
+    clarification = parallel_review.get("clarification")
+    if isinstance(clarification, dict):
+        for item in clarification.get("questions", []) or []:
+            if not isinstance(item, dict):
+                continue
+            refs = [str(ref).strip() for ref in item.get("memory_refs", []) or [] if str(ref).strip()]
+            for finding_id in item.get("finding_ids", []) or []:
+                refs.extend(refs_by_finding_id.get(str(finding_id).strip(), []))
+            refs = _unique_strings(refs)
+            if not refs:
+                continue
+            clarification_questions.append(
+                {
+                    "id": str(item.get("id", "") or "").strip(),
+                    "question": str(item.get("question", "") or "").strip(),
+                    "memory_refs": refs,
+                }
+            )
+    return {
+        "findings": findings,
+        "open_questions": open_questions,
+        "clarification_questions": clarification_questions,
+    }
+
+
+def _extract_memory_refs(evidence: Any, known_memory_ids: set[str]) -> list[str]:
+    refs: list[str] = []
+    seen: set[str] = set()
+    entries = evidence if isinstance(evidence, list) else []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("source", "") or "").strip().lower() != "review_memory":
+            continue
+        ref = str(item.get("ref", "") or "").strip()
+        if not ref or ref in seen:
+            continue
+        if known_memory_ids and ref not in known_memory_ids:
+            continue
+        seen.add(ref)
+        refs.append(ref)
+    return refs
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    items: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        value = str(raw or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        items.append(value)
+    return items
 
 
 def _resolve_review_profile_context(state: ReviewState) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -387,6 +515,9 @@ def _attach_profile_meta(meta: dict[str, Any], state: ReviewState) -> dict[str, 
     if profile:
         meta["review_profile"] = profile
         meta["selected_profile"] = str(profile.get("selected_profile", "") or "")
+        meta["profile_routing_reason"] = str(profile.get("reason", "") or "")
+        meta["profile_routing_confidence"] = float(profile.get("confidence", 0.0) or 0.0)
+        meta["secondary_profiles"] = list(profile.get("secondary_profiles", []) or [])
     if pack:
         meta["review_profile_pack"] = {
             "profile": str(pack.get("profile", "") or ""),

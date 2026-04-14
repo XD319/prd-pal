@@ -185,6 +185,7 @@ class ReviewState(TypedDict, total=False):
     memory_retrieval_config: dict[str, Any]
     normalizer_cache_config: dict[str, Any]
     structured_memory_hits: list[dict[str, Any]]
+    rejected_memory_candidates: list[dict[str, Any]]
     memory_mode: str
     memory_usage_notes: list[str]
     memory_usage: dict[str, Any]
@@ -238,6 +239,7 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         memory_retrieval_config={},
         normalizer_cache_config={},
         structured_memory_hits=[],
+        rejected_memory_candidates=[],
         memory_mode="off",
         memory_usage_notes=[],
         memory_usage={},

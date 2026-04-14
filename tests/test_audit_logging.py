@@ -30,10 +30,13 @@ async def test_review_prd_writes_review_and_bundle_generation_audit_events(
         run_id: str | None = None,
         outputs_root: str | None = None,
         progress_hook=None,
+        **kwargs,
     ) -> dict[str, object]:
         assert requirement_doc == source_path.read_text(encoding="utf-8")
         assert str(outputs_root) == str(tmp_path)
         assert progress_hook is None or callable(progress_hook)
+        assert isinstance(kwargs.get("review_profile"), dict)
+        assert isinstance(kwargs.get("canonical_review_request"), dict)
 
         resolved_run_id = run_id or fixed_run_id
         run_dir = tmp_path / resolved_run_id
@@ -68,6 +71,16 @@ async def test_review_prd_writes_review_and_bundle_generation_audit_events(
     assert review_event["client_metadata"]["session_id"] == "sess-1"
     assert review_event["details"]["tool_name"] == "review_prd"
     assert review_event["details"]["requirement_source"] == "source"
+    assert review_event["details"]["selected_profile"] == "data_sensitive"
+    assert "selected data_sensitive" in review_event["details"]["profile_routing_reason"].lower()
+    assert review_event["details"]["memory_mode"] == "off"
+    assert review_event["details"]["retrieved_memories"] == []
+    assert review_event["details"]["rejected_memory_candidates"] == []
+    assert review_event["details"]["memory_influence"] == {
+        "findings": [],
+        "clarification_questions": [],
+        "open_questions": [],
+    }
     assert review_event["retry"]["state"] == "not_needed"
 
     assert bundle_event["status"] == "ok"

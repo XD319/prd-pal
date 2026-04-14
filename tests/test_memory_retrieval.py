@@ -4,7 +4,12 @@ import pytest
 
 pytest.importorskip("aiosqlite")
 
-from prd_pal.memory import MemoryRepository, MemoryService, retrieve_memories_async
+from prd_pal.memory import (
+    MemoryRepository,
+    MemoryService,
+    retrieve_memories_async,
+    retrieve_memories_with_diagnostics_async,
+)
 from prd_pal.workflow import _apply_review_context
 
 
@@ -141,9 +146,59 @@ async def test_retrieve_memories_rejects_weakly_related_memory(tmp_path) -> None
     assert hits == []
 
 
+@pytest.mark.asyncio
+async def test_retrieve_memories_reports_rejected_candidates_with_reasons(tmp_path) -> None:
+    service = MemoryService(MemoryRepository(tmp_path / "review_memory.sqlite3"))
+    await service.initialize()
+    await service.save_memory(
+        memory_type="review_case",
+        title="Unrelated copy note",
+        summary="Copy-only tweak.",
+        content="Minor UI copy update with no overlap.",
+        scope={"level": "global", "requirement_type": ["product_requirement"]},
+        confidence=0.61,
+        reuse_score=0.44,
+        tags=["copy"],
+    )
+
+    diagnostics = await retrieve_memories_with_diagnostics_async(
+        memory_service=service,
+        canonical_review_request={"team_id": "team-platform", "project_id": "", "requirement_type": "product_requirement"},
+        normalized_requirement=_normalized_requirement_payload("Payment OAuth rollout", risk_hints=["oauth", "audit", "rollback"]),
+        memory_mode="assist",
+    )
+
+    assert diagnostics.selected == ()
+    assert diagnostics.considered_count == 1
+    assert diagnostics.rejected_candidates
+    assert diagnostics.rejected_candidates[0].reason == "score_below_threshold"
+
+
 def test_apply_review_context_records_memory_usage_fields() -> None:
     updated = _apply_review_context(
-        {"parallel_review": {}, "parallel_review_meta": {}},
+        {
+            "parallel_review": {
+                "findings": [
+                    {
+                        "finding_id": "finding-1",
+                        "title": "Security gate missing",
+                        "evidence": [{"source": "review_memory", "ref": "memory:1"}],
+                    }
+                ],
+                "open_questions": [{"question": "Who owns approval gate?", "memory_refs": ["memory:1"]}],
+                "clarification": {
+                    "questions": [
+                        {
+                            "id": "clarify-1",
+                            "question": "Who approves export release?",
+                            "finding_ids": ["finding-1"],
+                        }
+                    ]
+                },
+            },
+            "parallel_review_meta": {},
+            "trace": {},
+        },
         {
             "normalized_requirement": {"summary": "x"},
             "memory_hits": [],
@@ -157,6 +212,7 @@ def test_apply_review_context_records_memory_usage_fields() -> None:
                 }
             ],
             "memory_mode": "assist",
+            "rejected_memory_candidates": [{"memory_id": "memory:2", "title": "Legacy note", "reason": "score_below_threshold"}],
             "memory_usage_notes": ["Verify against current PRD."],
             "normalizer_cache_hit": False,
             "rag_enabled": False,
@@ -165,4 +221,9 @@ def test_apply_review_context_records_memory_usage_fields() -> None:
 
     assert updated["memory_mode"] == "assist"
     assert updated["memory_usage"]["retrieved_memory_ids"] == ["memory:1"]
+    assert updated["memory_usage"]["retrieved_memories"] == [{"memory_id": "memory:1", "title": "Platform rule"}]
+    assert updated["parallel_review_meta"]["rejected_memory_candidates"][0]["memory_id"] == "memory:2"
+    assert updated["parallel_review_meta"]["memory_influence"]["findings"][0]["finding_id"] == "finding-1"
+    assert updated["parallel_review_meta"]["memory_influence"]["clarification_questions"][0]["id"] == "clarify-1"
+    assert updated["parallel_review"]["memory_influence"]["open_questions"][0]["memory_refs"] == ["memory:1"]
     assert updated["parallel_review_meta"]["memory_usage_notes"] == ["Verify against current PRD."]

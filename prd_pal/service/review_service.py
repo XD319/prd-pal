@@ -350,6 +350,29 @@ def _derive_status(result: dict[str, Any]) -> str:
     return "completed"
 
 
+def _review_observability_details(review_result: dict[str, Any], review_profile: dict[str, Any]) -> dict[str, Any]:
+    meta = review_result.get("parallel_review_meta")
+    if not isinstance(meta, dict):
+        meta = review_result.get("parallel-review_meta")
+    if not isinstance(meta, dict):
+        meta = {}
+    memory_influence = meta.get("memory_influence") if isinstance(meta.get("memory_influence"), dict) else {}
+    return {
+        "selected_profile": str(review_profile.get("selected_profile", "") or ""),
+        "profile_routing_reason": str(review_profile.get("reason", "") or ""),
+        "profile_routing_confidence": _to_float(review_profile.get("confidence")),
+        "secondary_profiles": list(review_profile.get("secondary_profiles", []) or []),
+        "memory_mode": str(review_result.get("memory_mode", meta.get("memory_mode", "off")) or "off"),
+        "retrieved_memories": list(meta.get("retrieved_memory_cards", []) or []),
+        "rejected_memory_candidates": list(meta.get("rejected_memory_candidates", []) or []),
+        "memory_influence": {
+            "findings": list(memory_influence.get("findings", []) or []),
+            "clarification_questions": list(memory_influence.get("clarification_questions", []) or []),
+            "open_questions": list(memory_influence.get("open_questions", []) or []),
+        },
+    }
+
+
 def _combine_operation_status(*statuses: str) -> str:
     normalized = [str(status or "").strip().lower() for status in statuses if str(status or "").strip()]
     if not normalized:
@@ -1146,7 +1169,10 @@ async def review_prd_text_async(
     )
     routed_profile = route_review_profile(canonical_request)
     profile_payload = routed_profile.to_dict()
-    profile_pack = load_profile_pack(profile_payload["selected_profile"])
+    profile_pack = load_profile_pack(
+        profile_payload["selected_profile"],
+        secondary_profiles=profile_payload.get("secondary_profiles"),
+    )
     run_review_kwargs: dict[str, Any] = {
         "requirement_doc": requirement_doc,
         "run_id": resolved_run_id,
@@ -1154,7 +1180,7 @@ async def review_prd_text_async(
         "progress_hook": combined_progress_hook,
         "review_profile": profile_payload,
         "review_profile_pack": profile_pack,
-        "canonical_review_request": canonical_request.model_dump(mode="python"),
+        "canonical_review_request": dict(canonical_request),
         "audit_context": audit_context,
     }
     review_mode_override = overrides.get("review_mode_override")
@@ -1229,6 +1255,7 @@ async def review_prd_text_async(
         if isinstance(review_result, dict):
             review_metrics = review_result.get("metrics") if isinstance(review_result.get("metrics"), dict) else {}
             review_status = _derive_status(review_result)
+            observability = _review_observability_details(review_result, profile_payload)
             _append_audit_event_safe(
                 run_output.get("run_dir", outputs_root / str(run_output.get("run_id", "") or "")),
                 operation="review",
@@ -1243,6 +1270,14 @@ async def review_prd_text_async(
                     "has_source_metadata": bool(source_context),
                     "review_mode": str(review_result.get("review_mode", review_result.get("mode", "quick")) or "quick"),
                     "parallel_review_enabled": bool(review_result.get("parallel_review_meta") or review_result.get("parallel-review_meta")),
+                    "selected_profile": observability["selected_profile"],
+                    "profile_routing_reason": observability["profile_routing_reason"],
+                    "profile_routing_confidence": observability["profile_routing_confidence"],
+                    "secondary_profiles": observability["secondary_profiles"],
+                    "memory_mode": observability["memory_mode"],
+                    "retrieved_memories": observability["retrieved_memories"],
+                    "rejected_memory_candidates": observability["rejected_memory_candidates"],
+                    "memory_influence": observability["memory_influence"],
                 },
                 retry=retry_metadata_for_status(status=review_status, non_blocking=False),
             )
