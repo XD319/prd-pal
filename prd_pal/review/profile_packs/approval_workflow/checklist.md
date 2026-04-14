@@ -1,0 +1,2 @@
+- Validate approval states, transitions, and exception paths.
+- Validate approver accountability and traceability requirements.

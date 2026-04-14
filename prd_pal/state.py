@@ -178,6 +178,8 @@ class ReviewState(TypedDict, total=False):
     similar_reviews_referenced: list[str]
     normalizer_cache_hit: bool
     rag_enabled: bool
+    review_profile: dict[str, Any]
+    review_profile_pack: dict[str, Any]
     memory_config: dict[str, Any]
     normalizer_cache_config: dict[str, Any]
 
@@ -223,6 +225,8 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         similar_reviews_referenced=[],
         normalizer_cache_hit=False,
         rag_enabled=False,
+        review_profile={},
+        review_profile_pack={},
         memory_config={},
         normalizer_cache_config={},
     )

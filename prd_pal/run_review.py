@@ -147,6 +147,8 @@ async def run_review(
     review_memory_enabled: bool | None = None,
     review_memory_seeds_dir: str | Path | None = None,
     normalizer_cache_path: str | Path | None = None,
+    review_profile: dict[str, Any] | None = None,
+    review_profile_pack: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved_run_id = run_id or make_run_id()
     run_dir = os.path.join(str(outputs_root), resolved_run_id)
@@ -164,6 +166,8 @@ async def run_review(
         "run_dir": run_dir,
         "memory_config": memory_config,
         "normalizer_cache_config": normalizer_cache_config,
+        "review_profile": dict(review_profile or {}),
+        "review_profile_pack": dict(review_profile_pack or {}),
     }
     if isinstance(review_mode_override, str) and review_mode_override.strip():
         initial_state["review_mode_override"] = review_mode_override.strip()

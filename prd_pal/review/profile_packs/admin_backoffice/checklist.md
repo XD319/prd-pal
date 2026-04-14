@@ -1,0 +1,2 @@
+- Validate admin role/permission boundaries and audit visibility.
+- Validate operator workflows and fallback operations.

@@ -1,0 +1,2 @@
+- Require measurable success metrics and observation windows.
+- Flag missing experiment rollback criteria.

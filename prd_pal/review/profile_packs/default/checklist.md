@@ -1,0 +1,3 @@
+- Confirm requirement summary and scope are explicit.
+- Confirm acceptance criteria are testable and complete.
+- Confirm module/dependency impact is documented.

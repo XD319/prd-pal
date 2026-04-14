@@ -1,0 +1,2 @@
+- Prioritize least-privilege and operational safety checks.
+- Require explicit ownership for backoffice actions.

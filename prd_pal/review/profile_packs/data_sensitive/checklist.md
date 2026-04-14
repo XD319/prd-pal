@@ -1,0 +1,2 @@
+- Validate data classification, storage, and retention expectations.
+- Validate encryption, access controls, and audit requirements.

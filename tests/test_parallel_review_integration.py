@@ -197,3 +197,86 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
     trace_payload = json.loads((tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8"))
     assert report_payload["parallel-review_meta"]["selected_mode"] == "full"
     assert trace_payload["parallel-review_meta"]["selected_mode"] == "full"
+
+
+@pytest.mark.asyncio
+async def test_run_review_carries_review_profile_into_parallel_meta(monkeypatch, tmp_path):
+    async def fake_parser(state):
+        trace = dict(state.get("trace", {}))
+        trace["parser"] = _trace_span()
+        return {"parsed_items": [{"id": "REQ-001", "description": "Export data", "acceptance_criteria": ["Export works"]}], "trace": trace}
+
+    async def fake_planner(state):
+        trace = dict(state.get("trace", {}))
+        trace["planner"] = _trace_span()
+        return {"plan": {"tasks": [], "milestones": [], "dependencies": [], "estimation": {}}, "trace": trace}
+
+    async def fake_risk(state):
+        trace = dict(state.get("trace", {}))
+        trace["risk"] = _trace_span()
+        return {"evidence": {}, "risks": [], "trace": trace}
+
+    async def fake_delivery(_state):
+        return {
+            "implementation_plan": {"implementation_steps": [], "target_modules": [], "constraints": []},
+            "test_plan": {"test_scope": [], "edge_cases": [], "regression_focus": []},
+            "codex_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+            "claude_code_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+        }
+
+    async def fake_parallel_review(_prd_text, output_dir, reviewer_config=None, gating_decision=None):
+        return ParallelReviewResult(
+            normalized_requirement={"summary": "Parallel export review"},
+            reviewer_inputs={"product": "p"},
+            reviewer_results=({"reviewer": "product", "findings": [], "open_questions": [], "risk_items": [], "summary": "product", "status": "completed", "error_message": ""},),
+            aggregated={
+                "findings": [],
+                "risk_items": [],
+                "open_questions": [],
+                "conflicts": [],
+                "reviewer_summaries": [{"reviewer": "product", "summary": "product"}],
+                "reviewer_count": 1,
+                "meta": {"review_mode": "full", "reviewers_used": ["product"], "reviewers_skipped": [], "reviewers_completed": ["product"], "reviewers_failed": []},
+                "review_mode": "full",
+                "reviewers_used": ["product"],
+                "reviewers_skipped": [],
+                "gating": {"selected_mode": "full", "reasons": ["mode=full explicitly requested"], "skipped": False},
+                "summary": {"overall_risk": "low", "in_scope": ["Export data"], "out_of_scope": []},
+                "artifacts": {"review_result_json": str(output_dir) + "\\review_result.json"},
+            },
+        )
+
+    async def fake_reporter(state):
+        trace = dict(state.get("trace", {}))
+        trace["reporter"] = _trace_span()
+        return {"final_report": "# Requirement Review Report\n\nProfile meta.", "metrics": {}, "trace": trace}
+
+    monkeypatch.setattr("prd_pal.agents.parser_agent.run", fake_parser)
+    monkeypatch.setattr("prd_pal.agents.planner_agent.run", fake_planner)
+    monkeypatch.setattr("prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk)
+    monkeypatch.setattr("prd_pal.agents.delivery_planning_agent.run", fake_delivery)
+    monkeypatch.setattr("prd_pal.workflow.run_parallel_review_async", fake_parallel_review)
+    monkeypatch.setattr("prd_pal.agents.reporter_agent.run", fake_reporter)
+
+    run_output = await run_review(
+        "Complex export PRD",
+        outputs_root=tmp_path,
+        review_mode_override="parallel_review",
+        review_profile={
+            "selected_profile": "approval_workflow",
+            "confidence": 0.8,
+            "reason": "approval signals detected",
+            "secondary_profiles": ["data_sensitive"],
+        },
+        review_profile_pack={
+            "profile": "approval_workflow",
+            "pack_path": str(tmp_path / "profile_pack"),
+            "checklist_path": str(tmp_path / "profile_pack" / "checklist.md"),
+            "rules_path": str(tmp_path / "profile_pack" / "rules.md"),
+        },
+    )
+
+    meta = run_output["result"]["parallel-review_meta"]
+    assert meta["selected_profile"] == "approval_workflow"
+    assert meta["review_profile"]["confidence"] == 0.8
+    assert meta["review_profile_pack"]["profile"] == "approval_workflow"

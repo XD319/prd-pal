@@ -328,6 +328,27 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
         update["parallel_review"] = parallel_review
     return update
 
+
+def _resolve_review_profile_context(state: ReviewState) -> tuple[dict[str, Any], dict[str, Any]]:
+    profile = dict(state.get("review_profile", {}) or {})
+    pack = dict(state.get("review_profile_pack", {}) or {})
+    return profile, pack
+
+
+def _attach_profile_meta(meta: dict[str, Any], state: ReviewState) -> dict[str, Any]:
+    profile, pack = _resolve_review_profile_context(state)
+    if profile:
+        meta["review_profile"] = profile
+        meta["selected_profile"] = str(profile.get("selected_profile", "") or "")
+    if pack:
+        meta["review_profile_pack"] = {
+            "profile": str(pack.get("profile", "") or ""),
+            "pack_path": str(pack.get("pack_path", "") or ""),
+            "checklist_path": str(pack.get("checklist_path", "") or ""),
+            "rules_path": str(pack.get("rules_path", "") or ""),
+        }
+    return meta
+
 async def _reviewer_node(state: ReviewState) -> ReviewState:
     requested_mode = _resolve_requested_mode(state)
     review_context = _prepare_review_context(state)
@@ -405,6 +426,7 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
             }
         ],
     }
+    meta = _attach_profile_meta(meta, state)
     trace[_PARALLEL_REVIEW_META_KEY] = meta
     update["trace"] = trace
     update["mode"] = selected_mode
@@ -462,6 +484,7 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
             }
         ],
     }
+    meta = _attach_profile_meta(meta, state)
     trace[_PARALLEL_REVIEW_META_KEY] = meta
     return {
         "review_results": [],
@@ -571,7 +594,12 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "tool_calls": list(aggregated.get("tool_calls", [])),
         "reviewer_insights": list(aggregated.get("reviewer_summaries", [])),
     }
+    meta = _attach_profile_meta(meta, state)
     trace[_PARALLEL_REVIEW_META_KEY] = meta
+
+    aggregated["meta"] = _attach_profile_meta(dict(aggregated.get("meta", {}) or {}), state)
+    aggregated["review_profile"] = dict(state.get("review_profile", {}) or {})
+    aggregated["review_profile_pack"] = dict(state.get("review_profile_pack", {}) or {})
 
     return {
         "review_results": review_results,

@@ -15,6 +15,7 @@ from prd_pal.connectors import ConnectorRegistry, get_connector_error_payload
 from prd_pal.review.aggregator import _render_review_report, _render_summary
 from prd_pal.review.clarification_gate import apply_clarification_answers, build_clarification_payload
 from prd_pal.review.ingress_normalization import normalize_ingress_request
+from prd_pal.review.profile_router import load_profile_pack, route_review_profile
 from prd_pal.connectors.feishu import (
     FeishuAuthenticationError,
     FeishuDocumentNotFoundError,
@@ -1143,11 +1144,16 @@ async def review_prd_text_async(
         source=source,
         audit_context=audit_context,
     )
+    routed_profile = route_review_profile(canonical_request)
+    profile_payload = routed_profile.to_dict()
+    profile_pack = load_profile_pack(profile_payload["selected_profile"])
     run_review_kwargs: dict[str, Any] = {
         "requirement_doc": requirement_doc,
         "run_id": resolved_run_id,
         "outputs_root": outputs_root,
         "progress_hook": combined_progress_hook,
+        "review_profile": profile_payload,
+        "review_profile_pack": profile_pack,
     }
     review_mode_override = overrides.get("review_mode_override")
     if isinstance(review_mode_override, str) and review_mode_override.strip():
@@ -1201,9 +1207,13 @@ async def review_prd_text_async(
             if isinstance(result, dict):
                 result.update(source_context)
         run_output["canonical_review_request"] = canonical_request
+        run_output["review_profile"] = profile_payload
+        run_output["review_profile_pack"] = profile_pack
         review_result_for_meta = run_output.get("result")
         if isinstance(review_result_for_meta, dict):
             review_result_for_meta["canonical_review_request"] = canonical_request
+            review_result_for_meta["review_profile"] = profile_payload
+            review_result_for_meta["review_profile_pack"] = profile_pack
 
         review_result = run_output.get("result")
         if isinstance(review_result, dict):

@@ -1,0 +1,2 @@
+- Keep reviewer routing conservative; fallback to default on ambiguity.
+- Prefer broad coverage over profile-specific assumptions.

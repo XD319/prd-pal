@@ -1,0 +1,2 @@
+- Escalate missing security controls to high severity by default.
+- Require security acceptance checks before release.

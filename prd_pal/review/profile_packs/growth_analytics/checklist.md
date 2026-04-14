@@ -1,0 +1,2 @@
+- Validate metrics definitions, funnel stages, and attribution logic.
+- Validate experiment design and guardrail metrics.

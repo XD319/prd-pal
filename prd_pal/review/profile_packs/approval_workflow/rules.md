@@ -1,0 +1,2 @@
+- Keep release blocked until required approvals are explicit.
+- Treat ambiguous approval ownership as manual-review required.
