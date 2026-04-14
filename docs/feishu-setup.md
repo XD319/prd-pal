@@ -113,5 +113,6 @@ MARRDP_FEISHU_SIGNATURE_DISABLED=true
 ## 相关文档
 
 - 普通用户使用说明：[feishu-user-guide.md](./feishu-user-guide.md)
+- 飞书主入口落地方案：[feishu-main-entry-mvp.md](./feishu-main-entry-mvp.md)
 - 本地启动说明：[quick-start.md](./quick-start.md)
 - 部署说明：[deployment-guide.md](./deployment-guide.md)

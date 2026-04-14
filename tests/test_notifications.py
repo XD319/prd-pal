@@ -164,11 +164,60 @@ def test_feishu_renderer_builds_review_status_cards(
     assert payload["msg_type"] == "interactive"
     assert payload["card"]["header"]["template"] == expected_template
     assert expected_status in payload["card"]["header"]["title"]["content"]
-    button = payload["card"]["elements"][-1]["actions"][0]
-    assert button["url"] == "https://review.example.test/run/20260308T060711Z"
+    actions = payload["card"]["elements"][-1]["actions"]
+    assert actions[0]["text"]["content"] == "查看最新结果"
+    assert actions[0]["url"] == "https://review.example.test/run/20260308T060711Z"
+    assert actions[-1]["text"]["content"] == "重新提交"
+    assert actions[-1]["url"] == "https://review.example.test/feishu"
     fields = payload["card"]["elements"][0]["fields"]
     assert "`20260308T060711Z`" in fields[0]["text"]["content"]
     assert expected_status in fields[1]["text"]["content"]
+
+
+def test_feishu_renderer_includes_clarification_shortcut_for_clarification_required() -> None:
+    renderer = FeishuCardRenderer(
+        config=FeishuNotifierConfig(
+            detail_base_url="https://review.example.test",
+            dry_run=True,
+        )
+    )
+    event = build_notification_event(
+        notification_type=NotificationType.clarification_required,
+        title="Review needs clarification",
+        summary="Please provide additional input.",
+        run_id="20260308T060713Z",
+    )
+
+    payload = renderer.render(event)
+    actions = payload["card"]["elements"][-1]["actions"]
+    labels = [item["text"]["content"] for item in actions]
+    urls = [item["url"] for item in actions]
+
+    assert labels == ["查看最新结果", "继续澄清", "重新提交"]
+    assert urls[1].endswith("/run/20260308T060713Z#clarification")
+
+
+def test_feishu_renderer_includes_next_delivery_shortcut_for_completed() -> None:
+    renderer = FeishuCardRenderer(
+        config=FeishuNotifierConfig(
+            detail_base_url="https://review.example.test",
+            dry_run=True,
+        )
+    )
+    event = build_notification_event(
+        notification_type=NotificationType.review_completed,
+        title="Review completed",
+        summary="Ready for handoff.",
+        run_id="20260308T060714Z",
+    )
+
+    payload = renderer.render(event)
+    actions = payload["card"]["elements"][-1]["actions"]
+    labels = [item["text"]["content"] for item in actions]
+    urls = [item["url"] for item in actions]
+
+    assert labels == ["查看最新结果", "生成下一步交付", "重新提交"]
+    assert urls[1].endswith("/run/20260308T060714Z#next-delivery")
 
 
 def test_dispatch_notification_records_feishu_dry_run_delivery_metadata(tmp_path) -> None:

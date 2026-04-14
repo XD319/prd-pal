@@ -140,6 +140,15 @@ function FeishuEntryPage() {
     navigate(`/run/${runId}?embed=feishu`);
   }
 
+  function openRunSection(runId, sectionHash) {
+    if (!runId) {
+      return;
+    }
+    const normalizedHash = String(sectionHash || '').trim();
+    const hashPart = normalizedHash ? `#${normalizedHash.replace(/^#/, '')}` : '';
+    navigate(`/run/${runId}?embed=feishu${hashPart}`);
+  }
+
   useEffect(() => {
     void loadClarificationSummary(latestRun?.run_id ?? '');
   }, [latestRun?.run_id]);
@@ -286,11 +295,35 @@ function FeishuEntryPage() {
             <div className="panel-header">
               <div>
                 <p className="section-kicker">快捷动作</p>
-                <h2>继续工作</h2>
+                <h2>继续处理</h2>
               </div>
             </div>
             <div className="action-row">
-              <button type="button" className="secondary-button" onClick={resetForm}>新建评审草稿</button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => openRunDetails(effectiveRunId)}
+                disabled={!effectiveRunId}
+              >
+                查看最新结果
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => openRunSection(effectiveRunId, 'clarification')}
+                disabled={!effectiveRunId}
+              >
+                继续澄清
+              </button>
+              <button type="button" className="ghost-button" onClick={resetForm}>重新提交</button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => openRunSection(effectiveRunId, 'next-delivery')}
+                disabled={!effectiveRunId}
+              >
+                生成下一步交付
+              </button>
               <Link to="/" className="ghost-button">打开完整工作台</Link>
             </div>
           </section>

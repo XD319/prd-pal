@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from prd_pal.notifications.base import BaseNotifier
@@ -188,6 +188,7 @@ class FeishuCardRenderer:
         status = _normalize_review_status(event)
         summary = str(event.summary or event.title or "").strip() or f"Review {status.replace('_', ' ')}."
         detail_url = self._resolve_detail_url(event)
+        feishu_entry_url = self._resolve_feishu_entry_url(event)
         metadata = event.metadata or {}
         actor = str(metadata.get("actor") or "").strip()
         question_count = int(metadata.get("clarification_question_count", 0) or 0)
@@ -215,18 +216,16 @@ class FeishuCardRenderer:
             {"tag": "div", "text": {"tag": "lark_md", "content": summary}},
             {"tag": "note", "elements": [{"tag": "plain_text", "content": " | ".join(note_segments)}]},
         ]
-        if detail_url:
+        action_buttons = self._build_action_buttons(
+            status=status,
+            detail_url=detail_url,
+            feishu_entry_url=feishu_entry_url,
+        )
+        if action_buttons:
             elements.append(
                 {
                     "tag": "action",
-                    "actions": [
-                        {
-                            "tag": "button",
-                            "type": "primary",
-                            "text": {"tag": "plain_text", "content": "查看详情"},
-                            "url": detail_url,
-                        }
-                    ],
+                    "actions": action_buttons,
                 }
             )
 
@@ -259,6 +258,60 @@ class FeishuCardRenderer:
         if not base_url:
             return f"/run/{run_id}"
         return f"{base_url}/run/{run_id}"
+
+    def _resolve_feishu_entry_url(self, event: NotificationEvent) -> str:
+        metadata = event.metadata or {}
+        explicit_entry_url = str(metadata.get("entry_url") or "").strip()
+        if explicit_entry_url:
+            return explicit_entry_url
+        base_url = self._config.detail_base_url
+        if not base_url:
+            return "/feishu"
+        return f"{base_url}/feishu"
+
+    def _build_action_buttons(
+        self,
+        *,
+        status: str,
+        detail_url: str,
+        feishu_entry_url: str,
+    ) -> list[dict[str, Any]]:
+        if not detail_url and not feishu_entry_url:
+            return []
+
+        actions: list[dict[str, Any]] = []
+
+        if detail_url:
+            actions.append(self._build_button("查看最新结果", detail_url, primary=True))
+
+        if status == "clarification_required" and detail_url:
+            actions.append(self._build_button("继续澄清", self._with_hash(detail_url, "clarification"), primary=False))
+
+        if status == "completed" and detail_url:
+            actions.append(self._build_button("生成下一步交付", self._with_hash(detail_url, "next-delivery"), primary=False))
+
+        if feishu_entry_url:
+            actions.append(self._build_button("重新提交", feishu_entry_url, primary=False))
+
+        return actions[:3]
+
+    @staticmethod
+    def _build_button(label: str, url: str, *, primary: bool) -> dict[str, Any]:
+        return {
+            "tag": "button",
+            "type": "primary" if primary else "default",
+            "text": {"tag": "plain_text", "content": label},
+            "url": url,
+        }
+
+    @staticmethod
+    def _with_hash(url: str, section_id: str) -> str:
+        parsed = urlsplit(str(url or "").strip())
+        if not parsed.scheme and not parsed.netloc:
+            base = parsed.path or ""
+            query = f"?{parsed.query}" if parsed.query else ""
+            return f"{base}{query}#{section_id}"
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, parsed.query, section_id))
 
 
 class FeishuWebhookSender:

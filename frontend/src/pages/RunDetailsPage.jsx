@@ -86,16 +86,18 @@ function RunDetailsPage() {
             />
           </PanelErrorBoundary>
 
-          <PanelErrorBoundary panelTitle="Artifacts" resetKey={`${runId}:${runState.downloadFormat}`}>
-            <ArtifactDownloadPanel
-              runId={runId}
-              status={status}
-              resultPayload={runState.resultPayload}
-              statusPayload={sseRun.statusPayload ?? runState.statusPayload}
-              downloadFormat={runState.downloadFormat}
-              onDownload={downloadArtifact}
-            />
-          </PanelErrorBoundary>
+          <section id="next-delivery" aria-label="下一步交付">
+            <PanelErrorBoundary panelTitle="Artifacts" resetKey={`${runId}:${runState.downloadFormat}`}>
+              <ArtifactDownloadPanel
+                runId={runId}
+                status={status}
+                resultPayload={runState.resultPayload}
+                statusPayload={sseRun.statusPayload ?? runState.statusPayload}
+                downloadFormat={runState.downloadFormat}
+                onDownload={downloadArtifact}
+              />
+            </PanelErrorBoundary>
+          </section>
         </section>
 
         <section className="stack stack-wide">
@@ -138,13 +140,15 @@ function RunDetailsPage() {
             </PanelErrorBoundary>
           </div>
 
-          <PanelErrorBoundary panelTitle="Clarification Panel" resetKey={`${runId}:${runState.resultState}:questions`}>
-            <ClarificationPanel
-              result={result}
-              onSubmit={submitClarification}
-              isSubmitting={runState.clarificationState === 'submitting'}
-            />
-          </PanelErrorBoundary>
+          <section id="clarification" aria-label="澄清回答区">
+            <PanelErrorBoundary panelTitle="Clarification Panel" resetKey={`${runId}:${runState.resultState}:questions`}>
+              <ClarificationPanel
+                result={result}
+                onSubmit={submitClarification}
+                isSubmitting={runState.clarificationState === 'submitting'}
+              />
+            </PanelErrorBoundary>
+          </section>
         </section>
       </main>
     </>
