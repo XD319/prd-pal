@@ -17,6 +17,55 @@ const initialForm = {
   mode: 'quick',
 };
 
+function deriveRevisionQuickAction(payload, runStatus = '') {
+  const revisionStage = payload?.revision_stage ?? payload?.result?.revision_stage ?? {};
+  const normalizedStageStatus = String(revisionStage?.status ?? '').trim().toLowerCase();
+  const normalizedRunStatus = String(runStatus || '').trim().toLowerCase();
+  const hasDraft = Boolean(revisionStage?.draft_revision_ref);
+  const isConfirmed = Boolean(revisionStage?.revision_confirmed)
+    || normalizedStageStatus === 'confirmed'
+    || normalizedRunStatus === 'revision_confirmed';
+  const isPrompted = normalizedStageStatus === 'prompted' || normalizedRunStatus === 'revision_prompted';
+  const isGenerated = normalizedRunStatus === 'revision_generated'
+    || normalizedStageStatus === 'inputs_recorded'
+    || hasDraft;
+
+  if (isConfirmed) {
+    return {
+      stage: 'confirmed',
+      title: '修订版已确认，可继续交付',
+      detail: '你可以直接进入 next-delivery / handoff，默认会优先采用已确认修订版作为交付来源。',
+      primaryLabel: '继续下一步交付',
+      secondaryLabel: '查看修订版',
+    };
+  }
+  if (isGenerated) {
+    return {
+      stage: 'generated',
+      title: '修订版已生成，等待确认',
+      detail: '建议先进入修订区预览并确认修订版，再决定是否继续后续交付。',
+      primaryLabel: '查看修订版',
+      secondaryLabel: '继续修订',
+    };
+  }
+  if (isPrompted) {
+    return {
+      stage: 'prompted',
+      title: '需要决定是否修订',
+      detail: '最近 run 已进入修订决策阶段，可立即继续“修订 PRD”流程。',
+      primaryLabel: '继续修订',
+      secondaryLabel: '查看结果',
+    };
+  }
+  return {
+    stage: 'none',
+    title: '',
+    detail: '',
+    primaryLabel: '',
+    secondaryLabel: '',
+  };
+}
+
 function FeishuEntryPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -30,6 +79,16 @@ function FeishuEntryPage() {
     status: 'idle',
     pendingCount: 0,
     runId: '',
+    error: '',
+  });
+  const [revisionSummary, setRevisionSummary] = useState({
+    status: 'idle',
+    stage: 'none',
+    runId: '',
+    title: '',
+    detail: '',
+    primaryLabel: '',
+    secondaryLabel: '',
     error: '',
   });
 
@@ -104,10 +163,26 @@ function FeishuEntryPage() {
         runId: '',
         error: '',
       });
+      setRevisionSummary({
+        status: 'idle',
+        stage: 'none',
+        runId: '',
+        title: '',
+        detail: '',
+        primaryLabel: '',
+        secondaryLabel: '',
+        error: '',
+      });
       return;
     }
 
     setClarificationSummary((current) => ({
+      ...current,
+      status: 'loading',
+      runId,
+      error: '',
+    }));
+    setRevisionSummary((current) => ({
       ...current,
       status: 'loading',
       runId,
@@ -118,10 +193,21 @@ function FeishuEntryPage() {
       const payload = await fetchReviewResult(runId);
       const clarification = deriveClarification(payload?.result ?? {});
       const pendingCount = clarification.status === 'pending' ? clarification.questions.length : 0;
+      const revisionQuickAction = deriveRevisionQuickAction(payload, latestRun?.status);
       setClarificationSummary({
         status: 'ready',
         pendingCount,
         runId,
+        error: '',
+      });
+      setRevisionSummary({
+        status: 'ready',
+        stage: revisionQuickAction.stage,
+        runId,
+        title: revisionQuickAction.title,
+        detail: revisionQuickAction.detail,
+        primaryLabel: revisionQuickAction.primaryLabel,
+        secondaryLabel: revisionQuickAction.secondaryLabel,
         error: '',
       });
     } catch (error) {
@@ -130,6 +216,16 @@ function FeishuEntryPage() {
         pendingCount: 0,
         runId,
         error: formatApiError(error, 'Clarification summary is temporarily unavailable.'),
+      });
+      setRevisionSummary({
+        status: 'error',
+        stage: 'none',
+        runId,
+        title: '',
+        detail: '',
+        primaryLabel: '',
+        secondaryLabel: '',
+        error: formatApiError(error, 'Revision summary is temporarily unavailable.'),
       });
     }
   }
@@ -169,6 +265,29 @@ function FeishuEntryPage() {
 
   const effectiveRunId = submittedRunId || latestRun?.run_id || '';
   const latestRunSummary = latestRun ? describeHistoryRun(latestRun) : null;
+  const hasRevisionShortcut = revisionSummary.stage !== 'none';
+
+  function handleRevisionPrimaryAction() {
+    if (!effectiveRunId) {
+      return;
+    }
+    if (revisionSummary.stage === 'confirmed') {
+      openRunSection(effectiveRunId, 'next-delivery');
+      return;
+    }
+    openRunSection(effectiveRunId, 'revise-prd');
+  }
+
+  function handleRevisionSecondaryAction() {
+    if (!effectiveRunId) {
+      return;
+    }
+    if (revisionSummary.stage === 'prompted') {
+      openRunDetails(effectiveRunId);
+      return;
+    }
+    openRunSection(effectiveRunId, 'revise-prd');
+  }
 
   return (
     <>
@@ -267,6 +386,47 @@ function FeishuEntryPage() {
           <section className="panel">
             <div className="panel-header">
               <div>
+                <p className="section-kicker">修订状态</p>
+                <h2>继续修订 PRD</h2>
+              </div>
+            </div>
+
+            {revisionSummary.status === 'loading' ? <p className="panel-copy">正在读取最近 run 的修订阶段...</p> : null}
+            {revisionSummary.status === 'error' ? (
+              <div className="feedback-banner feedback-error" aria-live="polite">{revisionSummary.error}</div>
+            ) : null}
+            {revisionSummary.status !== 'loading' ? (
+              <>
+                <p className="panel-copy">
+                  {hasRevisionShortcut
+                    ? revisionSummary.detail
+                    : '最近 run 暂未进入修订相关阶段，可先查看结果或继续澄清。'}
+                </p>
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleRevisionPrimaryAction}
+                    disabled={!effectiveRunId || !hasRevisionShortcut}
+                  >
+                    {hasRevisionShortcut ? revisionSummary.primaryLabel : '继续修订'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={handleRevisionSecondaryAction}
+                    disabled={!effectiveRunId || !hasRevisionShortcut}
+                  >
+                    {hasRevisionShortcut ? revisionSummary.secondaryLabel : '查看修订版'}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
                 <p className="section-kicker">待处理澄清</p>
                 <h2>继续澄清</h2>
               </div>
@@ -315,19 +475,19 @@ function FeishuEntryPage() {
             <div className="action-row">
               <button
                 type="button"
-                className="secondary-button"
-                onClick={() => openRunDetails(effectiveRunId)}
+                className="primary-button"
+                onClick={hasRevisionShortcut ? handleRevisionPrimaryAction : () => openRunDetails(effectiveRunId)}
                 disabled={!effectiveRunId}
               >
-                查看最新结果
+                {hasRevisionShortcut ? revisionSummary.primaryLabel : '查看最新结果'}
               </button>
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => openRunSection(effectiveRunId, 'clarification')}
+                onClick={hasRevisionShortcut ? handleRevisionSecondaryAction : () => openRunSection(effectiveRunId, 'clarification')}
                 disabled={!effectiveRunId}
               >
-                继续澄清
+                {hasRevisionShortcut ? revisionSummary.secondaryLabel : '继续澄清'}
               </button>
               <button type="button" className="ghost-button" onClick={resetForm}>重新提交</button>
               <button
