@@ -28,6 +28,8 @@ function RunDetailsPage() {
     submitClarification,
     submitRevisionDecision,
     submitRevisionInput,
+    submitRevisionConfirmAction,
+    generateRoadmap,
   } = useReviewRun(runId, {
     externalStatusPayload: sseRun.statusPayload,
     externalLoadError: sseRun.error,
@@ -161,11 +163,14 @@ function RunDetailsPage() {
             <section id="revise-prd" aria-label="修订 PRD 决策区">
               <PanelErrorBoundary panelTitle="Revision Decision" resetKey={`${runId}:${runState.resultState}:revision-stage`}>
                 <RevisionDecisionPanel
+                  runId={runId}
                   revisionStage={revisionStage}
                   onDecide={submitRevisionDecision}
                   onSubmitRevisionInput={submitRevisionInput}
+                  onConfirmAction={submitRevisionConfirmAction}
                   isSubmitting={runState.revisionDecisionState === 'submitting'}
                   isSubmittingInput={runState.revisionInputState === 'submitting'}
+                  isSubmittingConfirm={runState.revisionConfirmState === 'submitting'}
                 />
               </PanelErrorBoundary>
             </section>
@@ -178,8 +183,11 @@ function RunDetailsPage() {
                 status={status}
                 resultPayload={runState.resultPayload}
                 statusPayload={sseRun.statusPayload ?? runState.statusPayload}
+                revisionStage={revisionStage}
                 downloadFormat={runState.downloadFormat}
                 onDownload={downloadArtifact}
+                onGenerateRoadmap={generateRoadmap}
+                isGeneratingRoadmap={runState.roadmapGenerationState === 'submitting'}
               />
             </PanelErrorBoundary>
           </section>

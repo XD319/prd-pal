@@ -22,10 +22,26 @@ function getPreviewFormat(path) {
   return 'text';
 }
 
-function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, downloadFormat, onDownload }) {
+function ArtifactDownloadPanel({
+  runId,
+  status,
+  resultPayload,
+  statusPayload,
+  revisionStage,
+  downloadFormat,
+  onDownload,
+  onGenerateRoadmap,
+  isGeneratingRoadmap,
+}) {
   const artifactPaths = resultPayload?.artifact_paths ?? statusPayload?.report_paths ?? {};
   const artifactKeys = Object.keys(artifactPaths);
   const canDownload = Boolean(runId) && status === 'completed';
+  const handoffSource = resultPayload?.result?.handoff_source?.selected_source
+    || resultPayload?.handoff_source?.selected_source
+    || '';
+  const roadmapGeneration = resultPayload?.result?.roadmap_generation;
+  const roadmapSource = roadmapGeneration?.roadmap_source?.selected_source
+    || (revisionStage?.revision_confirmed ? 'confirmed_revision' : 'original_prd_with_review');
   const [selectedFormat, setSelectedFormat] = useState('md');
   const [previewState, setPreviewState] = useState({
     artifactKey: '',
@@ -136,6 +152,16 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
         Download the canonical review report as Markdown, JSON, HTML, or CSV after the run completes. Additional artifact paths are listed for inspection.
       </p>
 
+      {handoffSource === 'confirmed_revision' || revisionStage?.revision_confirmed ? (
+        <div className="feedback-banner feedback-success" aria-live="polite">
+          当前将基于已确认修订版生成 handoff。
+        </div>
+      ) : (
+        <div className="feedback-banner feedback-info" aria-live="polite">
+          当前将基于原始 PRD + 评审结果生成 handoff。
+        </div>
+      )}
+
       <div className="action-row">
         <label className="field-label" htmlFor="artifact-download-format">
           Export format
@@ -162,6 +188,37 @@ function ArtifactDownloadPanel({ runId, status, resultPayload, statusPayload, do
           {downloadFormat === selectedFormat ? `Downloading ${selectedFormat.toUpperCase()}...` : `Download ${selectedFormat.toUpperCase()}`}
         </button>
       </div>
+
+      <section className="list-stack">
+        <div className="panel-subtitle">Roadmap（可选）</div>
+        <div className="subtle-note">
+          更适用于：多阶段需求；存在依赖与优先级取舍；需要阶段性交付规划的需求。
+        </div>
+        {roadmapSource === 'confirmed_revision' ? (
+          <div className="feedback-banner feedback-success" aria-live="polite">
+            当前 roadmap 将优先基于已确认修订版生成。
+          </div>
+        ) : (
+          <div className="feedback-banner feedback-info" aria-live="polite">
+            当前无已确认修订版，roadmap 将降级基于原始 PRD + 评审结果生成。
+          </div>
+        )}
+        <div className="action-row">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => onGenerateRoadmap?.()}
+            disabled={!canDownload || Boolean(isGeneratingRoadmap)}
+          >
+            {isGeneratingRoadmap ? '生成中...' : '可选生成 Roadmap'}
+          </button>
+        </div>
+        {roadmapGeneration?.status === 'not_recommended' ? (
+          <div className="feedback-banner feedback-info" aria-live="polite">
+            当前不建议生成 roadmap：{roadmapGeneration?.reason || 'insufficient scope'}。
+          </div>
+        ) : null}
+      </section>
 
       {!canDownload && <div className="empty-inline">Artifacts unlock after a run completes successfully.</div>}
 

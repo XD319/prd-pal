@@ -1,6 +1,8 @@
 ﻿import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import {
   answerReviewClarification,
+  confirmReviewRevision,
+  generateReviewRoadmap,
   downloadReportArtifact,
   fetchReviewResult,
   fetchReviewStatus,
@@ -25,6 +27,8 @@ const initialRunState = {
   clarificationState: 'idle',
   revisionDecisionState: 'idle',
   revisionInputState: 'idle',
+  revisionConfirmState: 'idle',
+  roadmapGenerationState: 'idle',
   loadState: 'idle',
   loadError: '',
   loadRetryEligible: false,
@@ -292,6 +296,81 @@ function useReviewRun(runId, options = {}) {
     }
   }, [runId, refreshStatus, showToast]);
 
+  const submitRevisionConfirmAction = useCallback(async (payload) => {
+    if (!runId) {
+      return;
+    }
+
+    setRunState((current) => ({
+      ...current,
+      revisionConfirmState: 'submitting',
+    }));
+
+    try {
+      const response = await confirmReviewRevision(runId, payload);
+      const revisionStage = response?.revision_stage ?? {};
+      startTransition(() => {
+        setRunState((current) => ({
+          ...current,
+          revisionConfirmState: 'ready',
+          resultPayload: current.resultPayload
+            ? { ...current.resultPayload, revision_stage: revisionStage }
+            : current.resultPayload,
+          statusPayload: current.statusPayload
+            ? { ...current.statusPayload, revision_stage: revisionStage }
+            : current.statusPayload,
+        }));
+      });
+      showToast('Revision confirmation action applied.', 'success');
+      void refreshStatus({ silent: true });
+    } catch (error) {
+      const message = formatApiError(error, 'Revision confirm action failed.');
+      setRunState((current) => ({
+        ...current,
+        revisionConfirmState: 'error',
+        failureMessage: current.failureMessage || message,
+      }));
+      showToast(message, 'error');
+    }
+  }, [runId, refreshStatus, showToast]);
+
+  const generateRoadmap = useCallback(async () => {
+    if (!runId) {
+      return;
+    }
+
+    setRunState((current) => ({
+      ...current,
+      roadmapGenerationState: 'submitting',
+    }));
+
+    try {
+      const response = await generateReviewRoadmap(runId);
+      startTransition(() => {
+        setRunState((current) => ({
+          ...current,
+          roadmapGenerationState: 'ready',
+          resultPayload: response,
+        }));
+      });
+      const roadmapStatus = String(response?.result?.roadmap_generation?.status || '');
+      if (roadmapStatus === 'not_recommended') {
+        showToast('Roadmap generation is optional and not recommended for this scope.', 'warning');
+      } else {
+        showToast('Roadmap generated.', 'success');
+      }
+      void refreshStatus({ silent: true });
+    } catch (error) {
+      const message = formatApiError(error, 'Roadmap generation failed.');
+      setRunState((current) => ({
+        ...current,
+        roadmapGenerationState: 'error',
+        failureMessage: current.failureMessage || message,
+      }));
+      showToast(message, 'error');
+    }
+  }, [runId, refreshStatus, showToast]);
+
   useEffect(() => {
     setRunState({
       ...initialRunState,
@@ -439,6 +518,8 @@ function useReviewRun(runId, options = {}) {
     submitClarification,
     submitRevisionDecision,
     submitRevisionInput,
+    submitRevisionConfirmAction,
+    generateRoadmap,
   };
 }
 

@@ -108,6 +108,11 @@ class RevisionInputRequest(BaseModel):
         return self
 
 
+class RevisionConfirmRequest(BaseModel):
+    action: Literal["confirm_revision", "regenerate_revision", "continue_without_revision"]
+    additional_requirements: str = ""
+
+
 @dataclass
 class JobRecord:
     run_id: str

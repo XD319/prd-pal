@@ -60,6 +60,7 @@ REVISION_STAGE_FILENAME = "revision_stage.json"
 REVISION_REQUEST_FILENAME = "revision_request.json"
 MEETING_NOTES_FILENAME = "meeting_notes.txt"
 MEETING_NOTES_META_FILENAME = "meeting_notes.json"
+CONFIRMED_PRD_FILENAME = "confirmed_prd.md"
 _REVISION_ENTRY_DECISIONS = {
     "generate_from_review",
     "custom_requirements",
@@ -157,6 +158,9 @@ _REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {
     "open_questions_json": "open_questions.json",
     "review_summary_md": "review_summary.md",
     "revised_prd": "revised_prd.md",
+    "confirmed_prd": "confirmed_prd.md",
+    "roadmap_md": "roadmap.md",
+    "roadmap_json": "roadmap.json",
     "revision_summary_md": "revision_summary.md",
     "revision_summary_json": "revision_summary.json",
 }
@@ -257,7 +261,37 @@ def _default_revision_stage_payload(report_payload: dict[str, Any]) -> dict[str,
         "available": available,
         "decision_required": available,
         "allow_continue_without_revision": available,
+        "revision_confirmed": False,
+        "confirmed_revision_ref": "",
+        "draft_revision_ref": "",
+        "preferred_prd_source": "original_prd",
+        "preferred_prd_ref": "report.requirement_doc",
         "updated_at": "",
+    }
+
+
+def _with_revision_preferences(run_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    revised_path = run_dir / "revised_prd.md"
+    confirmed_path = run_dir / CONFIRMED_PRD_FILENAME
+    draft_ref = str(revised_path.resolve()) if revised_path.exists() and revised_path.is_file() else ""
+    confirmed_ref = str(confirmed_path.resolve()) if confirmed_path.exists() and confirmed_path.is_file() else ""
+    revision_confirmed = bool(payload.get("revision_confirmed")) and bool(confirmed_ref)
+    if revision_confirmed:
+        preferred_source = "confirmed_revision"
+        preferred_ref = confirmed_ref
+    elif draft_ref:
+        preferred_source = "unconfirmed_revision_draft"
+        preferred_ref = draft_ref
+    else:
+        preferred_source = "original_prd"
+        preferred_ref = "report.requirement_doc"
+    return {
+        **payload,
+        "revision_confirmed": revision_confirmed,
+        "confirmed_revision_ref": confirmed_ref if revision_confirmed else "",
+        "draft_revision_ref": draft_ref,
+        "preferred_prd_source": preferred_source,
+        "preferred_prd_ref": preferred_ref,
     }
 
 
@@ -279,7 +313,7 @@ def _load_revision_stage_payload(run_dir: Path, report_payload: dict[str, Any]) 
         normalized["available"] and str(normalized.get("status", "") or "").strip() == "prompted"
     )
     normalized["allow_continue_without_revision"] = bool(normalized["available"])
-    return normalized
+    return _with_revision_preferences(run_dir, normalized)
 
 
 def record_revision_stage_decision(
@@ -315,8 +349,11 @@ def record_revision_stage_decision(
         "available": True,
         "decision_required": False,
         "allow_continue_without_revision": True,
+        "revision_confirmed": False,
+        "confirmed_revision_ref": "",
         "updated_at": _utc_now_iso(),
     }
+    payload = _with_revision_preferences(run_dir, payload)
     _write_json_object(_revision_stage_path(run_dir), payload)
     _append_audit_event_safe(
         run_dir,
@@ -405,8 +442,11 @@ def record_revision_input(
         **current_stage,
         "status": "inputs_recorded",
         "decision_required": False,
+        "revision_confirmed": False,
+        "confirmed_revision_ref": "",
         "updated_at": _utc_now_iso(),
     }
+    next_stage = _with_revision_preferences(run_dir, next_stage)
     _write_json_object(_revision_stage_path(run_dir), next_stage)
     _append_audit_event_safe(
         run_dir,
@@ -429,6 +469,108 @@ def record_revision_input(
         "meeting_notes_path": str((run_dir / MEETING_NOTES_FILENAME).resolve()) if normalized_notes else "",
         "meeting_notes_meta_path": str((run_dir / MEETING_NOTES_META_FILENAME).resolve()) if normalized_file_ref else "",
     }
+
+
+def confirm_revision_action(
+    *,
+    run_id: str,
+    action: str,
+    additional_requirements: str = "",
+    outputs_root: str | Path = "outputs",
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    report_payload = _load_json_object(run_dir / "report.json")
+    if not report_payload:
+        raise FileNotFoundError(f"report.json not found for run_id={run_id}")
+
+    current_stage = _load_revision_stage_payload(run_dir, report_payload)
+    normalized_action = str(action or "").strip()
+    normalized_requirements = str(additional_requirements or "").strip()
+
+    if normalized_action == "confirm_revision":
+        revised_path = run_dir / "revised_prd.md"
+        if not revised_path.exists() or not revised_path.is_file():
+            raise ValueError(f"revised_prd.md not found for run_id={run_id}")
+        confirmed_path = run_dir / CONFIRMED_PRD_FILENAME
+        confirmed_path.write_text(revised_path.read_text(encoding="utf-8"), encoding="utf-8")
+        next_stage = {
+            **current_stage,
+            "status": "confirmed",
+            "decision_required": False,
+            "revision_confirmed": True,
+            "confirmed_revision_ref": str(confirmed_path.resolve()),
+            "updated_at": _utc_now_iso(),
+        }
+        audit_operation = "revision_confirmed"
+        audit_status = "confirmed"
+        audit_details = {"confirmed_revision_ref": next_stage["confirmed_revision_ref"]}
+    elif normalized_action == "regenerate_revision":
+        revision_request_path = run_dir / REVISION_REQUEST_FILENAME
+        revision_request = _load_json_object(revision_request_path) if revision_request_path.exists() else {}
+        if not isinstance(revision_request, dict):
+            revision_request = {}
+        existing_extra = str(revision_request.get("extra_instructions", "") or "").strip()
+        merged_extra = existing_extra
+        if normalized_requirements:
+            merged_extra = (
+                f"{existing_extra}\n\n[additional_requirements]\n{normalized_requirements}"
+                if existing_extra else normalized_requirements
+            )
+        revision_request.update(
+            {
+                "run_id": str(run_id).strip(),
+                "selected_review_basis": str(revision_request.get("selected_review_basis") or "all_review_suggestions"),
+                "extra_instructions": merged_extra,
+                "meeting_notes_text": str(revision_request.get("meeting_notes_text") or ""),
+                "meeting_notes_file_ref": revision_request.get("meeting_notes_file_ref")
+                if isinstance(revision_request.get("meeting_notes_file_ref"), dict) else {},
+                "source_context_snapshot": _build_source_context_snapshot(report_payload),
+                "created_at": _utc_now_iso(),
+            }
+        )
+        _write_json_object(revision_request_path, revision_request)
+        next_stage = {
+            **current_stage,
+            "status": "inputs_recorded",
+            "decision": current_stage.get("decision") or "custom_requirements",
+            "entered_revision": True,
+            "decision_required": False,
+            "revision_confirmed": False,
+            "confirmed_revision_ref": "",
+            "updated_at": _utc_now_iso(),
+        }
+        audit_operation = "revision_regeneration_requested"
+        audit_status = "queued"
+        audit_details = {"has_additional_requirements": bool(normalized_requirements)}
+    elif normalized_action == "continue_without_revision":
+        next_stage = {
+            **current_stage,
+            "status": "skipped_unconfirmed",
+            "decision": _REVISION_SKIP_DECISION,
+            "entered_revision": False,
+            "decision_required": False,
+            "revision_confirmed": False,
+            "confirmed_revision_ref": "",
+            "updated_at": _utc_now_iso(),
+        }
+        audit_operation = "revision_skipped_unconfirmed"
+        audit_status = "skipped"
+        audit_details = {}
+    else:
+        raise ValueError(f"unsupported revision confirm action for run_id={run_id}: {normalized_action}")
+
+    next_stage = _with_revision_preferences(run_dir, next_stage)
+    _write_json_object(_revision_stage_path(run_dir), next_stage)
+    _append_audit_event_safe(
+        run_dir,
+        operation=audit_operation,
+        status=audit_status,
+        run_id=run_id,
+        audit_context=audit_context,
+        details=audit_details,
+    )
+    return next_stage
 
 
 def get_review_result_payload(
@@ -851,6 +993,9 @@ def _generate_delivery_bundle(
     parallel_review_meta = _extract_parallel_review_meta(run_output)
     if parallel_review_meta:
         bundle.metadata["parallel-review_meta"] = parallel_review_meta
+    handoff_source = result.get("handoff_source")
+    if isinstance(handoff_source, dict) and handoff_source:
+        bundle.metadata["handoff_source"] = dict(handoff_source)
     bundle_path = DeliveryBundleBuilder().save(bundle, run_dir)
 
     artifact_paths = {artifact_type: ref.path for artifact_type, ref in artifact_refs.items()}
@@ -887,6 +1032,58 @@ def _extract_parallel_review_meta(run_output: dict[str, Any]) -> dict[str, Any]:
             if isinstance(trace_meta, dict):
                 return dict(trace_meta)
     return {}
+
+
+def _read_text_if_present(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    try:
+        return str(path.read_text(encoding="utf-8") or "")
+    except OSError:
+        return ""
+
+
+def _resolve_handoff_source(run_dir: Path, result: dict[str, Any]) -> dict[str, str]:
+    revision_stage = _load_revision_stage_payload(run_dir, result)
+    confirmed_ref = str(revision_stage.get("confirmed_revision_ref", "") or "").strip()
+    draft_ref = str(revision_stage.get("draft_revision_ref", "") or "").strip()
+
+    confirmed_text = _read_text_if_present(Path(confirmed_ref)) if confirmed_ref else ""
+    if not confirmed_text:
+        confirmed_text = _read_text_if_present(run_dir / "confirmed_prd.md")
+    if confirmed_text.strip():
+        return {
+            "source": "confirmed_revision",
+            "requirement_doc": confirmed_text,
+            "source_ref": str(Path(confirmed_ref).resolve()) if confirmed_ref else str((run_dir / "confirmed_prd.md").resolve()),
+            "latest_revision_draft_ref": "",
+        }
+
+    draft_text = _read_text_if_present(Path(draft_ref)) if draft_ref else ""
+    if not draft_text:
+        draft_text = _read_text_if_present(run_dir / "revised_prd.md")
+    draft_ref_resolved = str(Path(draft_ref).resolve()) if draft_ref else str((run_dir / "revised_prd.md").resolve())
+
+    original_doc = str(result.get("requirement_doc", "") or "").strip()
+    if not original_doc:
+        canonical_payload = _load_json_object(run_dir / CANONICAL_REQUEST_FILENAME)
+        if isinstance(canonical_payload, dict):
+            content = canonical_payload.get("content")
+            if isinstance(content, dict):
+                original_doc = str(content.get("text", "") or "").strip()
+    if not original_doc and draft_text.strip():
+        return {
+            "source": "latest_revision_draft",
+            "requirement_doc": draft_text,
+            "source_ref": draft_ref_resolved,
+            "latest_revision_draft_ref": draft_ref_resolved,
+        }
+    return {
+        "source": "original_prd_with_review",
+        "requirement_doc": original_doc,
+        "source_ref": "report.requirement_doc",
+        "latest_revision_draft_ref": draft_ref_resolved if draft_text.strip() else "",
+    }
 
 
 def _resolve_requirement_doc(
@@ -1039,6 +1236,16 @@ def build_delivery_handoff_outputs(
     if not isinstance(trace, dict):
         trace = {}
         result["trace"] = trace
+
+    selected_handoff_source = _resolve_handoff_source(run_dir, result)
+    selected_requirement_doc = str(selected_handoff_source.get("requirement_doc", "") or "").strip()
+    if selected_requirement_doc:
+        result["requirement_doc"] = selected_requirement_doc
+    result["handoff_source"] = {
+        "selected_source": str(selected_handoff_source.get("source", "") or "original_prd_with_review"),
+        "source_ref": str(selected_handoff_source.get("source_ref", "") or ""),
+        "latest_revision_draft_ref": str(selected_handoff_source.get("latest_revision_draft_ref", "") or ""),
+    }
 
     source_metadata = _extract_source_metadata(run_output)
     if source_metadata:
@@ -1251,6 +1458,7 @@ def build_delivery_handoff_outputs(
         trace_path = Path(trace_path_raw)
         trace_payload = _load_json_object(trace_path)
         trace_payload.update(trace)
+        trace_payload["handoff_source"] = dict(result.get("handoff_source", {}))
         if source_metadata:
             trace_payload["source_metadata"] = source_metadata
         if parallel_review_meta:
@@ -1279,6 +1487,9 @@ def build_delivery_handoff_outputs(
                 report_payload["source_metadata"] = source_metadata
             if parallel_review_meta:
                 report_payload["parallel-review_meta"] = parallel_review_meta
+            report_payload["handoff_source"] = dict(result.get("handoff_source", {}))
+            if str(result.get("requirement_doc", "") or "").strip():
+                report_payload["requirement_doc"] = str(result.get("requirement_doc", "") or "").strip()
 
             artifacts = report_payload.get("artifacts")
             if not isinstance(artifacts, dict):
@@ -1327,6 +1538,7 @@ def build_delivery_handoff_outputs(
         details={
             "artifact_count": len(artifact_paths),
             "delivery_bundle_path": delivery_bundle_path,
+            "handoff_source": result.get("handoff_source", {}),
             "component_statuses": {
                 "pack_builder": pack_builder_trace.get("status", ""),
                 "draft_generator": draft_generator_trace.get("status", ""),

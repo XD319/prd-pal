@@ -1,6 +1,7 @@
 import '../styles/panels.css';
 import '../styles/components.css';
 import { useState } from 'react';
+import { fetchArtifactPreview } from '../api';
 
 const DECISION_OPTIONS = [
   {
@@ -48,11 +49,14 @@ const BASIS_OPTIONS = [
 ];
 
 function RevisionDecisionPanel({
+  runId,
   revisionStage,
   onDecide,
   onSubmitRevisionInput,
+  onConfirmAction,
   isSubmitting,
   isSubmittingInput,
+  isSubmittingConfirm,
 }) {
   const status = String(revisionStage?.status ?? 'unavailable');
   const decision = String(revisionStage?.decision ?? '');
@@ -63,7 +67,11 @@ function RevisionDecisionPanel({
   const [extraInstructions, setExtraInstructions] = useState('');
   const [meetingNotesText, setMeetingNotesText] = useState('');
   const [meetingNotesFileRef, setMeetingNotesFileRef] = useState(null);
+  const [revisionPreview, setRevisionPreview] = useState({ status: 'idle', content: '', error: '' });
+  const [regenerateRequirements, setRegenerateRequirements] = useState('');
   const [localError, setLocalError] = useState('');
+  const hasRevisionDraft = Boolean(revisionStage?.draft_revision_ref);
+  const isRevisionConfirmed = Boolean(revisionStage?.revision_confirmed);
 
   const handleNotesFileChange = async (event) => {
     const file = event.target.files?.[0];
@@ -122,6 +130,34 @@ function RevisionDecisionPanel({
         meeting_notes_file_ref: null,
       });
     }
+  };
+
+  const handleLoadRevisionPreview = async () => {
+    if (!hasRevisionDraft || !runId) {
+      return;
+    }
+    setRevisionPreview({ status: 'loading', content: '', error: '' });
+    try {
+      const payload = await fetchArtifactPreview(runId, 'revised_prd');
+      setRevisionPreview({ status: 'ready', content: String(payload.content ?? ''), error: '' });
+    } catch (error) {
+      setRevisionPreview({
+        status: 'error',
+        content: '',
+        error: error?.message || '修订版预览加载失败。',
+      });
+    }
+  };
+
+  const handleConfirmAction = async (action) => {
+    if (typeof onConfirmAction !== 'function') {
+      setLocalError('修订版确认接口尚未就绪，请稍后重试。');
+      return;
+    }
+    await onConfirmAction({
+      action,
+      additional_requirements: regenerateRequirements.trim(),
+    });
   };
 
   return (
@@ -245,6 +281,70 @@ function RevisionDecisionPanel({
             </button>
           </div>
         </form>
+      ) : null}
+
+      {hasRevisionDraft ? (
+        <div className="list-stack">
+          <div className="feedback-banner feedback-info" aria-live="polite">
+            当前修订版为草稿。你可以确认采用、补充要求后重新生成，或先继续原始流程。
+          </div>
+          {isRevisionConfirmed ? (
+            <div className="feedback-banner feedback-success" aria-live="polite">
+              已确认修订版：{revisionStage.confirmed_revision_ref}
+            </div>
+          ) : null}
+          <div className="action-row">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleLoadRevisionPreview}
+              disabled={isSubmittingConfirm || revisionPreview.status === 'loading'}
+            >
+              {revisionPreview.status === 'loading' ? '加载中...' : '预览修订版草稿'}
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => handleConfirmAction('confirm_revision')}
+              disabled={isSubmittingConfirm}
+            >
+              {isSubmittingConfirm ? '提交中...' : '确认此修订版'}
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => handleConfirmAction('continue_without_revision')}
+              disabled={isSubmittingConfirm}
+            >
+              {isSubmittingConfirm ? '提交中...' : '暂不采用修订版，继续原始流程'}
+            </button>
+          </div>
+
+          <label htmlFor="regenerate-requirements" className="field-label">附加要求（用于重新生成）</label>
+          <textarea
+            id="regenerate-requirements"
+            rows={3}
+            value={regenerateRequirements}
+            onChange={(event) => setRegenerateRequirements(event.target.value)}
+            placeholder="例如：保留原目标，重点重写验收标准并补充阶段里程碑。"
+            disabled={isSubmittingConfirm}
+          />
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => handleConfirmAction('regenerate_revision')}
+            disabled={isSubmittingConfirm}
+          >
+            {isSubmittingConfirm ? '提交中...' : '重新生成（带附加要求）'}
+          </button>
+
+          {revisionPreview.status === 'ready' ? (
+            <pre className="artifact-preview-markdown">{revisionPreview.content}</pre>
+          ) : null}
+          {revisionPreview.status === 'error' ? (
+            <div className="feedback-banner feedback-error" aria-live="polite">{revisionPreview.error}</div>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import json
+from pathlib import Path
 from typing import Any
 
 from prd_pal.prompt_quality.output_validator import validate_output
 from prd_pal.schemas.roadmap_schema import RoadmapDiffItem, RoadmapDiffOutput, RoadmapItem, RoadmapOutput
+from prd_pal.service.review_service import (
+    CANONICAL_REQUEST_FILENAME,
+    _load_json_object,
+    _load_revision_stage_payload,
+    _resolve_run_dir,
+)
 
 ROADMAP_ITEM_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -364,4 +373,184 @@ def integrate_with_execution_plan(plan: dict[str, Any], roadmap: dict[str, Any])
     normalized_plan["roadmap"] = roadmap_output.model_dump(mode="python")
     normalized_plan["execution_order"] = [item.id for item in roadmap_output.roadmap_items]
     return normalized_plan
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _load_text(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    try:
+        return str(path.read_text(encoding="utf-8") or "")
+    except OSError:
+        return ""
+
+
+def _select_roadmap_source(run_dir: Path, report_payload: dict[str, Any]) -> dict[str, str]:
+    stage = _load_revision_stage_payload(run_dir, report_payload)
+    confirmed_ref = str(stage.get("confirmed_revision_ref", "") or "").strip()
+    confirmed_text = _load_text(Path(confirmed_ref)) if confirmed_ref else _load_text(run_dir / "confirmed_prd.md")
+    if confirmed_text.strip():
+        return {
+            "selected_source": "confirmed_revision",
+            "source_ref": confirmed_ref or str((run_dir / "confirmed_prd.md").resolve()),
+            "requirement_doc": confirmed_text,
+        }
+
+    original_doc = str(report_payload.get("requirement_doc", "") or "").strip()
+    if not original_doc:
+        canonical = _load_json_object(run_dir / CANONICAL_REQUEST_FILENAME)
+        if isinstance(canonical, dict):
+            content = canonical.get("content")
+            if isinstance(content, dict):
+                original_doc = str(content.get("text", "") or "").strip()
+    return {
+        "selected_source": "original_prd_with_review",
+        "source_ref": "report.requirement_doc",
+        "requirement_doc": original_doc,
+    }
+
+
+def _normalize_task_candidates(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    tasks = report_payload.get("tasks")
+    if not isinstance(tasks, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in tasks:
+        if not isinstance(item, dict):
+            continue
+        task_id = str(item.get("id", "") or "").strip()
+        if not task_id:
+            continue
+        normalized.append(
+            {
+                "id": task_id,
+                "title": str(item.get("title", "") or "").strip(),
+                "depends_on": list(item.get("depends_on", []) or []),
+                "estimate_days": item.get("estimate_days", 0),
+            }
+        )
+    return normalized
+
+
+def _roadmap_not_recommended_reason(tasks: list[dict[str, Any]], dependencies: list[dict[str, Any]]) -> str:
+    if not tasks:
+        return "insufficient_scope:no_tasks"
+    if len(tasks) < 2:
+        return "roadmap_not_recommended:single_stage_scope"
+    if len(tasks) < 3 and not dependencies:
+        return "roadmap_not_recommended:limited_dependency_or_priority_tradeoff"
+    return ""
+
+
+def _render_roadmap_markdown(payload: dict[str, Any]) -> str:
+    status = str(payload.get("status", "") or "")
+    source = payload.get("roadmap_source", {}) if isinstance(payload.get("roadmap_source"), dict) else {}
+    source_name = str(source.get("selected_source", "") or "original_prd_with_review")
+    if status != "generated":
+        reason = str(payload.get("reason", "") or "roadmap_not_recommended")
+        return (
+            "# Roadmap\n\n"
+            f"- Status: `{status or 'not_generated'}`\n"
+            f"- Source: `{source_name}`\n"
+            f"- Reason: `{reason}`\n\n"
+            "Roadmap generation is optional. This run currently does not require phased roadmap planning.\n"
+        )
+
+    roadmap = payload.get("roadmap", {}) if isinstance(payload.get("roadmap"), dict) else {}
+    items = roadmap.get("roadmap_items", []) if isinstance(roadmap.get("roadmap_items"), list) else []
+    lines = [
+        "# Roadmap",
+        "",
+        f"- Status: `{status}`",
+        f"- Source: `{source_name}`",
+        "",
+        "## Prioritized Items",
+    ]
+    if not items:
+        lines.append("- No roadmap items generated.")
+    else:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"- `{item.get('id', '')}` {item.get('title', '')} "
+                f"(window: {item.get('target_window', '')}, priority: {item.get('priority_score', 0)})"
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def generate_roadmap_for_run(
+    *,
+    run_id: str,
+    outputs_root: str | Path = "outputs",
+) -> dict[str, Any]:
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    report_path = run_dir / "report.json"
+    report_payload = _load_json_object(report_path)
+    if not report_payload:
+        raise FileNotFoundError(f"report.json not found for run_id={run_id}")
+
+    roadmap_source = _select_roadmap_source(run_dir, report_payload)
+    tasks = _normalize_task_candidates(report_payload)
+    dependencies = report_payload.get("dependencies") if isinstance(report_payload.get("dependencies"), list) else []
+    reason = _roadmap_not_recommended_reason(tasks, dependencies)
+
+    if reason:
+        roadmap_generation = {
+            "status": "not_recommended",
+            "reason": reason,
+            "roadmap_source": {
+                "selected_source": roadmap_source.get("selected_source", "original_prd_with_review"),
+                "source_ref": roadmap_source.get("source_ref", ""),
+            },
+            "generated_at": _utc_now_iso(),
+        }
+    else:
+        roadmap_payload = generate_constrained_roadmap(
+            tasks=tasks,
+            dependencies=dependencies,
+            risk_items=report_payload.get("risk_items") if isinstance(report_payload.get("risk_items"), list) else [],
+            milestones=report_payload.get("milestones") if isinstance(report_payload.get("milestones"), list) else [],
+            version=f"roadmap-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        )
+        roadmap_generation = {
+            "status": "generated",
+            "reason": "",
+            "roadmap_source": {
+                "selected_source": roadmap_source.get("selected_source", "original_prd_with_review"),
+                "source_ref": roadmap_source.get("source_ref", ""),
+            },
+            "generated_at": _utc_now_iso(),
+            "roadmap": roadmap_payload,
+        }
+
+    roadmap_json_path = run_dir / "roadmap.json"
+    roadmap_md_path = run_dir / "roadmap.md"
+    roadmap_json_path.write_text(json.dumps(roadmap_generation, ensure_ascii=False, indent=2), encoding="utf-8")
+    roadmap_md_path.write_text(_render_roadmap_markdown(roadmap_generation), encoding="utf-8")
+
+    artifacts = report_payload.get("artifacts")
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+    artifacts.update({
+        "roadmap_json": str(roadmap_json_path.resolve()),
+        "roadmap_md": str(roadmap_md_path.resolve()),
+    })
+    report_payload["artifacts"] = artifacts
+    report_payload["roadmap_generation"] = roadmap_generation
+    report_payload["roadmap_source"] = roadmap_generation.get("roadmap_source", {})
+    report_path.write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "run_id": str(run_id).strip(),
+        "roadmap_generation": roadmap_generation,
+        "artifact_paths": {
+            "roadmap_json": str(roadmap_json_path.resolve()),
+            "roadmap_md": str(roadmap_md_path.resolve()),
+        },
+    }
 

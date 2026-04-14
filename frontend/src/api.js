@@ -108,8 +108,22 @@ export function submitReviewRevisionInput(runId, payload) {
   });
 }
 
+export function confirmReviewRevision(runId, payload) {
+  return requestJson(`/api/review/${encodeURIComponent(runId)}/revision-confirm`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchArtifactPreview(runId, artifactKey) {
   return requestJson(`/api/review/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactKey)}`);
+}
+
+export function generateReviewRoadmap(runId) {
+  return requestJson(`/api/review/${encodeURIComponent(runId)}/roadmap-generate`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 export function fetchRuns() {

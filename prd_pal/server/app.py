@@ -25,6 +25,7 @@ from prd_pal.server.job_state import (
     ClarificationAnswerRequest,
     JobRecord,
     RUN_PROGRESS_FILENAME,
+    RevisionConfirmRequest,
     RevisionInputRequest,
     RevisionStageRequest,
     ReviewCreateRequest,
@@ -56,7 +57,7 @@ from prd_pal.server.security import (
 )
 from prd_pal.server.sse import ProgressBroadcaster
 from prd_pal.service.comparison_service import compare_runs, get_run_stats_summary, get_trend_data
-from prd_pal.service.roadmap_service import diff_roadmap_versions, generate_constrained_roadmap
+from prd_pal.service.roadmap_service import diff_roadmap_versions, generate_constrained_roadmap, generate_roadmap_for_run
 from prd_pal.service.report_service import RUN_ID_PATTERN
 from prd_pal.service.review_service import (
     ReviewArtifactNotFoundError,
@@ -64,6 +65,7 @@ from prd_pal.service.review_service import (
     ReviewRunNotFoundError,
     answer_review_clarification,
     answer_review_clarification_async,
+    confirm_revision_action,
     get_review_artifact_preview_payload,
     get_review_result_payload,
     record_revision_input,
@@ -468,6 +470,11 @@ def _build_revision_stage_payload(*, run_id: str) -> dict[str, Any]:
             "available": False,
             "decision_required": False,
             "allow_continue_without_revision": False,
+            "revision_confirmed": False,
+            "confirmed_revision_ref": "",
+            "draft_revision_ref": "",
+            "preferred_prd_source": "original_prd",
+            "preferred_prd_ref": "report.requirement_doc",
             "updated_at": "",
         }
     try:
@@ -480,6 +487,11 @@ def _build_revision_stage_payload(*, run_id: str) -> dict[str, Any]:
             "available": False,
             "decision_required": False,
             "allow_continue_without_revision": False,
+            "revision_confirmed": False,
+            "confirmed_revision_ref": "",
+            "draft_revision_ref": "",
+            "preferred_prd_source": "original_prd",
+            "preferred_prd_ref": "report.requirement_doc",
             "updated_at": "",
         }
     revision_stage = result_payload.get("revision_stage")
@@ -490,6 +502,11 @@ def _build_revision_stage_payload(*, run_id: str) -> dict[str, Any]:
         "available": False,
         "decision_required": False,
         "allow_continue_without_revision": False,
+        "revision_confirmed": False,
+        "confirmed_revision_ref": "",
+        "draft_revision_ref": "",
+        "preferred_prd_source": "original_prd",
+        "preferred_prd_ref": "report.requirement_doc",
         "updated_at": "",
     }
 
@@ -1327,6 +1344,76 @@ async def generate_review_revision(run_id: str, request: Request) -> dict[str, A
         raise HTTPException(
             status_code=409,
             detail={"code": "revision_generate_unavailable", "message": str(exc), "run_id": run_id},
+        ) from exc
+
+
+@app.post("/api/review/{run_id}/revision-confirm")
+async def confirm_review_revision(run_id: str, payload: RevisionConfirmRequest, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    try:
+        revision_stage = confirm_revision_action(
+            run_id=run_id,
+            action=payload.action,
+            additional_requirements=payload.additional_requirements,
+            outputs_root=OUTPUTS_ROOT,
+            audit_context={
+                "source": "web",
+                "tool_name": "review.revision_confirm",
+                "actor": str(request_context.get("open_id") or "web").strip() or "web",
+                "client_metadata": request_context,
+            },
+        )
+        response_payload: dict[str, Any] = {
+            "run_id": run_id,
+            "revision_stage": revision_stage,
+            "result_page": _build_result_page_payload(
+                run_id,
+                request_context=request_context,
+                run_dir=OUTPUTS_ROOT / run_id,
+            ),
+        }
+        if payload.action == "regenerate_revision":
+            generation_payload = await generate_revision_for_run_async(
+                run_id=run_id,
+                outputs_root=OUTPUTS_ROOT,
+                audit_context={
+                    "source": "web",
+                    "tool_name": "review.revision_regenerate",
+                    "actor": str(request_context.get("open_id") or "web").strip() or "web",
+                    "client_metadata": request_context,
+                },
+            )
+            response_payload["revision_generation"] = generation_payload
+            response_payload["revision_stage"] = _build_revision_stage_payload(run_id=run_id)
+        return response_payload
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc), "run_id": run_id},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "revision_confirm_unavailable", "message": str(exc), "run_id": run_id},
+        ) from exc
+
+
+@app.post("/api/review/{run_id}/roadmap-generate")
+async def generate_review_roadmap(run_id: str, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
+    try:
+        generate_roadmap_for_run(run_id=run_id, outputs_root=OUTPUTS_ROOT)
+        return get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc), "run_id": run_id},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "roadmap_generation_unavailable", "message": str(exc), "run_id": run_id},
         ) from exc
 
 

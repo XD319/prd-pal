@@ -400,6 +400,7 @@ def prepare_agent_handoff_for_run_for_mcp(
         "bundle_id": str(bundle.bundle_id),
         "status": "prepared",
         "agent_selection": _normalize_agent_selection(agent),
+        "handoff_source": bundle.metadata.get("handoff_source", {}) if isinstance(bundle.metadata, dict) else {},
         "request_count": len(requests),
         "requests": requests,
         "paths": {

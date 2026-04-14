@@ -493,3 +493,33 @@ def test_get_review_result_payload_discovers_generated_artifacts(tmp_path):
 
     assert payload["artifact_paths"]["prd_v1"].endswith("prd_v1.md")
     assert payload["artifact_paths"]["task_bundle_v1"].endswith("task_bundle_v1.json")
+
+
+def test_build_delivery_handoff_outputs_prefers_confirmed_revision_source(tmp_path, sample_report_json: dict):
+    report_json_path = tmp_path / "report.json"
+    trace_path = tmp_path / "run_trace.json"
+    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    (tmp_path / "confirmed_prd.md").write_text("# Confirmed PRD\n\nUse this as handoff input.\n", encoding="utf-8")
+
+    run_output = {
+        "run_dir": str(tmp_path),
+        "run_id": "20260307T011500Z",
+        "report_paths": {
+            "report_json": str(report_json_path),
+            "run_trace": str(trace_path),
+        },
+        "result": {
+            **sample_report_json,
+            "requirement_doc": "# Original PRD\n\nLegacy baseline.",
+            "trace": {"reporter": {"status": "ok"}},
+        },
+    }
+
+    artifact_paths = build_delivery_handoff_outputs(run_output)
+    bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
+    report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
+
+    assert bundle_payload["metadata"]["handoff_source"]["selected_source"] == "confirmed_revision"
+    assert report_payload["handoff_source"]["selected_source"] == "confirmed_revision"
+    assert report_payload["requirement_doc"].startswith("# Confirmed PRD")
