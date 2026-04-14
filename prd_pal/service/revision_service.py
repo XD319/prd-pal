@@ -27,6 +27,28 @@ REVISION_SUMMARY_MD_FILENAME = "revision_summary.md"
 REVISION_SUMMARY_JSON_FILENAME = "revision_summary.json"
 
 
+def _ensure_confirmation_prefix(items: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for item in items:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        normalized.append(text if text.startswith("需确认") else f"需确认: {text}")
+    return normalized
+
+
+def _merge_pending_questions(validated_payload: dict[str, Any]) -> list[str]:
+    base_pending = [str(item).strip() for item in validated_payload.get("pending_questions", []) if str(item).strip()]
+    notes_pending = _ensure_confirmation_prefix(
+        [str(item).strip() for item in validated_payload.get("meeting_notes_pending_confirmations", []) if str(item).strip()]
+    )
+    merged: list[str] = []
+    for item in [*base_pending, *notes_pending]:
+        if item and item not in merged:
+            merged.append(item)
+    return merged
+
+
 def _revision_artifact_paths(run_dir: Path) -> dict[str, str]:
     return {
         "revised_prd": str((run_dir / REVISED_PRD_FILENAME).resolve()),
@@ -96,6 +118,9 @@ def _build_revision_summary_markdown(payload: dict[str, Any]) -> str:
     unadopted = [str(item) for item in payload.get("unadopted_review_suggestions", []) if str(item).strip()]
     pending = [str(item) for item in payload.get("pending_questions", []) if str(item).strip()]
     user_direct = [str(item) for item in payload.get("user_direct_requirements_applied", []) if str(item).strip()]
+    notes_resolutions = [str(item) for item in payload.get("meeting_notes_resolutions", []) if str(item).strip()]
+    notes_changes = [str(item) for item in payload.get("meeting_notes_change_points", []) if str(item).strip()]
+    notes_pending = [str(item) for item in payload.get("meeting_notes_pending_confirmations", []) if str(item).strip()]
     rationale = str(payload.get("rationale", "") or "").strip()
 
     def _bullets(items: list[str], empty_text: str) -> str:
@@ -115,6 +140,13 @@ def _build_revision_summary_markdown(payload: dict[str, Any]) -> str:
         f"{_bullets(pending, 'No pending confirmation questions were listed.')}\n\n"
         "## User Direct Requirements Applied\n"
         f"{_bullets(user_direct, 'No user direct requirement was listed as applied.')}\n\n"
+        "## Meeting Notes Impact\n"
+        "### Resolutions\n"
+        f"{_bullets(notes_resolutions, 'No meeting-note resolution was identified.')}\n\n"
+        "### Change Points\n"
+        f"{_bullets(notes_changes, 'No meeting-note-driven change point was identified.')}\n\n"
+        "### Need Confirmation\n"
+        f"{_bullets(notes_pending, 'No meeting-note conflicts requiring confirmation were listed.')}\n\n"
         "## Revision Rationale\n"
         f"{rationale or 'No rationale provided.'}\n"
     )
@@ -184,6 +216,10 @@ async def generate_revision_for_run_async(
             metadata=call_meta,
         )
         validated = validate_revision_output(raw_output).model_dump(mode="python")
+        validated["pending_questions"] = _merge_pending_questions(validated)
+        validated["meeting_notes_pending_confirmations"] = _ensure_confirmation_prefix(
+            [str(item).strip() for item in validated.get("meeting_notes_pending_confirmations", []) if str(item).strip()]
+        )
 
         revised_prd_markdown = str(validated.get("revised_prd_markdown", "") or "").strip()
         if not revised_prd_markdown:
@@ -203,6 +239,9 @@ async def generate_revision_for_run_async(
             "unadopted_review_suggestions": validated.get("unadopted_review_suggestions", []),
             "pending_questions": validated.get("pending_questions", []),
             "user_direct_requirements_applied": validated.get("user_direct_requirements_applied", []),
+            "meeting_notes_resolutions": validated.get("meeting_notes_resolutions", []),
+            "meeting_notes_change_points": validated.get("meeting_notes_change_points", []),
+            "meeting_notes_pending_confirmations": validated.get("meeting_notes_pending_confirmations", []),
             "artifacts": artifact_paths,
         }
         summary_json_path.write_text(json.dumps(summary_json, ensure_ascii=False, indent=2), encoding="utf-8")

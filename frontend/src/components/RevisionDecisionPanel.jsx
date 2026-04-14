@@ -3,6 +3,8 @@ import '../styles/components.css';
 import { useState } from 'react';
 import { fetchArtifactPreview } from '../api';
 
+const SUPPORTED_NOTES_EXTENSIONS = new Set(['txt', 'md']);
+
 const DECISION_OPTIONS = [
   {
     value: 'generate_from_review',
@@ -77,24 +79,42 @@ function RevisionDecisionPanel({
     const file = event.target.files?.[0];
     if (!file) {
       setMeetingNotesFileRef(null);
+      setMeetingNotesText('');
+      return;
+    }
+
+    setLocalError('');
+    const filename = String(file.name || '').trim();
+    const extension = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
+    if (!SUPPORTED_NOTES_EXTENSIONS.has(extension)) {
+      setMeetingNotesFileRef(null);
+      setMeetingNotesText('');
+      setLocalError('仅支持上传 .txt / .md 会议纪要文件。');
+      event.target.value = '';
       return;
     }
 
     const refPayload = {
-      filename: file.name,
+      filename,
+      extension,
       content_type: file.type || '',
       size_bytes: file.size,
       uploaded_at: new Date().toISOString(),
     };
-    setMeetingNotesFileRef(refPayload);
-
-    if (file.type.startsWith('text/')) {
-      try {
-        const text = await file.text();
-        setMeetingNotesText(text);
-      } catch {
-        setLocalError('会议纪要文件读取失败，请改为直接粘贴文本。');
+    try {
+      const text = await file.text();
+      if (!String(text || '').trim()) {
+        setMeetingNotesFileRef(null);
+        setMeetingNotesText('');
+        setLocalError('会议纪要文件为空，请上传包含文本内容的 .txt / .md 文件。');
+        return;
       }
+      setMeetingNotesText(text);
+      setMeetingNotesFileRef(refPayload);
+    } catch {
+      setMeetingNotesFileRef(null);
+      setMeetingNotesText('');
+      setLocalError('会议纪要文件读取失败，请改为直接粘贴文本。');
     }
   };
 
@@ -113,6 +133,10 @@ function RevisionDecisionPanel({
       meeting_notes_text: meetingNotesText.trim(),
       meeting_notes_file_ref: meetingNotesFileRef || null,
     };
+    if (meetingNotesFileRef && !payload.meeting_notes_text) {
+      setLocalError('已上传会议纪要文件，但未读取到文本内容，请重试上传。');
+      return;
+    }
 
     await onSubmitRevisionInput(payload);
   };
@@ -243,11 +267,11 @@ function RevisionDecisionPanel({
             disabled={isSubmittingInput}
           />
 
-          <label htmlFor="meeting-notes-file" className="field-label">会议纪要文件（可选，文本文件优先）</label>
+          <label htmlFor="meeting-notes-file" className="field-label">会议纪要文件（可选，仅支持 .txt / .md）</label>
           <input
             id="meeting-notes-file"
             type="file"
-            accept=".txt,.md,.json,text/plain,text/markdown,application/json"
+            accept=".txt,.md,text/plain,text/markdown"
             onChange={handleNotesFileChange}
             disabled={isSubmittingInput}
           />

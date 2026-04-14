@@ -67,6 +67,7 @@ _REVISION_ENTRY_DECISIONS = {
     "upload_notes",
 }
 _REVISION_SKIP_DECISION = "skip_revision"
+_SUPPORTED_MEETING_NOTES_EXTENSIONS = {"txt", "md"}
 
 
 @dataclass(slots=True)
@@ -415,6 +416,19 @@ def record_revision_input(
     normalized_extra = str(extra_instructions or "").strip()
     normalized_notes = str(meeting_notes_text or "").strip()
     normalized_file_ref = dict(meeting_notes_file_ref) if isinstance(meeting_notes_file_ref, dict) else {}
+    filename = str(normalized_file_ref.get("filename", "") or "").strip()
+    extension = str(normalized_file_ref.get("extension", "") or "").strip().lower()
+    if not extension and "." in filename:
+        extension = filename.rsplit(".", 1)[-1].lower()
+
+    if normalized_file_ref:
+        if not normalized_notes:
+            raise ValueError("meeting notes file upload requires extracted text content")
+        if extension and extension not in _SUPPORTED_MEETING_NOTES_EXTENSIONS:
+            raise ValueError(f"unsupported meeting notes file extension: .{extension}")
+        normalized_file_ref["filename"] = filename
+        if extension:
+            normalized_file_ref["extension"] = extension
 
     source_context_snapshot = _build_source_context_snapshot(report_payload)
     revision_request_payload = {

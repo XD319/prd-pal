@@ -19,6 +19,9 @@ class RevisionAgentOutput(AgentSchemaModel):
     unadopted_review_suggestions: SafeStrList = Field(default_factory=list)
     pending_questions: SafeStrList = Field(default_factory=list)
     user_direct_requirements_applied: SafeStrList = Field(default_factory=list)
+    meeting_notes_resolutions: SafeStrList = Field(default_factory=list)
+    meeting_notes_change_points: SafeStrList = Field(default_factory=list)
+    meeting_notes_pending_confirmations: SafeStrList = Field(default_factory=list)
 
 
 def validate_revision_output(data: dict[str, Any]) -> RevisionAgentOutput:
