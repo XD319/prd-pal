@@ -10,7 +10,7 @@
 ![Feishu](https://img.shields.io/badge/Feishu-Integrated-3370FF)
 ![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)
 
-`prd-pal` 是一个面向 PRD/需求文档的评审服务，默认以 **Feishu-first** 方式交付：普通用户在飞书里即可完成提审、查看结果、回答澄清并继续下一步动作。
+`prd-pal` 是一个面向 PRD/需求文档的评审服务，默认以 **Feishu-first** 方式交付：普通用户在飞书里即可完成提审、查看结果、回答澄清、确认修订版并进入后续交付。
 
 Web 与 CLI 仍完整保留，定位为试用、联调和开发入口。
 
@@ -19,7 +19,20 @@ Web 与 CLI 仍完整保留，定位为试用、联调和开发入口。
 1. 在飞书里发起 PRD 评审
 2. 在飞书内打开 H5 结果页
 3. 在结果页回答澄清问题并刷新结果
-4. 继续进入下一步交付动作（下载产物、准备 handoff）
+4. 选择是否生成 PRD 修订草稿（派生版本）
+5. 确认后继续进入 handoff / roadmap 等交付动作
+
+## 新增章节：飞书主流程（公开叙事）
+
+面向普通用户的默认流程：
+
+发起评审 -> 查看结果 -> 回答澄清 -> 选择是否修订 PRD -> （可选）上传会议纪要和额外要求 -> 生成并确认修订版 -> 生成 handoff / roadmap
+
+关键约定：
+
+- 修订版是草稿/派生版本，不会自动覆盖原文
+- handoff / roadmap 默认基于“已确认的修订版”生成
+- 若你选择不修订，也可以直接继续后续交付（兼容旧流程）
 
 ## 30 秒上手（Feishu-first）
 
@@ -27,7 +40,8 @@ Web 与 CLI 仍完整保留，定位为试用、联调和开发入口。
 2. 打开飞书入口页：`https://<your-domain>/feishu`
 3. 提交 PRD 链接或正文，获取 run
 4. 在飞书内进入结果页：`/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
-5. 如有澄清，继续在同一页回答并推进下一步
+5. 如有澄清，继续在同一页回答并刷新结果
+6. 选择是否修订 PRD；可选上传会议纪要和额外要求，确认修订版后再生成 handoff / roadmap
 
 ## 环境要求
 
@@ -239,6 +253,15 @@ python -m prd_pal.mcp_server.server
 - [docs/v2-api.md](./docs/v2-api.md)
 - [docs/mcp.md](./docs/mcp.md)
 - [docs/deployment-guide.md](./docs/deployment-guide.md)
+
+## 新增章节：文档受众边界
+
+- 用户文档（面向普通使用者）：
+  - `README.md` 中的“飞书主流程（公开叙事）”与“30 秒上手（Feishu-first）”
+  - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
+- 管理员/架构文档（面向部署、集成、运维）：
+  - [docs/feishu-setup.md](./docs/feishu-setup.md)
+  - [docs/feishu-main-entry-mvp.md](./docs/feishu-main-entry-mvp.md)（含接口映射、配置项、风险降级）
 
 ## 七、验证
 
