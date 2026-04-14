@@ -25,6 +25,8 @@ from prd_pal.server.job_state import (
     ClarificationAnswerRequest,
     JobRecord,
     RUN_PROGRESS_FILENAME,
+    RevisionInputRequest,
+    RevisionStageRequest,
     ReviewCreateRequest,
     build_run_list_entry,
     job_status_payload as _job_status_payload,
@@ -64,6 +66,8 @@ from prd_pal.service.review_service import (
     answer_review_clarification_async,
     get_review_artifact_preview_payload,
     get_review_result_payload,
+    record_revision_input,
+    record_revision_stage_decision,
 )
 from prd_pal.templates import TemplateRegistryError, list_template_records
 from prd_pal.utils.logging import get_logger
@@ -450,6 +454,43 @@ def _enforce_run_access(request: Request | None, run_id: str) -> None:
 
 def _workspace_context_from_request(request: Request | None) -> dict[str, str]:
     return _resolve_request_feishu_context(request)
+
+
+def _build_revision_stage_payload(*, run_id: str) -> dict[str, Any]:
+    run_dir = OUTPUTS_ROOT / str(run_id or "").strip()
+    report_path = run_dir / "report.json"
+    if not report_path.exists() or not report_path.is_file():
+        return {
+            "status": "unavailable",
+            "decision": "",
+            "entered_revision": False,
+            "available": False,
+            "decision_required": False,
+            "allow_continue_without_revision": False,
+            "updated_at": "",
+        }
+    try:
+        result_payload = get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
+    except (ReviewRunNotFoundError, ReviewResultNotReadyError, ValueError):
+        return {
+            "status": "unavailable",
+            "decision": "",
+            "entered_revision": False,
+            "available": False,
+            "decision_required": False,
+            "allow_continue_without_revision": False,
+            "updated_at": "",
+        }
+    revision_stage = result_payload.get("revision_stage")
+    return dict(revision_stage) if isinstance(revision_stage, dict) else {
+        "status": "unavailable",
+        "decision": "",
+        "entered_revision": False,
+        "available": False,
+        "decision_required": False,
+        "allow_continue_without_revision": False,
+        "updated_at": "",
+    }
 
 
 def _extract_workspace_entry_context(workspace: WorkspaceState) -> dict[str, str]:
@@ -1083,6 +1124,7 @@ async def get_review_status(run_id: str, request: Request = None) -> dict[str, A
 
     if job:
         payload = _job_status_payload(job)
+        payload["revision_stage"] = _build_revision_stage_payload(run_id=run_id)
         payload["result_page"] = _build_result_page_payload(
             run_id,
             request_context=request_context,
@@ -1094,6 +1136,7 @@ async def get_review_status(run_id: str, request: Request = None) -> dict[str, A
         raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
 
     payload = _persisted_status_payload(run_id, run_dir)
+    payload["revision_stage"] = _build_revision_stage_payload(run_id=run_id)
     payload["result_page"] = _build_result_page_payload(
         run_id,
         request_context=request_context,
@@ -1176,6 +1219,80 @@ async def submit_review_clarification(run_id: str, payload: ClarificationAnswerR
         raise HTTPException(
             status_code=422,
             detail={"code": "invalid_clarification_payload", "message": str(exc), "run_id": run_id},
+        ) from exc
+
+
+@app.post("/api/review/{run_id}/revision-stage")
+async def update_review_revision_stage(run_id: str, payload: RevisionStageRequest, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    try:
+        revision_stage = record_revision_stage_decision(
+            run_id=run_id,
+            decision=payload.decision,
+            outputs_root=OUTPUTS_ROOT,
+            audit_context={
+                "source": "web",
+                "tool_name": "review.revision_stage",
+                "actor": str(request_context.get("open_id") or "web").strip() or "web",
+                "client_metadata": request_context,
+            },
+        )
+        return {
+            "run_id": run_id,
+            "revision_stage": revision_stage,
+            "result_page": _build_result_page_payload(
+                run_id,
+                request_context=request_context,
+                run_dir=OUTPUTS_ROOT / run_id,
+            ),
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc), "run_id": run_id},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "revision_stage_unavailable", "message": str(exc), "run_id": run_id},
+        ) from exc
+
+
+@app.post("/api/review/{run_id}/revision-input")
+async def submit_review_revision_input(run_id: str, payload: RevisionInputRequest, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    try:
+        response_payload = record_revision_input(
+            run_id=run_id,
+            selected_review_basis=payload.selected_review_basis,
+            extra_instructions=payload.extra_instructions,
+            meeting_notes_text=payload.meeting_notes_text,
+            meeting_notes_file_ref=payload.meeting_notes_file_ref,
+            outputs_root=OUTPUTS_ROOT,
+            audit_context={
+                "source": "web",
+                "tool_name": "review.revision_input",
+                "actor": str(request_context.get("open_id") or "web").strip() or "web",
+                "client_metadata": request_context,
+            },
+        )
+        response_payload["result_page"] = _build_result_page_payload(
+            run_id,
+            request_context=request_context,
+            run_dir=OUTPUTS_ROOT / run_id,
+        )
+        return response_payload
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc), "run_id": run_id},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "revision_input_unavailable", "message": str(exc), "run_id": run_id},
         ) from exc
 
 

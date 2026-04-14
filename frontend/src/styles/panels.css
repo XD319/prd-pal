@@ -73,6 +73,39 @@
   gap: var(--space-3);
 }
 
+.revision-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.revision-input-form {
+  margin-top: var(--space-4);
+}
+
+.field-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+.revision-input-form textarea,
+.revision-input-form select,
+.revision-input-form input[type='file'] {
+  width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  background: var(--panel-strong);
+  color: var(--text-main);
+  box-shadow: var(--field-shadow);
+}
+
+.revision-input-form textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
 .history-filter-group,
 .pagination-nav,
 .artifact-preview-header {
@@ -415,6 +448,10 @@
 
   .history-search {
     max-width: none;
+  }
+
+  .revision-option-grid {
+    grid-template-columns: 1fr;
   }
 }
 

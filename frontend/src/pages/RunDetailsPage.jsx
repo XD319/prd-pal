@@ -6,6 +6,7 @@ import ConflictResolutionPanel from '../components/ConflictResolutionPanel';
 import FindingsPanel from '../components/FindingsPanel';
 import PanelErrorBoundary from '../components/PanelErrorBoundary';
 import ReviewerInsightsPanel from '../components/ReviewerInsightsPanel';
+import RevisionDecisionPanel from '../components/RevisionDecisionPanel';
 import ReviewSummaryPanel from '../components/ReviewSummaryPanel';
 import RisksPanel from '../components/RisksPanel';
 import RunProgressCard from '../components/RunProgressCard';
@@ -18,11 +19,30 @@ function RunDetailsPage() {
   const [searchParams] = useSearchParams();
   const isFeishuEmbed = searchParams.get('embed') === 'feishu';
   const sseRun = useReviewRunSSE(runId, { fallbackToPolling: true });
-  const { runState, status, result, refreshStatus, downloadArtifact, submitClarification } = useReviewRun(runId, {
+  const {
+    runState,
+    status,
+    result,
+    refreshStatus,
+    downloadArtifact,
+    submitClarification,
+    submitRevisionDecision,
+    submitRevisionInput,
+  } = useReviewRun(runId, {
     externalStatusPayload: sseRun.statusPayload,
     externalLoadError: sseRun.error,
     disableStatusPolling: true,
   });
+  const revisionStage =
+    runState.resultPayload?.revision_stage
+    ?? sseRun.statusPayload?.revision_stage
+    ?? runState.statusPayload?.revision_stage
+    ?? {};
+  const showRevisionSection = Boolean(
+    runState.resultState === 'ready'
+    && result
+    && revisionStage.available,
+  );
 
   useEffect(() => () => {
     sseRun.closeConnection();
@@ -47,8 +67,8 @@ function RunDetailsPage() {
             <h1>Run {runId}</h1>
             <p className="hero-copy">
               {isFeishuEmbed
-                ? 'Track progress, review findings, respond to clarification prompts, and open artifacts from a compact mobile-friendly detail page.'
-                : 'Track execution, inspect structured review output, and download artifacts from one dedicated run URL.'}
+                ? 'Track progress, review findings, respond to clarification prompts, decide whether to revise the PRD, and open artifacts from a compact mobile-friendly detail page.'
+                : 'Track execution, inspect structured review output, decide whether to revise the PRD, and download artifacts from one dedicated run URL.'}
             </p>
           </div>
 
@@ -85,19 +105,6 @@ function RunDetailsPage() {
               isPolling={sseRun.isPolling}
             />
           </PanelErrorBoundary>
-
-          <section id="next-delivery" aria-label="下一步交付">
-            <PanelErrorBoundary panelTitle="Artifacts" resetKey={`${runId}:${runState.downloadFormat}`}>
-              <ArtifactDownloadPanel
-                runId={runId}
-                status={status}
-                resultPayload={runState.resultPayload}
-                statusPayload={sseRun.statusPayload ?? runState.statusPayload}
-                downloadFormat={runState.downloadFormat}
-                onDownload={downloadArtifact}
-              />
-            </PanelErrorBoundary>
-          </section>
         </section>
 
         <section className="stack stack-wide">
@@ -146,6 +153,33 @@ function RunDetailsPage() {
                 result={result}
                 onSubmit={submitClarification}
                 isSubmitting={runState.clarificationState === 'submitting'}
+              />
+            </PanelErrorBoundary>
+          </section>
+
+          {showRevisionSection ? (
+            <section id="revise-prd" aria-label="修订 PRD 决策区">
+              <PanelErrorBoundary panelTitle="Revision Decision" resetKey={`${runId}:${runState.resultState}:revision-stage`}>
+                <RevisionDecisionPanel
+                  revisionStage={revisionStage}
+                  onDecide={submitRevisionDecision}
+                  onSubmitRevisionInput={submitRevisionInput}
+                  isSubmitting={runState.revisionDecisionState === 'submitting'}
+                  isSubmittingInput={runState.revisionInputState === 'submitting'}
+                />
+              </PanelErrorBoundary>
+            </section>
+          ) : null}
+
+          <section id="next-delivery" aria-label="下一步交付区">
+            <PanelErrorBoundary panelTitle="Artifacts" resetKey={`${runId}:${runState.downloadFormat}`}>
+              <ArtifactDownloadPanel
+                runId={runId}
+                status={status}
+                resultPayload={runState.resultPayload}
+                statusPayload={sseRun.statusPayload ?? runState.statusPayload}
+                downloadFormat={runState.downloadFormat}
+                onDownload={downloadArtifact}
               />
             </PanelErrorBoundary>
           </section>

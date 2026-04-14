@@ -56,6 +56,16 @@ from prd_pal.utils.logging import RunLogContext, get_logger
 
 log = get_logger("service.review")
 CANONICAL_REQUEST_FILENAME = "canonical_review_request.json"
+REVISION_STAGE_FILENAME = "revision_stage.json"
+REVISION_REQUEST_FILENAME = "revision_request.json"
+MEETING_NOTES_FILENAME = "meeting_notes.txt"
+MEETING_NOTES_META_FILENAME = "meeting_notes.json"
+_REVISION_ENTRY_DECISIONS = {
+    "generate_from_review",
+    "custom_requirements",
+    "upload_notes",
+}
+_REVISION_SKIP_DECISION = "skip_revision"
 
 
 @dataclass(slots=True)
@@ -222,6 +232,202 @@ def _derive_artifact_patch(report_payload: dict[str, Any]) -> dict[str, Any]:
     return dict(artifact_patch) if isinstance(artifact_patch, dict) else {}
 
 
+def _revision_stage_path(run_dir: Path) -> Path:
+    return run_dir / REVISION_STAGE_FILENAME
+
+
+def _is_review_stable_for_revision(report_payload: dict[str, Any]) -> bool:
+    if _derive_status(report_payload) != "completed":
+        return False
+    clarification = _derive_clarification(report_payload)
+    if not clarification.get("triggered"):
+        return True
+    return str(clarification.get("status", "not_needed") or "not_needed") != "pending"
+
+
+def _default_revision_stage_payload(report_payload: dict[str, Any]) -> dict[str, Any]:
+    available = _is_review_stable_for_revision(report_payload)
+    return {
+        "status": "prompted" if available else "unavailable",
+        "decision": "",
+        "entered_revision": False,
+        "available": available,
+        "decision_required": available,
+        "allow_continue_without_revision": available,
+        "updated_at": "",
+    }
+
+
+def _load_revision_stage_payload(run_dir: Path, report_payload: dict[str, Any]) -> dict[str, Any]:
+    default_payload = _default_revision_stage_payload(report_payload)
+    stage_path = _revision_stage_path(run_dir)
+    if not stage_path.exists() or not stage_path.is_file():
+        return default_payload
+
+    persisted = _load_json_object(stage_path)
+    if not isinstance(persisted, dict):
+        return default_payload
+
+    normalized = {**default_payload, **persisted}
+    normalized["available"] = default_payload["available"]
+    if not default_payload["available"] and str(normalized.get("status", "") or "").strip() == "prompted":
+        normalized["status"] = "unavailable"
+    normalized["decision_required"] = bool(
+        normalized["available"] and str(normalized.get("status", "") or "").strip() == "prompted"
+    )
+    normalized["allow_continue_without_revision"] = bool(normalized["available"])
+    return normalized
+
+
+def record_revision_stage_decision(
+    *,
+    run_id: str,
+    decision: str,
+    outputs_root: str | Path = "outputs",
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    report_payload = _load_json_object(run_dir / "report.json")
+    if not report_payload:
+        raise FileNotFoundError(f"report.json not found for run_id={run_id}")
+
+    current_stage = _load_revision_stage_payload(run_dir, report_payload)
+    if not current_stage.get("available"):
+        raise ValueError(f"revision stage not available for run_id={run_id}")
+
+    normalized_decision = str(decision or "").strip()
+    if normalized_decision in _REVISION_ENTRY_DECISIONS:
+        next_status = "collecting_inputs"
+        entered_revision = True
+    elif normalized_decision == _REVISION_SKIP_DECISION:
+        next_status = "skipped"
+        entered_revision = False
+    else:
+        raise ValueError(f"unsupported revision decision for run_id={run_id}: {normalized_decision}")
+
+    payload = {
+        "status": next_status,
+        "decision": normalized_decision,
+        "entered_revision": entered_revision,
+        "available": True,
+        "decision_required": False,
+        "allow_continue_without_revision": True,
+        "updated_at": _utc_now_iso(),
+    }
+    _write_json_object(_revision_stage_path(run_dir), payload)
+    _append_audit_event_safe(
+        run_dir,
+        operation="revision_stage_decision",
+        status=next_status,
+        run_id=run_id,
+        audit_context=audit_context,
+        details={
+            "decision": normalized_decision,
+            "entered_revision": entered_revision,
+        },
+    )
+    return payload
+
+
+def _build_source_context_snapshot(report_payload: dict[str, Any]) -> dict[str, Any]:
+    clarification = _derive_clarification(report_payload)
+    return {
+        "review_status": _derive_status(report_payload),
+        "review_summary": report_payload.get("summary") if isinstance(report_payload.get("summary"), dict) else {},
+        "gating": _derive_gating(report_payload),
+        "clarification": {
+            "triggered": bool(clarification.get("triggered")),
+            "status": str(clarification.get("status", "") or ""),
+            "stable_conclusions": clarification.get("stable_conclusions", []),
+            "resolved_answers": clarification.get("resolved_answers", []),
+        },
+        "reviewers_used": _derive_reviewers_used(report_payload),
+        "risk_items": report_payload.get("risk_items", []),
+        "findings": report_payload.get("findings", []),
+    }
+
+
+def record_revision_input(
+    *,
+    run_id: str,
+    selected_review_basis: str,
+    extra_instructions: str = "",
+    meeting_notes_text: str = "",
+    meeting_notes_file_ref: dict[str, Any] | None = None,
+    outputs_root: str | Path = "outputs",
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    run_dir = _resolve_run_dir(run_id, outputs_root)
+    report_payload = _load_json_object(run_dir / "report.json")
+    if not report_payload:
+        raise FileNotFoundError(f"report.json not found for run_id={run_id}")
+
+    current_stage = _load_revision_stage_payload(run_dir, report_payload)
+    if not current_stage.get("available"):
+        raise ValueError(f"revision stage not available for run_id={run_id}")
+    if not current_stage.get("entered_revision"):
+        raise ValueError(f"revision not entered for run_id={run_id}")
+
+    normalized_basis = str(selected_review_basis or "").strip()
+    if normalized_basis not in {"all_review_suggestions", "partial_review_suggestions", "user_only"}:
+        raise ValueError(f"unsupported selected_review_basis for run_id={run_id}: {normalized_basis}")
+
+    normalized_extra = str(extra_instructions or "").strip()
+    normalized_notes = str(meeting_notes_text or "").strip()
+    normalized_file_ref = dict(meeting_notes_file_ref) if isinstance(meeting_notes_file_ref, dict) else {}
+
+    source_context_snapshot = _build_source_context_snapshot(report_payload)
+    revision_request_payload = {
+        "run_id": str(run_id).strip(),
+        "selected_review_basis": normalized_basis,
+        "extra_instructions": normalized_extra,
+        "meeting_notes_text": normalized_notes,
+        "meeting_notes_file_ref": normalized_file_ref,
+        "source_context_snapshot": source_context_snapshot,
+        "created_at": _utc_now_iso(),
+    }
+    _write_json_object(run_dir / REVISION_REQUEST_FILENAME, revision_request_payload)
+
+    if normalized_notes:
+        (run_dir / MEETING_NOTES_FILENAME).write_text(normalized_notes, encoding="utf-8")
+    else:
+        (run_dir / MEETING_NOTES_FILENAME).unlink(missing_ok=True)
+
+    if normalized_file_ref:
+        _write_json_object(run_dir / MEETING_NOTES_META_FILENAME, normalized_file_ref)
+    else:
+        (run_dir / MEETING_NOTES_META_FILENAME).unlink(missing_ok=True)
+
+    next_stage = {
+        **current_stage,
+        "status": "inputs_recorded",
+        "decision_required": False,
+        "updated_at": _utc_now_iso(),
+    }
+    _write_json_object(_revision_stage_path(run_dir), next_stage)
+    _append_audit_event_safe(
+        run_dir,
+        operation="revision_input_recorded",
+        status="inputs_recorded",
+        run_id=run_id,
+        audit_context=audit_context,
+        details={
+            "selected_review_basis": normalized_basis,
+            "has_extra_instructions": bool(normalized_extra),
+            "has_meeting_notes_text": bool(normalized_notes),
+            "has_meeting_notes_file_ref": bool(normalized_file_ref),
+        },
+    )
+
+    return {
+        "run_id": str(run_id).strip(),
+        "revision_stage": next_stage,
+        "revision_request_path": str((run_dir / REVISION_REQUEST_FILENAME).resolve()),
+        "meeting_notes_path": str((run_dir / MEETING_NOTES_FILENAME).resolve()) if normalized_notes else "",
+        "meeting_notes_meta_path": str((run_dir / MEETING_NOTES_META_FILENAME).resolve()) if normalized_file_ref else "",
+    }
+
+
 def get_review_result_payload(
     *,
     run_id: str,
@@ -259,6 +465,7 @@ def get_review_result_payload(
         "mode": mode,
         "gating": gating,
         "clarification": _derive_clarification(result) if isinstance(result, dict) else {},
+        "revision_stage": _load_revision_stage_payload(run_dir, result) if isinstance(result, dict) else {},
         "artifact_patch": _derive_artifact_patch(result) if isinstance(result, dict) else {},
         "reviewers_used": reviewers_used,
         "reviewers_skipped": reviewers_skipped,

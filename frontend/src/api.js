@@ -94,6 +94,20 @@ export function answerReviewClarification(runId, payload) {
   });
 }
 
+export function updateReviewRevisionStage(runId, payload) {
+  return requestJson(`/api/review/${encodeURIComponent(runId)}/revision-stage`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitReviewRevisionInput(runId, payload) {
+  return requestJson(`/api/review/${encodeURIComponent(runId)}/revision-input`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchArtifactPreview(runId, artifactKey) {
   return requestJson(`/api/review/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactKey)}`);
 }

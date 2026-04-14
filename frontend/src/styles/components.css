@@ -101,6 +101,18 @@
   border: 1px solid rgba(217, 101, 81, 0.24);
 }
 
+.feedback-success {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-text);
+  border: 1px solid rgba(73, 185, 139, 0.24);
+}
+
+.feedback-info {
+  background: var(--status-queued-bg);
+  color: var(--status-queued-text);
+  border: 1px solid rgba(38, 103, 153, 0.22);
+}
+
 .status-badge,
 .inline-meta,
 .node-pill,

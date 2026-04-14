@@ -88,6 +88,26 @@ class ClarificationAnswerRequest(BaseModel):
     patch_context: dict[str, Any] | None = None
 
 
+class RevisionStageRequest(BaseModel):
+    decision: Literal["generate_from_review", "custom_requirements", "upload_notes", "skip_revision"]
+
+
+class RevisionInputRequest(BaseModel):
+    selected_review_basis: Literal["all_review_suggestions", "partial_review_suggestions", "user_only"]
+    extra_instructions: str = ""
+    meeting_notes_text: str = ""
+    meeting_notes_file_ref: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _validate_notes_input(self) -> "RevisionInputRequest":
+        notes_text = str(self.meeting_notes_text or "").strip()
+        if notes_text:
+            return self
+        if isinstance(self.meeting_notes_file_ref, dict) and self.meeting_notes_file_ref:
+            return self
+        return self
+
+
 @dataclass
 class JobRecord:
     run_id: str

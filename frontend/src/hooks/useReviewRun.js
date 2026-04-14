@@ -4,6 +4,8 @@ import {
   downloadReportArtifact,
   fetchReviewResult,
   fetchReviewStatus,
+  submitReviewRevisionInput,
+  updateReviewRevisionStage,
 } from '../api';
 import { useToast } from '../components/ToastProvider';
 import { deriveFailureMessage } from '../utils/derivers';
@@ -21,6 +23,8 @@ const initialRunState = {
   resultError: '',
   downloadFormat: '',
   clarificationState: 'idle',
+  revisionDecisionState: 'idle',
+  revisionInputState: 'idle',
   loadState: 'idle',
   loadError: '',
   loadRetryEligible: false,
@@ -207,6 +211,87 @@ function useReviewRun(runId, options = {}) {
     }
   }, [runId, refreshStatus, showToast]);
 
+  const submitRevisionDecision = useCallback(async (decision) => {
+    if (!runId) {
+      return;
+    }
+
+    setRunState((current) => ({
+      ...current,
+      revisionDecisionState: 'submitting',
+    }));
+
+    try {
+      const response = await updateReviewRevisionStage(runId, { decision });
+      const revisionStage = response?.revision_stage ?? {};
+      startTransition(() => {
+        setRunState((current) => ({
+          ...current,
+          revisionDecisionState: 'ready',
+          resultPayload: current.resultPayload
+            ? { ...current.resultPayload, revision_stage: revisionStage }
+            : current.resultPayload,
+          statusPayload: current.statusPayload
+            ? { ...current.statusPayload, revision_stage: revisionStage }
+            : current.statusPayload,
+        }));
+      });
+      showToast(
+        decision === 'skip_revision'
+          ? `Revision skipped for run ${runId}. You can continue to next delivery below.`
+          : `Revision flow noted for run ${runId}.`,
+        'success',
+      );
+      void refreshStatus({ silent: true });
+    } catch (error) {
+      const message = formatApiError(error, 'Revision choice could not be recorded.');
+      setRunState((current) => ({
+        ...current,
+        revisionDecisionState: 'error',
+        failureMessage: current.failureMessage || message,
+      }));
+      showToast(message, 'error');
+    }
+  }, [runId, refreshStatus, showToast]);
+
+  const submitRevisionInput = useCallback(async (payload) => {
+    if (!runId) {
+      return;
+    }
+
+    setRunState((current) => ({
+      ...current,
+      revisionInputState: 'submitting',
+    }));
+
+    try {
+      const response = await submitReviewRevisionInput(runId, payload);
+      const revisionStage = response?.revision_stage ?? {};
+      startTransition(() => {
+        setRunState((current) => ({
+          ...current,
+          revisionInputState: 'ready',
+          resultPayload: current.resultPayload
+            ? { ...current.resultPayload, revision_stage: revisionStage }
+            : current.resultPayload,
+          statusPayload: current.statusPayload
+            ? { ...current.statusPayload, revision_stage: revisionStage }
+            : current.statusPayload,
+        }));
+      });
+      showToast(`Revision input recorded for run ${runId}.`, 'success');
+      void refreshStatus({ silent: true });
+    } catch (error) {
+      const message = formatApiError(error, 'Revision input could not be recorded.');
+      setRunState((current) => ({
+        ...current,
+        revisionInputState: 'error',
+        failureMessage: current.failureMessage || message,
+      }));
+      showToast(message, 'error');
+    }
+  }, [runId, refreshStatus, showToast]);
+
   useEffect(() => {
     setRunState({
       ...initialRunState,
@@ -352,6 +437,8 @@ function useReviewRun(runId, options = {}) {
     refreshStatus,
     downloadArtifact,
     submitClarification,
+    submitRevisionDecision,
+    submitRevisionInput,
   };
 }
 
