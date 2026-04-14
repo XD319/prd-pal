@@ -1154,6 +1154,8 @@ async def review_prd_text_async(
         "progress_hook": combined_progress_hook,
         "review_profile": profile_payload,
         "review_profile_pack": profile_pack,
+        "canonical_review_request": canonical_request.model_dump(mode="python"),
+        "audit_context": audit_context,
     }
     review_mode_override = overrides.get("review_mode_override")
     if isinstance(review_mode_override, str) and review_mode_override.strip():
@@ -1167,6 +1169,14 @@ async def review_prd_text_async(
         run_review_kwargs["review_memory_enabled"] = overrides.get("review_memory_enabled")
     if "review_memory_seeds_dir" in overrides:
         run_review_kwargs["review_memory_seeds_dir"] = overrides.get("review_memory_seeds_dir")
+    if "review_memory_db_path" in overrides:
+        run_review_kwargs["review_memory_db_path"] = overrides.get("review_memory_db_path")
+    if "review_memory_extract_enabled" in overrides:
+        run_review_kwargs["review_memory_extract_enabled"] = overrides.get("review_memory_extract_enabled")
+    if "review_memory_max_kept" in overrides:
+        run_review_kwargs["review_memory_max_kept"] = overrides.get("review_memory_max_kept")
+    if "review_memory_mode" in overrides:
+        run_review_kwargs["review_memory_mode"] = overrides.get("review_memory_mode")
     if "normalizer_cache_path" in overrides:
         run_review_kwargs["normalizer_cache_path"] = overrides.get("normalizer_cache_path")
 
@@ -2369,7 +2379,7 @@ async def _review_summary_for_mcp_async(
     mode = resolved_options.get("mode")
     if isinstance(mode, str) and mode.strip():
         config_overrides["mode"] = mode.strip()
-    for option_key in ("review_memory_path", "review_memory_enabled", "review_memory_seeds_dir", "normalizer_cache_path", "fast_llm", "smart_llm", "strategic_llm", "temperature", "llm_kwargs", "reasoning_effort", "FAST_LLM", "SMART_LLM", "STRATEGIC_LLM", "TEMPERATURE", "LLM_KWARGS", "REASONING_EFFORT"):
+    for option_key in ("review_memory_path", "review_memory_enabled", "review_memory_seeds_dir", "review_memory_db_path", "review_memory_extract_enabled", "review_memory_max_kept", "review_memory_mode", "normalizer_cache_path", "fast_llm", "smart_llm", "strategic_llm", "temperature", "llm_kwargs", "reasoning_effort", "FAST_LLM", "SMART_LLM", "STRATEGIC_LLM", "TEMPERATURE", "LLM_KWARGS", "REASONING_EFFORT"):
         if option_key in resolved_options:
             config_overrides[option_key] = resolved_options.get(option_key)
 

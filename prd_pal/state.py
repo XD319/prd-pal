@@ -180,8 +180,14 @@ class ReviewState(TypedDict, total=False):
     rag_enabled: bool
     review_profile: dict[str, Any]
     review_profile_pack: dict[str, Any]
+    canonical_review_request: dict[str, Any]
     memory_config: dict[str, Any]
+    memory_retrieval_config: dict[str, Any]
     normalizer_cache_config: dict[str, Any]
+    structured_memory_hits: list[dict[str, Any]]
+    memory_mode: str
+    memory_usage_notes: list[str]
+    memory_usage: dict[str, Any]
 
 
 def create_initial_state(requirement_doc: str) -> ReviewState:
@@ -227,7 +233,13 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         rag_enabled=False,
         review_profile={},
         review_profile_pack={},
+        canonical_review_request={},
         memory_config={},
+        memory_retrieval_config={},
         normalizer_cache_config={},
+        structured_memory_hits=[],
+        memory_mode="off",
+        memory_usage_notes=[],
+        memory_usage={},
     )
 

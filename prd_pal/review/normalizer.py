@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable
 
 
@@ -57,12 +57,26 @@ class NormalizedRequirement:
     in_scope: tuple[str, ...] = ()
     out_of_scope: tuple[str, ...] = ()
     completeness_signals: tuple[str, ...] = ()
+    memory_mode: str = "off"
+    reviewer_memory_context: tuple[str, ...] = ()
 
     def for_reviewer(self, reviewer: str) -> str:
         return build_reviewer_input(self, reviewer)
 
     def for_reviewers(self, reviewers: Iterable[str] | None = None) -> dict[str, str]:
         return build_reviewer_inputs(self, reviewers=reviewers)
+
+    def with_memory_context(
+        self,
+        *,
+        memory_mode: str,
+        reviewer_memory_context: Iterable[str] | None = None,
+    ) -> "NormalizedRequirement":
+        return replace(
+            self,
+            memory_mode=str(memory_mode or "off").strip().lower() or "off",
+            reviewer_memory_context=tuple(str(item) for item in reviewer_memory_context or [] if str(item).strip()),
+        )
 
 
 def normalize_requirement(prd_text: str) -> NormalizedRequirement:
@@ -158,6 +172,8 @@ def build_reviewer_input(requirement: NormalizedRequirement, reviewer: str) -> s
 
     if requirement.out_of_scope:
         sections.append(("Out of Scope", requirement.out_of_scope))
+    if requirement.reviewer_memory_context:
+        sections.append(("Memory Assistance", requirement.reviewer_memory_context))
 
     rendered_sections: list[str] = []
     for title, body in sections:

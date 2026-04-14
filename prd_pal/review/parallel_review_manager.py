@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping
 
+from ..memory import RetrievedMemory, format_memory_block_for_reviewer
 from .aggregator import aggregate_review_results
 from .gating import ReviewModeDecision
 from .memory_store import MemoryHit
@@ -49,6 +50,8 @@ def run_parallel_review(
     gating_decision: ReviewModeDecision | None = None,
     normalized_requirement: NormalizedRequirement | None = None,
     memory_hits: list[MemoryHit] | None = None,
+    retrieved_memories: list[RetrievedMemory] | None = None,
+    memory_mode: str = "off",
     normalizer_cache_hit: bool = False,
     rag_enabled: bool = False,
 ) -> ParallelReviewResult:
@@ -61,6 +64,8 @@ def run_parallel_review(
             gating_decision=gating_decision,
             normalized_requirement=normalized_requirement,
             memory_hits=memory_hits,
+            retrieved_memories=retrieved_memories,
+            memory_mode=memory_mode,
             normalizer_cache_hit=normalizer_cache_hit,
             rag_enabled=rag_enabled,
         )
@@ -76,18 +81,16 @@ async def run_parallel_review_async(
     gating_decision: ReviewModeDecision | None = None,
     normalized_requirement: NormalizedRequirement | None = None,
     memory_hits: list[MemoryHit] | None = None,
+    retrieved_memories: list[RetrievedMemory] | None = None,
+    memory_mode: str = "off",
     normalizer_cache_hit: bool = False,
     rag_enabled: bool = False,
 ) -> ParallelReviewResult:
     normalized = normalized_requirement or normalize_requirement(prd_text)
     selected_memory_hits = list(memory_hits or [])
+    selected_retrieved_memories = list(retrieved_memories or [])
     selection = select_reviewers(normalized)
-    reviewer_inputs = {
-        "product": normalized.for_reviewer("general"),
-        "engineering": normalized.for_reviewer("architecture"),
-        "qa": normalized.for_reviewer("qa"),
-        "security": normalized.for_reviewer("security"),
-    }
+    reviewer_inputs = _build_reviewer_inputs_with_memory(normalized, selected_retrieved_memories, memory_mode=memory_mode)
     resolved_timeouts = _resolve_reviewer_timeouts(reviewer_timeouts)
     results = await asyncio.gather(
         *(
@@ -96,6 +99,9 @@ async def run_parallel_review_async(
                 normalized,
                 reviewer_config=reviewer_config,
                 timeout_seconds=resolved_timeouts[reviewer],
+                reviewer_input=reviewer_inputs[reviewer],
+                memory_context=tuple(item.to_dict() for item in selected_retrieved_memories),
+                memory_mode=memory_mode,
             )
             for reviewer in selection.reviewers_used
         )
@@ -170,6 +176,26 @@ def _normalized_requirement_dict(requirement: NormalizedRequirement) -> dict[str
     return payload
 
 
+def _build_reviewer_inputs_with_memory(
+    requirement: NormalizedRequirement,
+    retrieved_memories: list[RetrievedMemory],
+    *,
+    memory_mode: str,
+) -> dict[str, str]:
+    mapping = {
+        "product": "general",
+        "engineering": "architecture",
+        "qa": "qa",
+        "security": "security",
+    }
+    reviewer_inputs: dict[str, str] = {}
+    for reviewer, reviewer_kind in mapping.items():
+        base = requirement.for_reviewer(reviewer_kind)
+        memory_block = format_memory_block_for_reviewer(reviewer, retrieved_memories, memory_mode=memory_mode)
+        reviewer_inputs[reviewer] = f"{base}\n\n{memory_block}".strip() if memory_block else base
+    return reviewer_inputs
+
+
 def _resolve_reviewer_timeouts(reviewer_timeouts: Mapping[str, float] | None) -> dict[str, float]:
     resolved = {reviewer: _DEFAULT_REVIEWER_TIMEOUT_SECONDS for reviewer in _REVIEWER_ORDER}
     if reviewer_timeouts is None:
@@ -189,16 +215,31 @@ async def _run_reviewer_with_resilience(
     *,
     reviewer_config: ReviewerConfig | None,
     timeout_seconds: float,
+    reviewer_input: str,
+    memory_context: tuple[dict[str, Any], ...],
+    memory_mode: str,
 ) -> ReviewerResult:
     review_fn = _REVIEWER_FUNCTIONS[reviewer]
 
     try:
         if timeout_seconds > 0:
             return await asyncio.wait_for(
-                review_fn(requirement, config=reviewer_config),
+                review_fn(
+                    requirement,
+                    config=reviewer_config,
+                    reviewer_input=reviewer_input,
+                    memory_context=memory_context,
+                    memory_mode=memory_mode,
+                ),
                 timeout=timeout_seconds,
             )
-        return await review_fn(requirement, config=reviewer_config)
+        return await review_fn(
+            requirement,
+            config=reviewer_config,
+            reviewer_input=reviewer_input,
+            memory_context=memory_context,
+            memory_mode=memory_mode,
+        )
     except TimeoutError:
         reason = f"timed out after {timeout_seconds:.1f}s"
         return _partial_reviewer_result(reviewer, status="timeout", reason=reason)

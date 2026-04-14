@@ -6,18 +6,28 @@ import asyncio
 
 from ..normalizer import NormalizedRequirement
 from .base import ReviewFinding, ReviewerConfig, ReviewerResult, RiskItem, limit_items
+from .memory_support import build_memory_evidence, build_memory_notes
 from .tooling import get_reviewer_toolbox
 
 
-async def review(requirement: NormalizedRequirement, config: ReviewerConfig | None = None) -> ReviewerResult:
+async def review(
+    requirement: NormalizedRequirement,
+    config: ReviewerConfig | None = None,
+    *,
+    reviewer_input: str = "",
+    memory_context: tuple[dict, ...] = (),
+    memory_mode: str = "off",
+) -> ReviewerResult:
     resolved = config or ReviewerConfig()
     findings: list[ReviewFinding] = []
     risks: list[RiskItem] = []
     open_questions: list[str] = []
+    memory_evidence = build_memory_evidence(memory_context)
+    memory_notes = build_memory_notes(memory_context, memory_mode=memory_mode)
 
-    query = " ".join([requirement.summary, *requirement.modules[:4], *requirement.dependency_hints[:4]]).strip()
+    query = " ".join([requirement.summary, *requirement.modules[:4], *requirement.dependency_hints[:4], reviewer_input[:200]]).strip()
     tool_result = get_reviewer_toolbox().local_risk_catalog.run(reviewer="engineering", query=query)
-    evidence = tool_result.evidence
+    evidence = tuple([*memory_evidence, *tool_result.evidence])
     tool_calls = (tool_result.tool_call,) if tool_result.tool_call else ()
 
     if requirement.dependency_hints and not requirement.modules:
@@ -65,5 +75,5 @@ async def review(requirement: NormalizedRequirement, config: ReviewerConfig | No
         ambiguity_type=ambiguity_type,
         clarification_question=clarification_question,
         reviewer_status_detail=reviewer_status_detail,
-        notes=("Evidence prioritized from local risk catalog for dependency and architecture signals.",),
+        notes=("Evidence prioritized from local risk catalog for dependency and architecture signals.", *memory_notes),
     )

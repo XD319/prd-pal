@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .memory import DEFAULT_MEMORY_DB_PATH, MemoryService, process_review_memory_extraction_async
+from .monitoring import append_audit_event, normalize_audit_context
 from .review.memory_store import FileBackedMemoryStore, NoopMemoryStore
 from .review.normalizer import NormalizedRequirement, normalize_requirement
 from .workflow import build_review_graph
@@ -107,6 +109,40 @@ def _resolve_normalizer_cache_config(normalizer_cache_path: str | Path | None) -
     return {"path": configured_path}
 
 
+def _resolve_structured_memory_config(
+    *,
+    review_memory_db_path: str | Path | None,
+    review_memory_extract_enabled: bool | None,
+    review_memory_max_kept: int | None,
+) -> dict[str, Any]:
+    enabled = (
+        review_memory_extract_enabled
+        if review_memory_extract_enabled is not None
+        else _truthy(os.getenv("REVIEW_MEMORY_EXTRACT_ENABLED", ""))
+    )
+    configured_path = str(review_memory_db_path or "").strip() or str(DEFAULT_MEMORY_DB_PATH)
+    return {
+        "enabled": bool(enabled),
+        "db_path": configured_path,
+        "max_kept": max(1, int(review_memory_max_kept or 3)),
+    }
+
+
+def _resolve_memory_retrieval_config(
+    *,
+    review_memory_db_path: str | Path | None,
+    review_memory_mode: str | None,
+) -> dict[str, Any]:
+    mode = str(review_memory_mode or os.getenv("REVIEW_MEMORY_MODE", "off")).strip().lower() or "off"
+    if mode not in {"off", "assist", "strict", "hybrid"}:
+        mode = "off"
+    configured_path = str(review_memory_db_path or "").strip() or str(DEFAULT_MEMORY_DB_PATH)
+    return {
+        "mode": mode,
+        "db_path": configured_path,
+    }
+
+
 def _resolve_memory_store(memory_config: dict[str, Any]):
     storage_path = str(memory_config.get("path", "") or "").strip()
     seeds_dir = str(memory_config.get("seeds_dir", "") or "").strip()
@@ -146,9 +182,15 @@ async def run_review(
     review_memory_path: str | Path | None = None,
     review_memory_enabled: bool | None = None,
     review_memory_seeds_dir: str | Path | None = None,
+    review_memory_db_path: str | Path | None = None,
+    review_memory_extract_enabled: bool | None = None,
+    review_memory_max_kept: int | None = None,
+    review_memory_mode: str | None = None,
     normalizer_cache_path: str | Path | None = None,
     review_profile: dict[str, Any] | None = None,
     review_profile_pack: dict[str, Any] | None = None,
+    canonical_review_request: dict[str, Any] | None = None,
+    audit_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved_run_id = run_id or make_run_id()
     run_dir = os.path.join(str(outputs_root), resolved_run_id)
@@ -159,6 +201,15 @@ async def run_review(
         review_memory_seeds_dir=review_memory_seeds_dir,
     )
     normalizer_cache_config = _resolve_normalizer_cache_config(normalizer_cache_path)
+    structured_memory_config = _resolve_structured_memory_config(
+        review_memory_db_path=review_memory_db_path,
+        review_memory_extract_enabled=review_memory_extract_enabled,
+        review_memory_max_kept=review_memory_max_kept,
+    )
+    memory_retrieval_config = _resolve_memory_retrieval_config(
+        review_memory_db_path=review_memory_db_path,
+        review_memory_mode=review_memory_mode,
+    )
 
     graph = build_review_graph(progress_hook=progress_hook)
     initial_state: dict[str, Any] = {
@@ -168,6 +219,8 @@ async def run_review(
         "normalizer_cache_config": normalizer_cache_config,
         "review_profile": dict(review_profile or {}),
         "review_profile_pack": dict(review_profile_pack or {}),
+        "canonical_review_request": dict(canonical_review_request or {}),
+        "memory_retrieval_config": memory_retrieval_config,
     }
     if isinstance(review_mode_override, str) and review_mode_override.strip():
         initial_state["review_mode_override"] = review_mode_override.strip()
@@ -189,6 +242,35 @@ async def run_review(
             requirement=_normalized_requirement_from_state(result, requirement_doc),
             review_payload=result.get("parallel_review") if isinstance(result.get("parallel_review"), dict) else result,
         )
+
+    if structured_memory_config["enabled"]:
+        try:
+            memory_service = MemoryService.from_db_path(structured_memory_config["db_path"])
+            await memory_service.initialize()
+            extraction = await process_review_memory_extraction_async(
+                run_id=resolved_run_id,
+                run_dir=run_dir,
+                review_result=result,
+                memory_service=memory_service,
+                canonical_review_request=canonical_review_request,
+                review_profile=review_profile,
+                audit_context=audit_context,
+                max_memories=int(structured_memory_config["max_kept"]),
+            )
+            result["memory_extraction"] = extraction.to_dict()
+        except Exception as exc:
+            result["memory_extraction"] = {
+                "status": "skipped",
+                "error": str(exc),
+            }
+            append_audit_event(
+                run_dir,
+                operation="memory_extraction_error",
+                status="error",
+                run_id=resolved_run_id,
+                audit_context=normalize_audit_context(audit_context),
+                details={"error": str(exc)},
+            )
 
     report_paths = write_outputs(run_dir=run_dir, run_id=resolved_run_id, result=result)
     return {

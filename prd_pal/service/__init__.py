@@ -1,5 +1,7 @@
 """Shared service APIs for prd_pal entrypoints."""
 
+from prd_pal.memory.service import DEFAULT_MEMORY_DB_PATH, MemoryService, MemoryServiceError
+
 from .artifact_service import ArtifactReviewSummary, review_artifact_version_async
 from .artifact_patch_service import (
     apply_artifact_patch_async,
@@ -36,6 +38,9 @@ from .roadmap_service import (
 )
 
 __all__ = [
+    "DEFAULT_MEMORY_DB_PATH",
+    "MemoryService",
+    "MemoryServiceError",
     "append_execution_event",
     "ArtifactReviewSummary",
     "ReviewResultSummary",

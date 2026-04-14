@@ -6,6 +6,7 @@ import asyncio
 
 from ..normalizer import NormalizedRequirement
 from .base import EvidenceItem, ReviewFinding, ReviewerConfig, ReviewerResult, RiskItem, ToolCall, limit_items
+from .memory_support import build_memory_evidence, build_memory_notes
 
 
 def _defect_heuristic(requirement: NormalizedRequirement) -> tuple[tuple[EvidenceItem, ...], ToolCall]:
@@ -43,12 +44,22 @@ def _defect_heuristic(requirement: NormalizedRequirement) -> tuple[tuple[Evidenc
     )
 
 
-async def review(requirement: NormalizedRequirement, config: ReviewerConfig | None = None) -> ReviewerResult:
+async def review(
+    requirement: NormalizedRequirement,
+    config: ReviewerConfig | None = None,
+    *,
+    reviewer_input: str = "",
+    memory_context: tuple[dict, ...] = (),
+    memory_mode: str = "off",
+) -> ReviewerResult:
     resolved = config or ReviewerConfig()
     findings: list[ReviewFinding] = []
     risks: list[RiskItem] = []
     open_questions: list[str] = []
-    evidence, tool_call = _defect_heuristic(requirement)
+    heuristic_evidence, tool_call = _defect_heuristic(requirement)
+    memory_evidence = build_memory_evidence(memory_context)
+    memory_notes = build_memory_notes(memory_context, memory_mode=memory_mode)
+    evidence = tuple([*memory_evidence, *heuristic_evidence])
 
     if not requirement.acceptance_criteria:
         findings.append(
@@ -105,5 +116,5 @@ async def review(requirement: NormalizedRequirement, config: ReviewerConfig | No
         ambiguity_type=ambiguity_type,
         clarification_question=clarification_question,
         reviewer_status_detail=reviewer_status_detail,
-        notes=("QA evidence currently comes from local heuristics; external defect systems remain optional stubs.",),
+        notes=("QA evidence currently comes from local heuristics; external defect systems remain optional stubs.", *memory_notes),
     )

@@ -15,6 +15,7 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 
 from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent, risk_agent
+from .memory import MemoryService, retrieve_memories_async
 from .review import decide_review_mode, run_parallel_review_async
 from .state import ReviewState, plan_from_state
 from .review.memory_store import FileBackedMemoryStore, NoopMemoryStore
@@ -283,7 +284,7 @@ def _resolve_memory_store(state: ReviewState):
     return FileBackedMemoryStore(storage_path, seeds_dir=seeds_dir or None)
 
 
-def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
+async def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
     requirement_doc = str(state.get("requirement_doc", "") or "")
     cache = _resolve_normalizer_cache(state)
     cache_result = normalize_requirement_with_cache(requirement_doc, cache=cache)
@@ -291,12 +292,39 @@ def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
     memory_hit_objects = memory_store.retrieve_similar(cache_result.requirement, limit=3)
     memory_hits = [item.to_dict() for item in memory_hit_objects]
     similar_reviews_referenced = [str(item.get("reference_id", "") or "").strip() for item in memory_hits if str(item.get("reference_id", "") or "").strip()]
+    memory_retrieval_config = dict(state.get("memory_retrieval_config", {}) or {})
+    memory_mode = str(memory_retrieval_config.get("mode", "off") or "off").strip().lower() or "off"
+    structured_memory_hits: list[dict[str, Any]] = []
+    structured_memory_hits_objects: list[Any] = []
+    memory_usage_notes: list[str] = []
+    if memory_mode != "off":
+        try:
+            memory_service = MemoryService.from_db_path(memory_retrieval_config.get("db_path"))
+            await memory_service.initialize()
+            retrieved = await retrieve_memories_async(
+                memory_service=memory_service,
+                canonical_review_request=dict(state.get("canonical_review_request", {}) or {}),
+                normalized_requirement=asdict(cache_result.requirement),
+                memory_mode=memory_mode,
+            )
+            structured_memory_hits_objects = list(retrieved)
+            structured_memory_hits = [item.to_dict() for item in retrieved]
+            memory_usage_notes = [str(item.get("usage_note", "") or "").strip() for item in structured_memory_hits if str(item.get("usage_note", "") or "").strip()]
+        except Exception:
+            structured_memory_hits = []
+            structured_memory_hits_objects = []
+            memory_usage_notes = []
+            memory_mode = "off"
     return {
         "normalized_requirement_obj": cache_result.requirement,
         "normalized_requirement": asdict(cache_result.requirement),
         "memory_hits": memory_hits,
         "memory_hits_objects": memory_hit_objects,
         "similar_reviews_referenced": similar_reviews_referenced,
+        "structured_memory_hits": structured_memory_hits,
+        "structured_memory_hits_objects": structured_memory_hits_objects,
+        "memory_mode": memory_mode,
+        "memory_usage_notes": memory_usage_notes,
         "normalizer_cache_hit": cache_result.cache_hit,
         "rag_enabled": not isinstance(memory_store, NoopMemoryStore),
     }
@@ -305,9 +333,21 @@ def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
 def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> ReviewState:
     memory_hits = [dict(item) for item in context.get("memory_hits", []) or [] if isinstance(item, dict)]
     similar_reviews_referenced = [str(item) for item in context.get("similar_reviews_referenced", []) or [] if str(item).strip()]
+    structured_memory_hits = [dict(item) for item in context.get("structured_memory_hits", []) or [] if isinstance(item, dict)]
+    memory_usage_notes = [str(item) for item in context.get("memory_usage_notes", []) or [] if str(item).strip()]
+    memory_mode = str(context.get("memory_mode", "off") or "off").strip().lower() or "off"
     update["normalized_requirement"] = dict(context.get("normalized_requirement", {}) or {})
     update["memory_hits"] = memory_hits
     update["similar_reviews_referenced"] = similar_reviews_referenced
+    update["structured_memory_hits"] = structured_memory_hits
+    update["memory_mode"] = memory_mode
+    update["memory_usage_notes"] = memory_usage_notes
+    update["memory_usage"] = {
+        "memory_mode": memory_mode,
+        "retrieved_count": len(structured_memory_hits),
+        "retrieved_memory_ids": [str(item.get("memory_id", "") or "").strip() for item in structured_memory_hits if str(item.get("memory_id", "") or "").strip()],
+        "usage_notes": memory_usage_notes,
+    }
     update["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
     update["rag_enabled"] = bool(context.get("rag_enabled", False))
 
@@ -315,6 +355,9 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
     meta["memory_hits"] = memory_hits
     meta["memory_hit_count"] = len(memory_hits)
     meta["similar_reviews_referenced"] = similar_reviews_referenced
+    meta["memory_mode"] = memory_mode
+    meta["retrieved_memories"] = structured_memory_hits
+    meta["memory_usage_notes"] = memory_usage_notes
     meta["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
     meta["rag_enabled"] = bool(context.get("rag_enabled", False))
     update["parallel_review_meta"] = meta
@@ -323,6 +366,10 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
     if parallel_review:
         parallel_review["memory_hits"] = memory_hits
         parallel_review["similar_reviews_referenced"] = similar_reviews_referenced
+        parallel_review["memory_mode"] = memory_mode
+        parallel_review["retrieved_memories"] = structured_memory_hits
+        parallel_review["memory_usage_notes"] = memory_usage_notes
+        parallel_review["memory_usage"] = dict(update["memory_usage"])
         parallel_review["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
         parallel_review["rag_enabled"] = bool(context.get("rag_enabled", False))
         update["parallel_review"] = parallel_review
@@ -351,7 +398,7 @@ def _attach_profile_meta(meta: dict[str, Any], state: ReviewState) -> dict[str, 
 
 async def _reviewer_node(state: ReviewState) -> ReviewState:
     requested_mode = _resolve_requested_mode(state)
-    review_context = _prepare_review_context(state)
+    review_context = await _prepare_review_context(state)
     decision = decide_review_mode(
         str(state.get("requirement_doc", "") or ""),
         requested_mode=requested_mode,
@@ -526,6 +573,8 @@ async def _invoke_parallel_review_manager(requirement_doc: str, run_dir: str, de
         "gating_decision": decision,
         "normalized_requirement": review_context["normalized_requirement_obj"],
         "memory_hits": list(review_context.get("memory_hits_objects", []) or []),
+        "retrieved_memories": list(review_context.get("structured_memory_hits_objects", []) or []),
+        "memory_mode": str(review_context.get("memory_mode", "off") or "off"),
         "normalizer_cache_hit": bool(review_context.get("normalizer_cache_hit", False)),
         "rag_enabled": bool(review_context.get("rag_enabled", False)),
     }
