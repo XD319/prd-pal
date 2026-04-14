@@ -29,6 +29,7 @@ from .review_service import (
     review_prd_text_async,
     review_requirement_for_mcp_async,
 )
+from .revision_service import generate_revision_for_run, generate_revision_for_run_async
 from .roadmap_service import (
     build_roadmap_prompt,
     diff_roadmap_versions,
@@ -62,6 +63,8 @@ __all__ = [
     "review_prd_text",
     "review_prd_text_async",
     "review_requirement_for_mcp_async",
+    "generate_revision_for_run",
+    "generate_revision_for_run_async",
     "build_roadmap_prompt",
     "diff_roadmap_versions",
     "generate_constrained_roadmap",

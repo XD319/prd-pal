@@ -69,6 +69,7 @@ from prd_pal.service.review_service import (
     record_revision_input,
     record_revision_stage_decision,
 )
+from prd_pal.service.revision_service import generate_revision_for_run_async
 from prd_pal.templates import TemplateRegistryError, list_template_records
 from prd_pal.utils.logging import get_logger
 from prd_pal.workspace import ArtifactRepository, ArtifactVersion, ArtifactVersionStatus, WorkspaceRepository, WorkspaceState
@@ -1293,6 +1294,39 @@ async def submit_review_revision_input(run_id: str, payload: RevisionInputReques
         raise HTTPException(
             status_code=409,
             detail={"code": "revision_input_unavailable", "message": str(exc), "run_id": run_id},
+        ) from exc
+
+
+@app.post("/api/review/{run_id}/revision-generate")
+async def generate_review_revision(run_id: str, request: Request) -> dict[str, Any]:
+    _enforce_run_access(request, run_id)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    try:
+        response_payload = await generate_revision_for_run_async(
+            run_id=run_id,
+            outputs_root=OUTPUTS_ROOT,
+            audit_context={
+                "source": "web",
+                "tool_name": "review.revision_generate",
+                "actor": str(request_context.get("open_id") or "web").strip() or "web",
+                "client_metadata": request_context,
+            },
+        )
+        response_payload["result_page"] = _build_result_page_payload(
+            run_id,
+            request_context=request_context,
+            run_dir=OUTPUTS_ROOT / run_id,
+        )
+        return response_payload
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "run_not_found", "message": str(exc), "run_id": run_id},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "revision_generate_unavailable", "message": str(exc), "run_id": run_id},
         ) from exc
 
 

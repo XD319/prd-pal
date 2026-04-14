@@ -156,6 +156,9 @@ _REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {
     "risk_items_json": "risk_items.json",
     "open_questions_json": "open_questions.json",
     "review_summary_md": "review_summary.md",
+    "revised_prd": "revised_prd.md",
+    "revision_summary_md": "revision_summary.md",
+    "revision_summary_json": "revision_summary.json",
 }
 
 _LLM_OVERRIDE_OPTION_KEYS: dict[str, str] = {

@@ -11,6 +11,7 @@ from .planner_schema import (
 )
 from .roadmap_schema import RoadmapDiffOutput, RoadmapItem, RoadmapOutput
 from .risk_schema import RiskItem, RiskOutput, validate_risk_output
+from .revision_schema import RevisionAgentOutput, validate_revision_output
 from .reviewer_schema import (
     PlanReview,
     ReviewResultItem,
@@ -22,6 +23,7 @@ __all__ = [
     "ParserOutput",
     "PlannerOutput",
     "RiskOutput",
+    "RevisionAgentOutput",
     "ReviewerOutput",
     "RoadmapItem",
     "RoadmapOutput",
@@ -29,5 +31,6 @@ __all__ = [
     "validate_parser_output",
     "validate_planner_output",
     "validate_risk_output",
+    "validate_revision_output",
     "validate_reviewer_output",
 ]
