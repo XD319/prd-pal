@@ -339,13 +339,19 @@ def _build_result_page_payload(
 
     is_feishu_entry = (
         str(entry_context.get("source_origin") or "").strip().lower() == "feishu"
+        or str(audit_context.get("source") or "").strip().lower() == "feishu"
         or str(client_metadata.get("trigger_source") or "").strip().lower() == "feishu"
-        or str((request_context or {}).get("trigger_source") or "").strip().lower() == "feishu"
     )
     if not is_feishu_entry:
         return {"path": base_path, "url": base_path}
 
     query_params = _merge_result_page_context(entry_result_context, client_metadata, request_context)
+    expected_open_id = str(entry_context.get("submitter_open_id") or "").strip()
+    expected_tenant_key = str(entry_context.get("tenant_key") or "").strip()
+    if expected_open_id:
+        query_params["open_id"] = expected_open_id
+    if expected_tenant_key:
+        query_params["tenant_key"] = expected_tenant_key
     query_params["embed"] = "feishu"
 
     open_id = str(query_params.get("open_id") or "").strip()
@@ -358,6 +364,29 @@ def _build_result_page_payload(
     query_string = urlencode(query_params)
     url = f"{base_path}?{query_string}" if query_string else base_path
     return {"path": url, "url": url}
+
+
+def _resolve_run_feishu_context(run_id: str, context: dict[str, Any] | None) -> dict[str, str]:
+    resolved = _extract_result_page_context(context)
+    run_dir = OUTPUTS_ROOT / str(run_id or "").strip()
+    entry_context = _read_run_entry_context(run_dir)
+    if str(entry_context.get("source_origin") or "").strip().lower() != "feishu":
+        return resolved
+
+    entry_result_context = entry_context.get("result_page_context")
+    if isinstance(entry_result_context, dict):
+        merged = _merge_result_page_context(entry_result_context, resolved)
+    else:
+        merged = dict(resolved)
+
+    submitter_open_id = str(entry_context.get("submitter_open_id") or "").strip()
+    tenant_key = str(entry_context.get("tenant_key") or "").strip()
+    if submitter_open_id and not str(merged.get("open_id") or "").strip():
+        merged["open_id"] = submitter_open_id
+    if tenant_key and not str(merged.get("tenant_key") or "").strip():
+        merged["tenant_key"] = tenant_key
+    merged.setdefault("trigger_source", "feishu")
+    return merged
 
 
 def _resolve_request_feishu_context(request: Request | None) -> dict[str, str]:
@@ -667,7 +696,7 @@ async def _submit_feishu_workspace_clarification(
             workspace = await _load_workspace_or_404(workspace_id)
     if workspace is not None:
         _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
-    request_context = _workspace_context_from_request(request)
+    request_context = _resolve_run_feishu_context(run_id, _workspace_context_from_request(request))
     audit_context = _merge_audit_context_with_request(payload.build_audit_context(), request_context)
     result_payload = _submit_review_clarification_internal(
         run_id=run_id,
@@ -697,7 +726,7 @@ async def _submit_feishu_workspace_clarification(
 
 async def _submit_feishu_clarification(*, request: Request, payload: Any) -> dict[str, Any]:
     run_id = str(payload.run_id or "").strip()
-    request_context = _resolve_request_feishu_context(request)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
     audit_context = _merge_audit_context_with_request(payload.build_audit_context(), request_context)
     result_payload = _submit_review_clarification_internal(
         run_id=run_id,
@@ -1047,16 +1076,29 @@ async def create_review(payload: ReviewCreateRequest) -> dict[str, str]:
 @app.get("/api/review/{run_id}")
 async def get_review_status(run_id: str, request: Request = None) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    run_dir = OUTPUTS_ROOT / run_id
     job = await _job_registry.get(run_id)
 
     if job:
-        return _job_status_payload(job)
+        payload = _job_status_payload(job)
+        payload["result_page"] = _build_result_page_payload(
+            run_id,
+            request_context=request_context,
+            run_dir=run_dir,
+        )
+        return payload
 
-    run_dir = OUTPUTS_ROOT / run_id
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail=f"run_id not found: {run_id}")
 
-    return _persisted_status_payload(run_id, run_dir)
+    payload = _persisted_status_payload(run_id, run_dir)
+    payload["result_page"] = _build_result_page_payload(
+        run_id,
+        request_context=request_context,
+        run_dir=run_dir,
+    )
+    return payload
 
 
 @app.get("/api/review/{run_id}/progress/stream")
@@ -1098,9 +1140,9 @@ async def stream_review_progress(run_id: str) -> StreamingResponse:
 @app.post("/api/review/{run_id}/clarification")
 async def submit_review_clarification(run_id: str, payload: ClarificationAnswerRequest, request: Request) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_request_feishu_context(request)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
     try:
-        return await answer_review_clarification_async(
+        response_payload = await answer_review_clarification_async(
             run_id=run_id,
             answers=[item.model_dump(mode="python") for item in payload.answers],
             outputs_root=OUTPUTS_ROOT,
@@ -1113,6 +1155,12 @@ async def submit_review_clarification(run_id: str, payload: ClarificationAnswerR
             patch=payload.patch,
             patch_context=payload.patch_context,
         )
+        response_payload["result_page"] = _build_result_page_payload(
+            run_id,
+            request_context=request_context,
+            run_dir=OUTPUTS_ROOT / run_id,
+        )
+        return response_payload
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
@@ -1133,8 +1181,15 @@ async def submit_review_clarification(run_id: str, payload: ClarificationAnswerR
 @app.get("/api/review/{run_id}/result")
 async def get_review_result(run_id: str, request: Request) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
+    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
     try:
-        return get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
+        payload = get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
+        payload["result_page"] = _build_result_page_payload(
+            run_id,
+            request_context=request_context,
+            run_dir=OUTPUTS_ROOT / run_id,
+        )
+        return payload
     except ReviewRunNotFoundError as exc:
         raise HTTPException(
             status_code=404,

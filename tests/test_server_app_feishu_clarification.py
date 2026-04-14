@@ -332,6 +332,85 @@ def test_feishu_clarification_uses_request_context_when_payload_context_is_missi
     )
 
 
+def test_feishu_clarification_falls_back_to_entry_context_when_request_context_missing(tmp_path, monkeypatch):
+    run_id = "20260309T020213Z"
+    _write_run_payloads(
+        tmp_path,
+        run_id,
+        clarification={
+            "triggered": True,
+            "status": "pending",
+            "questions": [
+                {
+                    "id": "clarify-fallback",
+                    "question": "What is the target conversion rate?",
+                    "reviewer": "product",
+                    "ambiguity_type": "unanswerable",
+                    "finding_ids": ["finding-fallback-1"],
+                }
+            ],
+            "answers_applied": [],
+            "findings_updated": [],
+        },
+        findings=[
+            {
+                "finding_id": "finding-fallback-1",
+                "title": "Missing target conversion rate",
+                "detail": "Target conversion rate is missing.",
+                "description": "Target conversion rate is missing.",
+                "severity": "high",
+                "category": "scope",
+                "source_reviewer": "product",
+                "reviewers": ["product"],
+                "ambiguity_type": "unanswerable",
+                "clarification_applied": False,
+                "original_severity": "",
+                "user_clarification": "",
+            }
+        ],
+        reviewer_summaries=[],
+    )
+    (tmp_path / run_id / "entry_context.json").write_text(
+        json.dumps(
+            {
+                "source_origin": "feishu",
+                "entry_mode": "plugin",
+                "submitter_open_id": "ou_entry_user",
+                "tenant_key": "tenant-entry",
+                "trigger_source": "feishu",
+                "result_page_context": {
+                    "trigger_source": "feishu",
+                    "open_id": "ou_entry_user",
+                    "tenant_key": "tenant-entry",
+                    "lang": "zh-CN",
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_DISABLED", "true")
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    client = _build_client()
+
+    response = client.post(
+        "/api/feishu/clarification",
+        json={
+            "run_id": run_id,
+            "question_id": "clarify-fallback",
+            "answer": "Target conversion rate should reach 5%.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result_page"]["url"] == (
+        f"/run/{run_id}?trigger_source=feishu&open_id=ou_entry_user&tenant_key=tenant-entry&lang=zh-CN&embed=feishu"
+    )
+
+
 def test_feishu_clarification_result_page_degrades_when_open_id_is_missing(tmp_path, monkeypatch):
     run_id = "20260309T020212Z"
     _write_run_payloads(
@@ -370,6 +449,48 @@ def test_feishu_clarification_result_page_degrades_when_open_id_is_missing(tmp_p
     assert payload == {
         "path": f"/run/{run_id}?trigger_source=feishu&tenant_key=tenant-only&embed=feishu",
         "url": f"/run/{run_id}?trigger_source=feishu&tenant_key=tenant-only&embed=feishu",
+    }
+
+
+def test_feishu_clarification_result_page_uses_entry_identity_when_request_context_is_forged(tmp_path, monkeypatch):
+    run_id = "20260309T020214Z"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    run_dir.joinpath("entry_context.json").write_text(
+        json.dumps(
+            {
+                "source_origin": "feishu",
+                "entry_mode": "plugin",
+                "submitter_open_id": "ou_owner",
+                "tenant_key": "tenant-owner",
+                "trigger_source": "feishu",
+                "result_page_context": {
+                    "trigger_source": "feishu",
+                    "open_id": "ou_owner",
+                    "tenant_key": "tenant-owner",
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+
+    payload = app_module._build_result_page_payload(
+        run_id,
+        request_context={
+            "trigger_source": "feishu",
+            "open_id": "ou_forged",
+            "tenant_key": "tenant-forged",
+            "locale": "zh-CN",
+        },
+        run_dir=run_dir,
+    )
+
+    assert payload == {
+        "path": f"/run/{run_id}?trigger_source=feishu&open_id=ou_owner&tenant_key=tenant-owner&locale=zh-CN&embed=feishu",
+        "url": f"/run/{run_id}?trigger_source=feishu&open_id=ou_owner&tenant_key=tenant-owner&locale=zh-CN&embed=feishu",
     }
 
 

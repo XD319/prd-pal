@@ -49,7 +49,12 @@ def test_get_review_result_allows_matching_feishu_context(tmp_path, monkeypatch)
     response = client.get(f"/api/review/{run_id}/result?open_id=ou_owner&tenant_key=tenant-a")
 
     assert response.status_code == 200
-    assert response.json()["run_id"] == run_id
+    payload = response.json()
+    assert payload["run_id"] == run_id
+    assert payload["result_page"] == {
+        "path": f"/run/{run_id}?open_id=ou_owner&tenant_key=tenant-a&trigger_source=feishu&embed=feishu",
+        "url": f"/run/{run_id}?open_id=ou_owner&tenant_key=tenant-a&trigger_source=feishu&embed=feishu",
+    }
 
 
 def test_get_review_result_rejects_mismatched_feishu_context(tmp_path, monkeypatch):
@@ -65,4 +70,35 @@ def test_get_review_result_rejects_mismatched_feishu_context(tmp_path, monkeypat
     assert response.json()["detail"] == {
         "code": "run_access_denied",
         "message": "This run is not accessible to the current Feishu user.",
+    }
+
+
+def test_get_review_status_for_web_run_does_not_force_feishu_result_page(tmp_path, monkeypatch):
+    run_id = "20260409T120003Z"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "report.md").write_text("# Review Report", encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "mode": "quick",
+                "review_mode": "quick",
+                "trace": {"reviewer": {"status": "ok"}},
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "run_trace.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    app_module._jobs.clear()
+
+    client = _build_client()
+    response = client.get(f"/api/review/{run_id}?open_id=ou_fake&tenant_key=tenant-fake")
+    assert response.status_code == 200
+    assert response.json()["result_page"] == {
+        "path": f"/run/{run_id}",
+        "url": f"/run/{run_id}",
     }
