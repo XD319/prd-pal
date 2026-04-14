@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { submitReview } from '../api';
 import PanelErrorBoundary from '../components/PanelErrorBoundary';
 import ReviewHistoryPanel from '../components/ReviewHistoryPanel';
@@ -94,11 +94,14 @@ function HomePage() {
       <header className="hero hero-tight">
         <div>
           <p className="eyebrow">Requirement Review Workspace</p>
-          <h1>Plan faster with a focused review workspace</h1>
+          <h1>Web workspace for trial and development</h1>
           <p className="hero-copy">
-            Start a new requirement review from the left, then jump into any run detail page for progress, findings,
-            risks, open questions, and downloadable artifacts.
+            Feishu is now the primary product entry for end users. This page remains available as a local trial and
+            engineering workspace for rapid debugging, smoke checks, and advanced run inspection.
           </p>
+          <div className="action-row">
+            <Link to="/feishu" className="secondary-button">Open Feishu work entry</Link>
+          </div>
         </div>
 
         <div className="hero-panel">
@@ -106,15 +109,15 @@ function HomePage() {
           <ol className="quick-start-list" aria-label="Quick start steps">
             <li className="quick-start-step">
               <strong>1. Submit the PRD</strong>
-              <p>Paste the requirement document or point to the canonical source.</p>
+              <p>Use this page to simulate submissions before handing the flow to Feishu users.</p>
             </li>
             <li className="quick-start-step">
               <strong>2. Open the run page</strong>
-              <p>Each review now has its own URL, so tracking progress and sharing context is simpler.</p>
+              <p>Each review has its own URL, useful for troubleshooting result rendering and panel behavior.</p>
             </li>
             <li className="quick-start-step">
-              <strong>3. Follow up with confidence</strong>
-              <p>Inspect findings, risks, questions, and artifacts from one dedicated detail view.</p>
+              <strong>3. Validate feature changes safely</strong>
+              <p>Inspect findings, risks, clarifications, and artifacts before promoting changes to Feishu flow.</p>
             </li>
           </ol>
         </div>

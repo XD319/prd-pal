@@ -49,6 +49,7 @@ function FeishuEntryPage() {
   }, [history.runs]);
 
   const workspaceLabel = searchParams.get('workspace') || searchParams.get('tenant') || 'Feishu Workspace';
+  const preservedRunQueryKeys = ['open_id', 'tenant_key', 'lang', 'locale', 'user_id', 'trigger_source'];
 
   function updateField(field, value) {
     setForm((current) => ({
@@ -137,16 +138,29 @@ function FeishuEntryPage() {
     if (!runId) {
       return;
     }
-    navigate(`/run/${runId}?embed=feishu`);
+    navigate(buildFeishuRunUrl(runId));
   }
 
   function openRunSection(runId, sectionHash) {
     if (!runId) {
       return;
     }
+    navigate(buildFeishuRunUrl(runId, sectionHash));
+  }
+
+  function buildFeishuRunUrl(runId, sectionHash = '') {
+    const params = new URLSearchParams();
+    params.set('embed', 'feishu');
+    params.set('trigger_source', 'feishu');
+    preservedRunQueryKeys.forEach((key) => {
+      const value = String(searchParams.get(key) || '').trim();
+      if (value) {
+        params.set(key, value);
+      }
+    });
     const normalizedHash = String(sectionHash || '').trim();
     const hashPart = normalizedHash ? `#${normalizedHash.replace(/^#/, '')}` : '';
-    navigate(`/run/${runId}?embed=feishu${hashPart}`);
+    return `/run/${runId}?${params.toString()}${hashPart}`;
   }
 
   useEffect(() => {
@@ -163,7 +177,7 @@ function FeishuEntryPage() {
           <p className="eyebrow">Feishu Work Entry</p>
           <h1>飞书工作入口页</h1>
           <p className="hero-copy">
-            从飞书进入后，你可以直接开始新评审，回到最近一次 run，处理待澄清问题，或继续上次工作，不需要切换到完整工作台。
+            从飞书进入后，你可以在一个页面完成完整闭环：发起评审、查看结果、回答澄清、继续下一步动作，不需要切换到完整工作台。
           </p>
         </div>
 
@@ -171,7 +185,7 @@ function FeishuEntryPage() {
           <span className="hero-label">Current Workspace</span>
           <strong>{workspaceLabel}</strong>
           <p>
-            推荐使用飞书文档链接发起评审。提交后可直接进入嵌入式 run 详情页继续跟进。
+            推荐使用飞书文档链接发起评审。入口页会自动保留飞书上下文并跳转到完整 H5 结果页。
           </p>
         </div>
       </header>
@@ -266,8 +280,8 @@ function FeishuEntryPage() {
               <>
                 <p className="panel-copy">
                   {clarificationSummary.pendingCount > 0
-                    ? `最近 run 有 ${clarificationSummary.pendingCount} 条待回答澄清，建议优先处理。`
-                    : '最近 run 暂无待处理澄清问题。'}
+                    ? `最近 run 有 ${clarificationSummary.pendingCount} 条待回答澄清，建议优先处理后再进入下一步。`
+                    : '最近 run 暂无待处理澄清问题，可直接进入下一步交付。'}
                 </p>
                 <div className="action-row">
                   <button

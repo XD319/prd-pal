@@ -14,9 +14,10 @@
 完成接入后，应满足以下结果：
 
 1. 用户可在飞书中发起评审
-2. 用户可在飞书中打开结果页
+2. 用户可在飞书中打开完整 H5 结果页
 3. 用户可在飞书中回答澄清问题
-4. 系统可保留必要审计信息（来源身份与交互记录）
+4. 用户可继续进入下一步交付动作
+5. 系统可保留必要审计信息（来源身份与交互记录）
 
 ## 管理员最小配置清单
 
@@ -55,8 +56,8 @@ MARRDP_API_KEY=replace-with-a-strong-secret
 - [ ] 事件回调地址：`POST https://<your-domain>/api/feishu/events`
 - [ ] 评审提交地址：`POST https://<your-domain>/api/feishu/submit`
 - [ ] 澄清提交地址：`POST https://<your-domain>/api/feishu/clarification`
-- [ ] 飞书提交页地址：`https://<your-domain>/feishu`
-- [ ] 飞书结果页可正常打开：`https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+- [ ] 飞书工作入口地址：`https://<your-domain>/feishu`
+- [ ] 飞书结果页可正常打开：`https://<your-domain>/run/<run_id>?trigger_source=feishu&open_id=<open_id>&tenant_key=<tenant_key>&embed=feishu`
 
 ## 推荐接入流程（管理员）
 
@@ -91,6 +92,7 @@ MARRDP_API_KEY=replace-with-a-strong-secret
 ### 2) 用户能提交但打不开结果页怎么办？
 
 - 检查结果页地址是否为 `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>` 结构
+- 推荐显式保留 `trigger_source=feishu`，便于审计和链路排查
 - 检查是否误删 `embed=feishu` 参数（会影响飞书内布局）
 - 检查是否正确传递了 `open_id` 与 `tenant_key`
 
@@ -114,5 +116,6 @@ MARRDP_FEISHU_SIGNATURE_DISABLED=true
 
 - 普通用户使用说明：[feishu-user-guide.md](./feishu-user-guide.md)
 - 飞书主入口落地方案：[feishu-main-entry-mvp.md](./feishu-main-entry-mvp.md)
+- 演示材料说明：[feishu-demo-assets.md](./feishu-demo-assets.md)
 - 本地启动说明：[quick-start.md](./quick-start.md)
 - 部署说明：[deployment-guide.md](./deployment-guide.md)

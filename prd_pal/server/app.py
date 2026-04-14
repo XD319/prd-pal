@@ -330,8 +330,9 @@ def _build_result_page_payload(
 ) -> dict[str, str]:
     run_id = str(run_id or "").strip()
     base_path = f"/run/{run_id}"
+    normalized_audit_context = audit_context if isinstance(audit_context, dict) else {}
 
-    client_metadata = resolve_audit_client_metadata(audit_context)
+    client_metadata = resolve_audit_client_metadata(normalized_audit_context)
     entry_context = _read_run_entry_context(run_dir) if run_dir is not None else {}
     entry_result_context = entry_context.get("result_page_context")
     if not isinstance(entry_result_context, dict):
@@ -339,7 +340,7 @@ def _build_result_page_payload(
 
     is_feishu_entry = (
         str(entry_context.get("source_origin") or "").strip().lower() == "feishu"
-        or str(audit_context.get("source") or "").strip().lower() == "feishu"
+        or str(normalized_audit_context.get("source") or "").strip().lower() == "feishu"
         or str(client_metadata.get("trigger_source") or "").strip().lower() == "feishu"
     )
     if not is_feishu_entry:

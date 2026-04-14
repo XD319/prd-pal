@@ -10,28 +10,24 @@
 ![Feishu](https://img.shields.io/badge/Feishu-Integrated-3370FF)
 ![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)
 
-`prd-pal` is a PRD and requirement review service. It turns local files, raw text, or Feishu/Notion documents into structured review outputs such as findings, risks, open questions, and downloadable reports.
+`prd-pal` is a PRD and requirement review service with a **Feishu-first** product entry. End users can submit reviews, read H5 results, answer clarifications, and continue follow-up actions directly inside Feishu.
 
-Before the first formal release, the recommended adoption path is:
+Web and CLI are fully retained as trial and engineering entry points.
 
-1. Run it locally
-2. Validate one sample review
-3. Connect Feishu submission, clarification, and H5 result pages
+## What Feishu Entry Delivers
 
-## What You Get
+1. Start PRD review from Feishu
+2. Open embedded H5 result pages in Feishu
+3. Answer clarification questions in-page
+4. Continue next-step delivery actions after updates
 
-- Web submission and result pages
-- FastAPI backend
-- CLI and MCP entry points
-- Feishu submission, clarification writeback, and embedded H5 result support
+## 30-Second Start (Feishu-first)
 
-## Quick Start Order
-
-1. Clone the repository
-2. Configure `.env`
-3. Start backend and frontend locally
-4. Run one sample PRD review
-5. Configure Feishu callbacks and H5 entry URLs
+1. Complete admin setup in [docs/feishu-setup.md](./docs/feishu-setup.md)
+2. Open Feishu entry page: `https://<your-domain>/feishu`
+3. Submit PRD source/text and get a run
+4. Open result page in Feishu: `/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+5. Answer clarification prompts and continue to next delivery actions
 
 ## Requirements
 
@@ -39,7 +35,18 @@ Before the first formal release, the recommended adoption path is:
 - Node.js `22+`
 - A valid model API key
 
-## Local Quick Start
+## Feishu Docs First
+
+- Admin / deployer setup:
+  - [docs/feishu-setup.md](./docs/feishu-setup.md)
+- End-user guide:
+  - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
+- Feishu main-entry interaction plan:
+  - [docs/feishu-main-entry-mvp.md](./docs/feishu-main-entry-mvp.md)
+- Demo material playbook:
+  - [docs/feishu-demo-assets.md](./docs/feishu-demo-assets.md)
+
+## Local Quick Start (trial/development)
 
 ### 1. Clone
 
@@ -139,25 +146,20 @@ To run the Vite frontend in dev mode:
 docker-compose --profile dev up dev
 ```
 
-## Feishu Entry Docs
-
-Feishu docs are split by audience so each reader can find the right actions quickly:
-
-- Admin / deployer setup checklist:
-  - [docs/feishu-setup.md](./docs/feishu-setup.md)
-- End-user usage flow:
-  - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
-
 ## Common Entry Points
 
-### Web
+### Feishu (primary entry)
+
+- Feishu work entry:
+  - `https://<your-domain>/feishu`
+- Feishu H5 result URL template:
+  - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+
+### Web (trial/development)
 
 - Home:
   - `http://127.0.0.1:5173/`
-- Feishu entry:
-  - `https://<your-domain>/feishu`
-
-### CLI
+### CLI (trial/development)
 
 ```bash
 prd-pal review --input docs/sample_prd.md
@@ -217,6 +219,7 @@ Feishu-origin runs also persist:
 - [docs/quick-start.md](./docs/quick-start.md)
 - [docs/feishu-setup.md](./docs/feishu-setup.md)
 - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
+- [docs/feishu-demo-assets.md](./docs/feishu-demo-assets.md)
 - [docs/v2-api.md](./docs/v2-api.md)
 - [docs/mcp.md](./docs/mcp.md)
 - [docs/deployment-guide.md](./docs/deployment-guide.md)

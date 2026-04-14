@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from prd_pal.notifications.base import BaseNotifier
@@ -254,10 +254,11 @@ class FeishuCardRenderer:
         run_id = str(event.run_id or "").strip()
         if not run_id:
             return ""
+        result_context = self._resolve_result_context(metadata)
         base_url = self._config.detail_base_url
         if not base_url:
-            return f"/run/{run_id}"
-        return f"{base_url}/run/{run_id}"
+            return self._append_query_params(f"/run/{run_id}", result_context)
+        return self._append_query_params(f"{base_url}/run/{run_id}", result_context)
 
     def _resolve_feishu_entry_url(self, event: NotificationEvent) -> str:
         metadata = event.metadata or {}
@@ -268,6 +269,37 @@ class FeishuCardRenderer:
         if not base_url:
             return "/feishu"
         return f"{base_url}/feishu"
+
+    @staticmethod
+    def _resolve_result_context(metadata: dict[str, Any]) -> dict[str, str]:
+        resolved: dict[str, str] = {"embed": "feishu", "trigger_source": "feishu"}
+        client_metadata = metadata.get("client_metadata")
+        if isinstance(client_metadata, dict):
+            for key in ("open_id", "tenant_key", "lang", "locale"):
+                value = str(client_metadata.get(key) or "").strip()
+                if value:
+                    resolved[key] = value
+        for key in ("open_id", "tenant_key", "lang", "locale"):
+            value = str(metadata.get(key) or "").strip()
+            if value and key not in resolved:
+                resolved[key] = value
+        return resolved
+
+    @staticmethod
+    def _append_query_params(url: str, params: dict[str, str]) -> str:
+        parsed = urlsplit(str(url or "").strip())
+        existing_pairs = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=False) if key]
+        merged: dict[str, str] = {}
+        for key, value in existing_pairs:
+            if value:
+                merged[key] = value
+        for key, value in params.items():
+            normalized_key = str(key or "").strip()
+            normalized_value = str(value or "").strip()
+            if normalized_key and normalized_value:
+                merged[normalized_key] = normalized_value
+        query = urlencode(merged)
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
 
     def _build_action_buttons(
         self,

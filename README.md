@@ -10,24 +10,24 @@
 ![Feishu](https://img.shields.io/badge/Feishu-Integrated-3370FF)
 ![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)
 
-`prd-pal` 是一个面向 PRD/需求文档的评审服务。它可以把本地文件、纯文本或 Feishu/Notion 文档转成结构化评审结果，包括 findings、risks、open questions 和可下载报告。
+`prd-pal` 是一个面向 PRD/需求文档的评审服务，默认以 **Feishu-first** 方式交付：普通用户在飞书里即可完成提审、查看结果、回答澄清并继续下一步动作。
 
-正式发布前，推荐把它当作一套“先本地跑通，再接入飞书”的评审服务来使用。
+Web 与 CLI 仍完整保留，定位为试用、联调和开发入口。
 
-## 你会得到什么
+## 飞书主入口可以做什么
 
-- Web 提审页与结果页
-- FastAPI 服务接口
-- CLI 与 MCP 入口
-- Feishu 提交、澄清回写、H5 结果页接入能力
+1. 在飞书里发起 PRD 评审
+2. 在飞书内打开 H5 结果页
+3. 在结果页回答澄清问题并刷新结果
+4. 继续进入下一步交付动作（下载产物、准备 handoff）
 
-## 30 秒看懂上手顺序
+## 30 秒上手（Feishu-first）
 
-1. 下载仓库
-2. 配置 `.env`
-3. 本地启动前后端
-4. 用 sample PRD 跑通一次
-5. 再配置 Feishu 回调与 H5 打开地址
+1. 按 [docs/feishu-setup.md](./docs/feishu-setup.md) 完成管理员配置
+2. 打开飞书入口页：`https://<your-domain>/feishu`
+3. 提交 PRD 链接或正文，获取 run
+4. 在飞书内进入结果页：`/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+5. 如有澄清，继续在同一页回答并推进下一步
 
 ## 环境要求
 
@@ -36,7 +36,18 @@
 - 一个可用的模型 API Key
 - Windows 本地开发可直接使用仓库内脚本；macOS/Linux 可用 `python` + `npm` 或 Docker
 
-## 一、本地快速跑通
+## 一、飞书入口文档（推荐先读）
+
+- 管理员 / 部署者接入清单：
+  - [docs/feishu-setup.md](./docs/feishu-setup.md)
+- 普通用户操作说明：
+  - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
+- 飞书主入口交互方案：
+  - [docs/feishu-main-entry-mvp.md](./docs/feishu-main-entry-mvp.md)
+- 演示材料与拍摄规范：
+  - [docs/feishu-demo-assets.md](./docs/feishu-demo-assets.md)
+
+## 二、本地快速跑通（试用/开发入口）
 
 ### 1. 下载仓库
 
@@ -132,7 +143,7 @@ prd-pal review --input docs/sample_prd.md
 python -m prd_pal.main review --input docs/sample_prd.md
 ```
 
-## 二、Docker 跑通
+## 三、Docker 跑通
 
 如果你想先快速启动完整服务，可以直接用 Docker：
 
@@ -151,31 +162,20 @@ docker-compose up --build
 docker-compose --profile dev up dev
 ```
 
-## 三、飞书入口（管理员与用户）
-
-飞书相关文档已按角色拆分，便于直接作为主入口使用：
-
-- 管理员 / 部署者（应用配置、域名与上线检查）：
-  - [docs/feishu-setup.md](./docs/feishu-setup.md)
-- 普通用户（在飞书里提交、查看结果、回答澄清）：
-  - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
-
-如果你是首次接入，推荐顺序：
-
-1. 先完成“本地快速跑通”
-2. 按 `docs/feishu-setup.md` 完成管理员最小配置清单
-3. 按 `docs/feishu-user-guide.md` 验证普通用户流程
-
 ## 四、常用入口
 
-### Web
+### Feishu（主入口）
+
+- 飞书工作入口：
+  - `https://<your-domain>/feishu`
+- 飞书 H5 结果页模板：
+  - `https://<your-domain>/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
+
+### Web（试用/开发）
 
 - 首页:
   - `http://127.0.0.1:5173/`
-- 飞书提交入口:
-  - `https://<your-domain>/feishu`
-
-### CLI
+### CLI（试用/开发）
 
 ```bash
 prd-pal review --input docs/sample_prd.md
@@ -232,9 +232,10 @@ python -m prd_pal.mcp_server.server
 
 ## 六、推荐阅读顺序
 
-- [docs/quick-start.md](./docs/quick-start.md)
 - [docs/feishu-setup.md](./docs/feishu-setup.md)
 - [docs/feishu-user-guide.md](./docs/feishu-user-guide.md)
+- [docs/feishu-demo-assets.md](./docs/feishu-demo-assets.md)
+- [docs/quick-start.md](./docs/quick-start.md)
 - [docs/v2-api.md](./docs/v2-api.md)
 - [docs/mcp.md](./docs/mcp.md)
 - [docs/deployment-guide.md](./docs/deployment-guide.md)

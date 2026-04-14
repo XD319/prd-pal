@@ -166,7 +166,9 @@ def test_feishu_renderer_builds_review_status_cards(
     assert expected_status in payload["card"]["header"]["title"]["content"]
     actions = payload["card"]["elements"][-1]["actions"]
     assert actions[0]["text"]["content"] == "查看最新结果"
-    assert actions[0]["url"] == "https://review.example.test/run/20260308T060711Z"
+    assert actions[0]["url"] == (
+        "https://review.example.test/run/20260308T060711Z?embed=feishu&trigger_source=feishu"
+    )
     assert actions[-1]["text"]["content"] == "重新提交"
     assert actions[-1]["url"] == "https://review.example.test/feishu"
     fields = payload["card"]["elements"][0]["fields"]
@@ -194,7 +196,7 @@ def test_feishu_renderer_includes_clarification_shortcut_for_clarification_requi
     urls = [item["url"] for item in actions]
 
     assert labels == ["查看最新结果", "继续澄清", "重新提交"]
-    assert urls[1].endswith("/run/20260308T060713Z#clarification")
+    assert urls[1].endswith("/run/20260308T060713Z?embed=feishu&trigger_source=feishu#clarification")
 
 
 def test_feishu_renderer_includes_next_delivery_shortcut_for_completed() -> None:
@@ -217,7 +219,7 @@ def test_feishu_renderer_includes_next_delivery_shortcut_for_completed() -> None
     urls = [item["url"] for item in actions]
 
     assert labels == ["查看最新结果", "生成下一步交付", "重新提交"]
-    assert urls[1].endswith("/run/20260308T060714Z#next-delivery")
+    assert urls[1].endswith("/run/20260308T060714Z?embed=feishu&trigger_source=feishu#next-delivery")
 
 
 def test_dispatch_notification_records_feishu_dry_run_delivery_metadata(tmp_path) -> None:
