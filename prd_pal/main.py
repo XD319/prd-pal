@@ -100,6 +100,12 @@ def _resolve_review_inputs(args: argparse.Namespace) -> tuple[str | None, str | 
 def _review_options_from_args(args: argparse.Namespace) -> dict[str, Any]:
     options: dict[str, Any] = {
         "outputs_root": str(getattr(args, "outputs_root", "outputs") or "outputs"),
+        "audit_context": {
+            "source": "cli",
+            "tool_name": f"cli.{str(getattr(args, 'command', 'review') or 'review')}",
+            "actor": "cli",
+            "client_metadata": {},
+        },
     }
     mode = str(getattr(args, "mode", "") or "").strip()
     review_mode_override = str(getattr(args, "review_mode_override", "") or "").strip()

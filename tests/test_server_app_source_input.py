@@ -19,12 +19,13 @@ async def test_create_review_keeps_legacy_prd_path_compatible(tmp_path, monkeypa
     prd_file.write_text("# Legacy PRD", encoding="utf-8")
     captured: dict[str, object] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None):
+    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None, audit_context=None):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
         captured["mode"] = mode
         captured["llm_options"] = llm_options
+        captured["audit_context"] = audit_context
         job.status = "completed"
 
     monkeypatch.setattr(app_module, "_run_job", fake_run_job)
@@ -42,6 +43,7 @@ async def test_create_review_keeps_legacy_prd_path_compatible(tmp_path, monkeypa
     assert captured["source"] is None
     assert captured["mode"] is None
     assert captured["llm_options"] == {}
+    assert captured["audit_context"]["source"] == "web"
     app_module._jobs.clear()
 
 
@@ -51,12 +53,13 @@ async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, mon
     source_file.write_text("# Source PRD", encoding="utf-8")
     captured: dict[str, object] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None):
+    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None, audit_context=None):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
         captured["mode"] = mode
         captured["llm_options"] = llm_options
+        captured["audit_context"] = audit_context
         job.status = "completed"
 
     monkeypatch.setattr(app_module, "_run_job", fake_run_job)
@@ -79,6 +82,7 @@ async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, mon
     assert captured["source"] == str(source_file)
     assert captured["mode"] is None
     assert captured["llm_options"] == {}
+    assert captured["audit_context"]["source"] == "web"
     app_module._jobs.clear()
 
 
@@ -86,12 +90,13 @@ async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, mon
 async def test_create_review_forwards_runtime_llm_options(tmp_path, monkeypatch):
     captured: dict[str, object] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None):
+    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None, audit_context=None):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
         captured["mode"] = mode
         captured["llm_options"] = llm_options
+        captured["audit_context"] = audit_context
         job.status = "completed"
 
     monkeypatch.setattr(app_module, "_run_job", fake_run_job)
@@ -118,6 +123,7 @@ async def test_create_review_forwards_runtime_llm_options(tmp_path, monkeypatch)
         "reasoning_effort": "low",
         "llm_kwargs": {"max_retries": 1},
     }
+    assert captured["audit_context"]["tool_name"] == "web.review.submit"
     app_module._jobs.clear()
 
 

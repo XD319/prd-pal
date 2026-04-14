@@ -1032,7 +1032,16 @@ async def list_runs() -> dict[str, Any]:
 async def create_review(payload: ReviewCreateRequest) -> dict[str, str]:
     review_inputs = _resolve_review_inputs(payload)
     llm_options = _resolve_runtime_llm_options(payload)
-    return await _enqueue_review_run(**review_inputs, llm_options=llm_options)
+    return await _enqueue_review_run(
+        **review_inputs,
+        llm_options=llm_options,
+        audit_context={
+            "source": "web",
+            "tool_name": "web.review.submit",
+            "actor": "web",
+            "client_metadata": {},
+        },
+    )
 
 
 @app.get("/api/review/{run_id}")

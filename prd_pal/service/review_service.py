@@ -14,6 +14,7 @@ from typing import Any
 from prd_pal.connectors import ConnectorRegistry, get_connector_error_payload
 from prd_pal.review.aggregator import _render_review_report, _render_summary
 from prd_pal.review.clarification_gate import apply_clarification_answers, build_clarification_payload
+from prd_pal.review.ingress_normalization import normalize_ingress_request
 from prd_pal.connectors.feishu import (
     FeishuAuthenticationError,
     FeishuDocumentNotFoundError,
@@ -53,6 +54,7 @@ from prd_pal.workspace import ReviewWorkspaceRepository
 from prd_pal.utils.logging import RunLogContext, get_logger
 
 log = get_logger("service.review")
+CANONICAL_REQUEST_FILENAME = "canonical_review_request.json"
 
 
 @dataclass(slots=True)
@@ -668,6 +670,33 @@ def _resolve_requirement_doc(
     return _read_prd_text(prd_text=prd_text, prd_path=prd_path), {}
 
 
+def _persist_canonical_review_request(
+    *,
+    run_dir: Path,
+    run_id: str,
+    requirement_doc: str,
+    prd_text: str | None,
+    prd_path: str | None,
+    source: str | None,
+    audit_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    canonical_request = normalize_ingress_request(
+        run_id=run_id,
+        requirement_doc=requirement_doc,
+        prd_text=prd_text,
+        prd_path=prd_path,
+        source_ref=source,
+        audit_context=audit_context,
+    )
+    run_dir.mkdir(parents=True, exist_ok=True)
+    payload = canonical_request.model_dump(mode="json")
+    (run_dir / CANONICAL_REQUEST_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return payload
+
+
 def build_handoff_prompts(
     execution_pack_path: str | Path | None,
     *,
@@ -1105,6 +1134,15 @@ async def review_prd_text_async(
         prd_path=prd_path,
         source=source,
     )
+    canonical_request = _persist_canonical_review_request(
+        run_dir=run_dir,
+        run_id=resolved_run_id,
+        requirement_doc=requirement_doc,
+        prd_text=prd_text,
+        prd_path=prd_path,
+        source=source,
+        audit_context=audit_context,
+    )
     run_review_kwargs: dict[str, Any] = {
         "requirement_doc": requirement_doc,
         "run_id": resolved_run_id,
@@ -1162,6 +1200,10 @@ async def review_prd_text_async(
             result = run_output.get("result")
             if isinstance(result, dict):
                 result.update(source_context)
+        run_output["canonical_review_request"] = canonical_request
+        review_result_for_meta = run_output.get("result")
+        if isinstance(review_result_for_meta, dict):
+            review_result_for_meta["canonical_review_request"] = canonical_request
 
         review_result = run_output.get("result")
         if isinstance(review_result, dict):
