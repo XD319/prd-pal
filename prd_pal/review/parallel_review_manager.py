@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -220,32 +221,52 @@ async def _run_reviewer_with_resilience(
     memory_mode: str,
 ) -> ReviewerResult:
     review_fn = _REVIEWER_FUNCTIONS[reviewer]
+    kwargs = _reviewer_call_kwargs(
+        review_fn,
+        reviewer_config=reviewer_config,
+        reviewer_input=reviewer_input,
+        memory_context=memory_context,
+        memory_mode=memory_mode,
+    )
 
     try:
         if timeout_seconds > 0:
             return await asyncio.wait_for(
-                review_fn(
-                    requirement,
-                    config=reviewer_config,
-                    reviewer_input=reviewer_input,
-                    memory_context=memory_context,
-                    memory_mode=memory_mode,
-                ),
+                review_fn(requirement, **kwargs),
                 timeout=timeout_seconds,
             )
-        return await review_fn(
-            requirement,
-            config=reviewer_config,
-            reviewer_input=reviewer_input,
-            memory_context=memory_context,
-            memory_mode=memory_mode,
-        )
+        return await review_fn(requirement, **kwargs)
     except TimeoutError:
         reason = f"timed out after {timeout_seconds:.1f}s"
         return _partial_reviewer_result(reviewer, status="timeout", reason=reason)
     except Exception as exc:
         reason = str(exc).strip() or exc.__class__.__name__
         return _partial_reviewer_result(reviewer, status="error", reason=reason)
+
+
+def _reviewer_call_kwargs(
+    review_fn: Callable[..., Awaitable[ReviewerResult]],
+    *,
+    reviewer_config: ReviewerConfig | None,
+    reviewer_input: str,
+    memory_context: tuple[dict[str, Any], ...],
+    memory_mode: str,
+) -> dict[str, Any]:
+    all_kwargs = {
+        "config": reviewer_config,
+        "reviewer_input": reviewer_input,
+        "memory_context": memory_context,
+        "memory_mode": memory_mode,
+    }
+    try:
+        signature = inspect.signature(review_fn)
+    except (TypeError, ValueError):
+        return all_kwargs
+
+    parameters = signature.parameters
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
+        return all_kwargs
+    return {key: value for key, value in all_kwargs.items() if key in parameters}
 
 
 def _partial_reviewer_result(reviewer: str, *, status: str, reason: str) -> ReviewerResult:

@@ -151,9 +151,7 @@ async def _enqueue_review_run(
     llm_options: dict[str, Any] | None = None,
     audit_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    run_id = make_run_id()
-    run_dir = OUTPUTS_ROOT / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_id, run_dir = await _allocate_unique_run_dir()
     entry_context = _persist_run_entry_context(run_dir, audit_context)
 
     if isinstance(audit_context, dict) and audit_context:
@@ -188,6 +186,19 @@ async def _enqueue_review_run(
     if _is_feishu_audit_context(audit_context):
         payload["result_page"] = _build_result_page_payload(run_id, audit_context=audit_context, run_dir=run_dir)
     return payload
+
+
+async def _allocate_unique_run_dir(*, max_attempts: int = 30) -> tuple[str, Path]:
+    OUTPUTS_ROOT.mkdir(parents=True, exist_ok=True)
+    for _ in range(max(1, int(max_attempts))):
+        run_id = make_run_id()
+        run_dir = OUTPUTS_ROOT / run_id
+        async with _jobs_lock:
+            if run_id not in _jobs and not run_dir.exists():
+                run_dir.mkdir(parents=True, exist_ok=False)
+                return run_id, run_dir
+        await asyncio.sleep(0.05)
+    raise RuntimeError("unable to allocate unique run_id")
 
 
 def _submit_review_clarification_internal(
@@ -607,15 +618,31 @@ def _list_recent_workspace_runs(
             "artifact_version_id": str(row[1] or ""),
             "review_result_version_id": str(row[2] or ""),
             "updated_at": str(row[3] or ""),
-            "result_url": _build_result_page_payload(
+            "result_url": _build_workspace_review_result_url(
                 str(row[0] or ""),
                 request_context=request_context,
-                run_dir=OUTPUTS_ROOT / str(row[0] or "").strip(),
-            )["url"],
+            ),
         }
         for row in rows
         if str(row[0] or "").strip()
     ]
+
+
+def _build_workspace_review_result_url(run_id: str, *, request_context: dict[str, Any] | None = None) -> str:
+    normalized_run_id = str(run_id or "").strip()
+    base_payload = _build_result_page_payload(
+        normalized_run_id,
+        request_context=request_context,
+        run_dir=OUTPUTS_ROOT / normalized_run_id,
+    )
+    context = _extract_result_page_context(request_context)
+    if not context:
+        return base_payload["url"]
+
+    query_params = _merge_result_page_context(context)
+    query_params["embed"] = "feishu"
+    query_string = urlencode(query_params)
+    return f"/run/{normalized_run_id}?{query_string}" if query_string else base_payload["url"]
 
 
 async def _list_feishu_workspace_overviews(*, request: Request, limit: int = 20) -> dict[str, Any]:

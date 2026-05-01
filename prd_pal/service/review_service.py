@@ -46,7 +46,7 @@ from prd_pal.packs import (
     reset_to_draft,
 )
 from prd_pal.packs.approval import build_approval_record
-from prd_pal.run_review import make_run_id, run_review
+from prd_pal.run_review import make_unique_run_id, run_review
 from review_runtime.config.config import runtime_config_overrides
 from prd_pal.service.report_service import RUN_ID_PATTERN
 from prd_pal.server.sse import ProgressBroadcaster
@@ -1581,8 +1581,7 @@ async def review_prd_text_async(
     progress_hook = overrides.get("progress_hook")
     if progress_hook is not None and not callable(progress_hook):
         raise TypeError("config_overrides['progress_hook'] must be callable")
-    resolved_run_id = str(run_id or "").strip() or make_run_id()
-    run_dir = outputs_root / resolved_run_id
+    requested_run_id = str(run_id or "").strip()
 
     def combined_progress_hook(event: str, node_name: str, state: dict[str, Any]) -> None:
         if progress_hook is not None:
@@ -1594,6 +1593,8 @@ async def review_prd_text_async(
         prd_path=prd_path,
         source=source,
     )
+    resolved_run_id = requested_run_id or make_unique_run_id(outputs_root, reserve_dir=True)
+    run_dir = outputs_root / resolved_run_id
     canonical_request = _persist_canonical_review_request(
         run_dir=run_dir,
         run_id=resolved_run_id,

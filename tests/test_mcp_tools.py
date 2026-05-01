@@ -93,10 +93,14 @@ async def test_review_prd_supports_local_source_and_persists_source_metadata(tmp
         run_id: str | None = None,
         outputs_root: str | None = None,
         progress_hook=None,
+        **kwargs,
     ) -> dict[str, object]:
         assert requirement_doc == source_path.read_text(encoding="utf-8")
         assert str(outputs_root) == str(tmp_path)
         assert progress_hook is None or callable(progress_hook)
+        assert isinstance(kwargs.get("review_profile"), dict)
+        assert isinstance(kwargs.get("review_profile_pack"), dict)
+        assert isinstance(kwargs.get("canonical_review_request"), dict)
 
         resolved_run_id = run_id or fixed_run_id
         run_dir = tmp_path / resolved_run_id
@@ -275,11 +279,15 @@ async def test_review_requirement_returns_review_only_payload_for_single_review(
         outputs_root: str | None = None,
         progress_hook=None,
         review_mode_override: str | None = None,
+        **kwargs,
     ) -> dict[str, object]:
         assert requirement_doc == source_path.read_text(encoding="utf-8")
         assert str(outputs_root) == str(tmp_path)
         assert progress_hook is None or callable(progress_hook)
         assert review_mode_override is None
+        assert isinstance(kwargs.get("review_profile"), dict)
+        assert isinstance(kwargs.get("review_profile_pack"), dict)
+        assert isinstance(kwargs.get("canonical_review_request"), dict)
 
         resolved_run_id = run_id or fixed_run_id
         run_dir = tmp_path / resolved_run_id

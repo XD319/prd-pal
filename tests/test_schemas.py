@@ -285,10 +285,15 @@ class TestInitReExports:
         expected = {
             "ParserOutput",
             "PlannerOutput",
+            "RevisionAgentOutput",
             "RiskOutput",
+            "RoadmapDiffOutput",
+            "RoadmapItem",
+            "RoadmapOutput",
             "ReviewerOutput",
             "validate_parser_output",
             "validate_planner_output",
+            "validate_revision_output",
             "validate_risk_output",
             "validate_reviewer_output",
         }
@@ -298,16 +303,32 @@ class TestInitReExports:
         from prd_pal.schemas import (
             ParserOutput,
             PlannerOutput,
+            RevisionAgentOutput,
             ReviewerOutput,
+            RoadmapDiffOutput,
+            RoadmapItem,
+            RoadmapOutput,
             RiskOutput,
             validate_parser_output,
             validate_planner_output,
+            validate_revision_output,
             validate_reviewer_output,
             validate_risk_output,
         )
+        assert all(cls is not None for cls in [
+            ParserOutput,
+            PlannerOutput,
+            RevisionAgentOutput,
+            ReviewerOutput,
+            RoadmapDiffOutput,
+            RoadmapItem,
+            RoadmapOutput,
+            RiskOutput,
+        ])
         assert all(callable(f) for f in [
             validate_parser_output,
             validate_planner_output,
+            validate_revision_output,
             validate_reviewer_output,
             validate_risk_output,
         ])

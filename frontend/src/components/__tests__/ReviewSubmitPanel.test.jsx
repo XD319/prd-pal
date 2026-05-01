@@ -57,33 +57,22 @@ describe('ReviewSubmitPanel', () => {
     vi.clearAllMocks();
   });
 
-  it('switches between prd_text, prd_path, and source input modes', async () => {
-    const user = userEvent.setup();
-
+  it('renders prd_text, prd_path, and source inputs together', () => {
     renderWithProviders(<HomePage />);
 
-    const textTab = screen.getByRole('tab', { name: 'PRD Content' });
-    const pathTab = screen.getByRole('tab', { name: 'File Path' });
-    const sourceTab = screen.getByRole('tab', { name: 'Document Source' });
-
-    expect(textTab).toHaveAttribute('aria-selected', 'true');
-    expect(pathTab).toHaveAttribute('aria-selected', 'false');
-    expect(sourceTab).toHaveAttribute('aria-selected', 'false');
-
-    await user.click(pathTab);
-    expect(pathTab).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByLabelText('PRD content')).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByLabelText('PRD file path')).toHaveAttribute('aria-hidden', 'false');
-
-    await user.click(sourceTab);
-    expect(sourceTab).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByLabelText('Document source')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByLabelText('PRD Content')).toBeInTheDocument();
+    expect(screen.getByLabelText('File Path')).toBeInTheDocument();
+    expect(screen.getByLabelText('Document Source')).toBeInTheDocument();
   });
 
-  it('disables the submit button when all inputs are empty', () => {
+  it('shows validation when all inputs are empty', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<HomePage />);
 
-    expect(screen.getByRole('button', { name: 'Submit review' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Submit review' }));
+
+    expect(screen.getByText('Provide source, or exactly one of prd_text or prd_path.')).toBeInTheDocument();
+    expect(mockSubmitReview).not.toHaveBeenCalled();
   });
 
   it('calls the submit API and shows loading state after content is entered', async () => {
@@ -93,7 +82,7 @@ describe('ReviewSubmitPanel', () => {
 
     renderWithProviders(<HomePage />);
 
-    await user.type(screen.getByLabelText('PRD content'), 'A realistic PRD body');
+    await user.type(screen.getByLabelText('PRD Content'), 'A realistic PRD body');
     await user.click(screen.getByRole('button', { name: 'Submit review' }));
 
     expect(mockSubmitReview).toHaveBeenCalledWith({ prd_text: 'A realistic PRD body' });
@@ -113,7 +102,7 @@ describe('ReviewSubmitPanel', () => {
 
     renderWithProviders(<HomePage />);
 
-    const textarea = screen.getByLabelText('PRD content');
+    const textarea = screen.getByLabelText('PRD Content');
     await user.type(textarea, 'Reset me after success');
     await user.click(screen.getByRole('button', { name: 'Submit review' }));
 
@@ -128,7 +117,7 @@ describe('ReviewSubmitPanel', () => {
 
     renderWithProviders(<HomePage />);
 
-    await user.type(screen.getByLabelText('PRD content'), 'Failure path');
+    await user.type(screen.getByLabelText('PRD Content'), 'Failure path');
     await user.click(screen.getByRole('button', { name: 'Submit review' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('Submission exploded');

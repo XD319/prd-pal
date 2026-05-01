@@ -7,6 +7,7 @@ import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from time import sleep
 from typing import Any
 
 from .memory import DEFAULT_MEMORY_DB_PATH, MemoryService, process_review_memory_extraction_async
@@ -20,6 +21,39 @@ ProgressHook = Callable[[str, str, dict[str, Any]], None]
 
 def make_run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def make_unique_run_id(
+    outputs_root: str | Path = "outputs",
+    *,
+    existing_ids: set[str] | None = None,
+    reserve_dir: bool = False,
+    max_attempts: int = 30,
+) -> str:
+    """Return a timestamp run_id that does not already exist under outputs_root.
+
+    The public run_id format is intentionally unchanged because reports, APIs,
+    and historical directory scans all rely on YYYYMMDDTHHMMSSZ.
+    """
+
+    root = Path(outputs_root)
+    if reserve_dir:
+        root.mkdir(parents=True, exist_ok=True)
+    reserved = set(existing_ids or set())
+    last_candidate = ""
+    for _ in range(max(1, int(max_attempts))):
+        candidate = make_run_id()
+        last_candidate = candidate
+        if candidate not in reserved and not (root / candidate).exists():
+            if reserve_dir:
+                try:
+                    (root / candidate).mkdir(parents=True, exist_ok=False)
+                except FileExistsError:
+                    sleep(0.05)
+                    continue
+            return candidate
+        sleep(0.05)
+    raise RuntimeError(f"unable to allocate unique run_id after collision on {last_candidate or '<unknown>'}")
 
 
 def resolve_model_provider(result: dict[str, Any]) -> tuple[str, str]:
