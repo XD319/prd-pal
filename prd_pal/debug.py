@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -55,7 +54,10 @@ MOCK_PARSED_ITEMS = [
     {
         "id": "REQ-002",
         "description": "Provide a fast and user-friendly login experience",
-        "acceptance_criteria": ["Login should be fast", "Login should be user-friendly"],
+        "acceptance_criteria": [
+            "Login should be fast",
+            "Login should be user-friendly",
+        ],
     },
     {
         "id": "REQ-003",
@@ -76,15 +78,19 @@ def parse_args() -> argparse.Namespace:
         default="all",
         help="Which agent(s) to run (default: all)",
     )
-    p.add_argument("--input", type=str, default=None, help="Path to requirement doc (optional)")
-    p.add_argument("-v", "--verbose", action="store_true", help="Print raw LLM responses")
+    p.add_argument(
+        "--input", type=str, default=None, help="Path to requirement doc (optional)"
+    )
+    p.add_argument(
+        "-v", "--verbose", action="store_true", help="Print raw LLM responses"
+    )
     return p.parse_args()
 
 
 def pretty(label: str, data: object) -> None:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {label}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(json.dumps(data, indent=2, ensure_ascii=False))
     print()
 
@@ -144,7 +150,9 @@ async def main() -> None:
     if args.agent in ("reviewer", "all"):
         items = parsed_items if parsed_items else MOCK_PARSED_ITEMS
         if not parsed_items:
-            print("[debug] No parser output available — using built-in mock parsed_items.\n")
+            print(
+                "[debug] No parser output available — using built-in mock parsed_items.\n"
+            )
         await debug_reviewer(items, args.verbose)
 
 

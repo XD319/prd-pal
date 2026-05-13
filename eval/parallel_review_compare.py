@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from prd_pal.service.review_service import review_prd_text
+from prd_pal.service.review_service import review_prd_text  # noqa: E402
 
 CASES = [
     {
@@ -90,9 +90,15 @@ def _load_report(path: str) -> dict[str, Any]:
 
 
 def _extract_stats(report_payload: dict[str, Any]) -> dict[str, Any]:
-    meta = report_payload.get("parallel-review_meta") if isinstance(report_payload.get("parallel-review_meta"), dict) else {}
+    meta = (
+        report_payload.get("parallel-review_meta")
+        if isinstance(report_payload.get("parallel-review_meta"), dict)
+        else {}
+    )
     return {
-        "selected_mode": meta.get("selected_mode", report_payload.get("review_mode", "unknown")),
+        "selected_mode": meta.get(
+            "selected_mode", report_payload.get("review_mode", "unknown")
+        ),
         "open_questions_count": int(meta.get("open_questions_count", 0) or 0),
         "risk_items_count": int(meta.get("risk_items_count", 0) or 0),
         "input_token_estimate": int(meta.get("input_token_estimate", 0) or 0),
@@ -148,7 +154,9 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cases": rows,
     }
-    REPORT_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    REPORT_PATH.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(f"Saved comparison report to {REPORT_PATH}")
 
 

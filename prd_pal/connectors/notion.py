@@ -74,7 +74,9 @@ class _DefaultNotionHTTPClient:
     DEFAULT_TIMEOUT_SECONDS = 10.0
     USER_AGENT = "marrdp-requirement-review/1.0"
 
-    def __init__(self, *, base_url: str, timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self, *, base_url: str, timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    ) -> None:
         self._base_url = str(base_url or "").rstrip("/")
         self._timeout_seconds = timeout_seconds
 
@@ -119,7 +121,9 @@ class _DefaultNotionHTTPClient:
         return NotionHTTPResponse(
             status_code=int(response.status_code),
             json_body=payload,
-            headers={str(key).lower(): str(value) for key, value in response.headers.items()},
+            headers={
+                str(key).lower(): str(value) for key, value in response.headers.items()
+            },
         )
 
 
@@ -159,7 +163,9 @@ class NotionConnector(BaseConnector):
         source_ref = self._parse_source(source)
         config = self._read_config()
         self._ensure_authenticated(config=config, source_ref=source_ref)
-        http_client = self._http_client or _DefaultNotionHTTPClient(base_url=config.base_url)
+        http_client = self._http_client or _DefaultNotionHTTPClient(
+            base_url=config.base_url
+        )
 
         page_payload = self._api_request(
             http_client=http_client,
@@ -231,9 +237,14 @@ class NotionConnector(BaseConnector):
         )
 
     def _read_config(self) -> NotionConfig:
-        raw_base_url = str(os.getenv(self.BASE_URL_ENV, self.DEFAULT_BASE_URL) or self.DEFAULT_BASE_URL).strip()
+        raw_base_url = str(
+            os.getenv(self.BASE_URL_ENV, self.DEFAULT_BASE_URL) or self.DEFAULT_BASE_URL
+        ).strip()
         parsed_base_url = urlparse(raw_base_url)
-        if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
+        if (
+            parsed_base_url.scheme not in {"http", "https"}
+            or not parsed_base_url.netloc
+        ):
             raise ConnectorValidationError(
                 f"{self.BASE_URL_ENV} must be an absolute http(s) URL, got: {raw_base_url or '<empty>'}",
                 details={"connector": "notion", "base_url_env": self.BASE_URL_ENV},
@@ -247,21 +258,34 @@ class NotionConnector(BaseConnector):
                 extra={"token_env": self.TOKEN_ENV},
             )
         else:
-            auth = ConnectorAuthConfig(extra={"expected_auth_type": "bearer_token", "token_env": self.TOKEN_ENV})
+            auth = ConnectorAuthConfig(
+                extra={
+                    "expected_auth_type": "bearer_token",
+                    "token_env": self.TOKEN_ENV,
+                }
+            )
 
         return NotionConfig(
             auth=auth,
             base_url=raw_base_url.rstrip("/"),
-            api_version=str(os.getenv(self.API_VERSION_ENV, self.DEFAULT_API_VERSION) or self.DEFAULT_API_VERSION).strip(),
+            api_version=str(
+                os.getenv(self.API_VERSION_ENV, self.DEFAULT_API_VERSION)
+                or self.DEFAULT_API_VERSION
+            ).strip(),
         )
 
-    def _ensure_authenticated(self, *, config: NotionConfig, source_ref: NotionSourceRef) -> None:
+    def _ensure_authenticated(
+        self, *, config: NotionConfig, source_ref: NotionSourceRef
+    ) -> None:
         if config.auth.auth_type != ConnectorAuthType.bearer_token:
             raise NotionAuthenticationError(
                 "Notion authentication failed because an integration token is missing. "
                 f"Set {self.TOKEN_ENV} before fetching '{source_ref.raw_source}'.",
                 source=source_ref.raw_source,
-                details={"connector": "notion", "auth_type": str(config.auth.auth_type)},
+                details={
+                    "connector": "notion",
+                    "auth_type": str(config.auth.auth_type),
+                },
             )
 
     def _fetch_block_children(
@@ -388,7 +412,9 @@ class NotionConnector(BaseConnector):
                     return title
         return "notion-page"
 
-    def _blocks_to_markdown(self, blocks: list[dict[str, Any]], *, depth: int = 0) -> str:
+    def _blocks_to_markdown(
+        self, blocks: list[dict[str, Any]], *, depth: int = 0
+    ) -> str:
         lines: list[str] = []
         unknown_types: list[str] = []
 
@@ -481,7 +507,9 @@ class NotionConnector(BaseConnector):
             )
         if block_type == "quote":
             text = self._extract_rich_text(block_payload.get("rich_text"))
-            return "\n".join(f"{indent}> {line}".rstrip() for line in (text.splitlines() or [""]))
+            return "\n".join(
+                f"{indent}> {line}".rstrip() for line in (text.splitlines() or [""])
+            )
         if block_type == "divider":
             return f"{indent}---"
         if block_type == "image":

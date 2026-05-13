@@ -3,10 +3,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from prd_pal.adapters import BaseAdapter, ClaudeCodeAdapter, CodexAdapter, OpenClawAdapter
+from prd_pal.adapters import (
+    BaseAdapter,
+    ClaudeCodeAdapter,
+    CodexAdapter,
+    OpenClawAdapter,
+)
 from prd_pal.execution import ExecutionMode, ExecutionTask, ExecutionTaskStatus
 from prd_pal.packs import build_execution_pack
-from prd_pal.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
+from prd_pal.packs.delivery_bundle import (
+    ArtifactRef,
+    BundleStatus,
+    DeliveryArtifacts,
+    DeliveryBundle,
+)
 from prd_pal.packs.schemas import ExecutionPack
 
 
@@ -40,10 +50,20 @@ def _make_execution_pack() -> ExecutionPack:
             "title": "Add adapter abstraction",
             "summary": "Generate adapter request payloads from the delivery bundle.",
             "context": "Repository context for downstream coding agents.",
-            "target_modules": ["prd_pal/adapters/base.py", "prd_pal/service/execution_service.py"],
-            "implementation_steps": ["Read execution pack", "Build adapter request payload", "Persist execution context"],
+            "target_modules": [
+                "prd_pal/adapters/base.py",
+                "prd_pal/service/execution_service.py",
+            ],
+            "implementation_steps": [
+                "Read execution pack",
+                "Build adapter request payload",
+                "Persist execution context",
+            ],
             "constraints": ["Do not execute external commands"],
-            "acceptance_criteria": ["Request payload is persisted", "Execution context includes prompt"],
+            "acceptance_criteria": [
+                "Request payload is persisted",
+                "Execution context includes prompt",
+            ],
             "recommended_skills": ["pytest"],
             "agent_handoff": {
                 "primary_agent": "codex",
@@ -60,7 +80,10 @@ def _make_execution_pack() -> ExecutionPack:
             "summary": "Ensure prompt and payload generation are deterministic.",
             "test_scope": ["codex request builder", "claude_code request builder"],
             "edge_cases": ["Missing execution pack file", "Executor type mismatch"],
-            "acceptance_criteria": ["Pytest coverage exists", "Prompt rendering includes validation details"],
+            "acceptance_criteria": [
+                "Pytest coverage exists",
+                "Prompt rendering includes validation details",
+            ],
             "agent_handoff": {
                 "primary_agent": "claude_code",
                 "supporting_agents": ["codex"],
@@ -92,18 +115,34 @@ def _make_bundle(tmp_path: Path) -> DeliveryBundle:
     test_checklist = tmp_path / "test_checklist.md"
 
     implementation_pack_path.write_text(
-        json.dumps(execution_pack.implementation_pack.model_dump(mode="python"), ensure_ascii=False, indent=2),
+        json.dumps(
+            execution_pack.implementation_pack.model_dump(mode="python"),
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     test_pack_path.write_text(
-        json.dumps(execution_pack.test_pack.model_dump(mode="python"), ensure_ascii=False, indent=2),
+        json.dumps(
+            execution_pack.test_pack.model_dump(mode="python"),
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     execution_pack_path.write_text(
-        json.dumps(execution_pack.model_dump(mode="python"), ensure_ascii=False, indent=2),
+        json.dumps(
+            execution_pack.model_dump(mode="python"), ensure_ascii=False, indent=2
+        ),
         encoding="utf-8",
     )
-    for path in (prd_review_report, open_questions, scope_boundary, tech_design_draft, test_checklist):
+    for path in (
+        prd_review_report,
+        open_questions,
+        scope_boundary,
+        tech_design_draft,
+        test_checklist,
+    ):
         _write_text(path, f"{path.stem}\n")
 
     return DeliveryBundle(
@@ -112,16 +151,33 @@ def _make_bundle(tmp_path: Path) -> DeliveryBundle:
         status=BundleStatus.approved,
         source_run_id="20260308T080000Z",
         artifacts=DeliveryArtifacts(
-            prd_review_report=ArtifactRef(artifact_type="prd_review_report", path=str(prd_review_report)),
-            open_questions=ArtifactRef(artifact_type="open_questions", path=str(open_questions)),
-            scope_boundary=ArtifactRef(artifact_type="scope_boundary", path=str(scope_boundary)),
-            tech_design_draft=ArtifactRef(artifact_type="tech_design_draft", path=str(tech_design_draft)),
-            test_checklist=ArtifactRef(artifact_type="test_checklist", path=str(test_checklist)),
-            implementation_pack=ArtifactRef(artifact_type="implementation_pack", path=str(implementation_pack_path)),
+            prd_review_report=ArtifactRef(
+                artifact_type="prd_review_report", path=str(prd_review_report)
+            ),
+            open_questions=ArtifactRef(
+                artifact_type="open_questions", path=str(open_questions)
+            ),
+            scope_boundary=ArtifactRef(
+                artifact_type="scope_boundary", path=str(scope_boundary)
+            ),
+            tech_design_draft=ArtifactRef(
+                artifact_type="tech_design_draft", path=str(tech_design_draft)
+            ),
+            test_checklist=ArtifactRef(
+                artifact_type="test_checklist", path=str(test_checklist)
+            ),
+            implementation_pack=ArtifactRef(
+                artifact_type="implementation_pack", path=str(implementation_pack_path)
+            ),
             test_pack=ArtifactRef(artifact_type="test_pack", path=str(test_pack_path)),
-            execution_pack=ArtifactRef(artifact_type="execution_pack", path=str(execution_pack_path)),
+            execution_pack=ArtifactRef(
+                artifact_type="execution_pack", path=str(execution_pack_path)
+            ),
         ),
-        metadata={"workspace_root": "D:/workspace/project", "owner": "delivery-planning"},
+        metadata={
+            "workspace_root": "D:/workspace/project",
+            "owner": "delivery-planning",
+        },
     )
 
 
@@ -139,7 +195,9 @@ def _make_task(executor_type: str, source_pack_type: str) -> ExecutionTask:
     )
 
 
-def test_base_adapter_subclass_build_pack_writes_request_and_context(tmp_path: Path) -> None:
+def test_base_adapter_subclass_build_pack_writes_request_and_context(
+    tmp_path: Path,
+) -> None:
     bundle = _make_bundle(tmp_path)
     task = _make_task("dummy", "implementation_pack")
 
@@ -187,7 +245,9 @@ def test_codex_adapter_request_payload_contains_expected_fields(tmp_path: Path) 
     assert request["prompt"].startswith("# Codex Handoff Prompt")
 
 
-def test_claude_code_adapter_build_prompt_and_context_generation(tmp_path: Path) -> None:
+def test_claude_code_adapter_build_prompt_and_context_generation(
+    tmp_path: Path,
+) -> None:
     bundle = _make_bundle(tmp_path)
     task = _make_task("claude_code", "test_pack")
     adapter = ClaudeCodeAdapter()
@@ -223,7 +283,9 @@ def test_claude_code_adapter_build_prompt_and_context_generation(tmp_path: Path)
     assert "# Claude Code Handoff Prompt" in context
 
 
-def test_openclaw_adapter_request_payload_contains_verification_scope(tmp_path: Path) -> None:
+def test_openclaw_adapter_request_payload_contains_verification_scope(
+    tmp_path: Path,
+) -> None:
     bundle = _make_bundle(tmp_path)
     task = _make_task("openclaw", "implementation_pack")
 

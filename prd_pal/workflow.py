@@ -14,12 +14,23 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
-from .agents import delivery_planning_agent, planner_agent, parser_agent, reporter_agent, reviewer_agent, risk_agent
+from .agents import (
+    delivery_planning_agent,
+    planner_agent,
+    parser_agent,
+    reporter_agent,
+    reviewer_agent,
+    risk_agent,
+)
 from .memory import MemoryService, retrieve_memories_with_diagnostics_async
 from .review import decide_review_mode, run_parallel_review_async
 from .state import ReviewState, plan_from_state
 from .review.memory_store import FileBackedMemoryStore, NoopMemoryStore
-from .review.normalizer_cache import FileBackedNormalizerCache, InMemoryNormalizerCache, normalize_requirement_with_cache
+from .review.normalizer_cache import (
+    FileBackedNormalizerCache,
+    InMemoryNormalizerCache,
+    normalize_requirement_with_cache,
+)
 from .templates.registry import CLARIFY_PARSER_REVIEW_PROMPT, PARSER_REVIEW_PROMPT
 from .utils.logging import get_logger
 from .utils.trace import trace_start
@@ -74,9 +85,15 @@ def _parallel_start_node(state: ReviewState) -> ReviewState:
 def _review_join_node(state: ReviewState) -> ReviewState:
     trace: dict[str, Any] = dict(state.get("trace", {}))
     plan = plan_from_state(state)
-    planner_span = trace.get("planner", {}) if isinstance(trace.get("planner"), dict) else {}
+    planner_span = (
+        trace.get("planner", {}) if isinstance(trace.get("planner"), dict) else {}
+    )
     risk_span = trace.get("risk", {}) if isinstance(trace.get("risk"), dict) else {}
-    start_span = trace.get(_PARALLEL_TRACE_KEY, {}) if isinstance(trace.get(_PARALLEL_TRACE_KEY), dict) else {}
+    start_span = (
+        trace.get(_PARALLEL_TRACE_KEY, {})
+        if isinstance(trace.get(_PARALLEL_TRACE_KEY), dict)
+        else {}
+    )
 
     planner_ready = isinstance(state.get("plan"), dict)
     risk_ready = isinstance(state.get("evidence"), dict)
@@ -91,7 +108,9 @@ def _review_join_node(state: ReviewState) -> ReviewState:
     risk_start = _parse_iso(risk_span.get("start"))
     risk_end = _parse_iso(risk_span.get("end"))
     parallel_start = _parse_iso(start_span.get("start")) or planner_start or risk_start
-    parallel_end = max([dt for dt in (planner_end, risk_end) if dt is not None], default=None)
+    parallel_end = max(
+        [dt for dt in (planner_end, risk_end) if dt is not None], default=None
+    )
 
     planner_duration_ms = int(planner_span.get("duration_ms", 0) or 0)
     risk_duration_ms = int(risk_span.get("duration_ms", 0) or 0)
@@ -102,13 +121,22 @@ def _review_join_node(state: ReviewState) -> ReviewState:
         else 0
     )
     overlap_ms = (
-        int((min(planner_end, risk_end) - max(planner_start, risk_start)).total_seconds() * 1000)
+        int(
+            (
+                min(planner_end, risk_end) - max(planner_start, risk_start)
+            ).total_seconds()
+            * 1000
+        )
         if planner_start and planner_end and risk_start and risk_end
         else 0
     )
     overlap_ms = max(0, overlap_ms)
     saved_ms = max(0, sum_step_time_ms - parallel_wall_time_ms)
-    speedup_ratio = round(sum_step_time_ms / parallel_wall_time_ms, 3) if parallel_wall_time_ms > 0 else 1.0
+    speedup_ratio = (
+        round(sum_step_time_ms / parallel_wall_time_ms, 3)
+        if parallel_wall_time_ms > 0
+        else 1.0
+    )
 
     trace[_PARALLEL_TRACE_KEY] = {
         **start_span,
@@ -181,7 +209,6 @@ def _route_next(state: ReviewState) -> str:
     return "reporter"
 
 
-
 def _not_needed_clarification() -> dict[str, Any]:
     return {
         "triggered": False,
@@ -190,6 +217,7 @@ def _not_needed_clarification() -> dict[str, Any]:
         "answers_applied": [],
         "findings_updated": [],
     }
+
 
 def _build_async_node(
     node_name: str,
@@ -207,7 +235,9 @@ def _build_async_node(
             log.error("node failed", extra={"node": node_name}, exc_info=True)
             raise
         duration_ms = round((perf_counter() - started) * 1000)
-        log.info("node completed", extra={"node": node_name, "duration_ms": duration_ms})
+        log.info(
+            "node completed", extra={"node": node_name, "duration_ms": duration_ms}
+        )
         if progress_hook:
             merged_state: ReviewState = dict(state)
             if isinstance(update, dict):
@@ -234,7 +264,9 @@ def _build_sync_node(
             log.error("node failed", extra={"node": node_name}, exc_info=True)
             raise
         duration_ms = round((perf_counter() - started) * 1000)
-        log.info("node completed", extra={"node": node_name, "duration_ms": duration_ms})
+        log.info(
+            "node completed", extra={"node": node_name, "duration_ms": duration_ms}
+        )
         if progress_hook:
             merged_state: ReviewState = dict(state)
             if isinstance(update, dict):
@@ -252,8 +284,9 @@ def _resolve_requested_mode(state: ReviewState) -> str:
 
     override = str(state.get("review_mode_override", "") or "").strip().lower()
     legacy_map = {"single_review": "quick", "parallel_review": "full"}
-    return legacy_map.get(override, override if override in {"auto", "quick", "full"} else "auto")
-
+    return legacy_map.get(
+        override, override if override in {"auto", "quick", "full"} else "auto"
+    )
 
 
 def _truthy(value: Any) -> bool:
@@ -262,7 +295,9 @@ def _truthy(value: Any) -> bool:
 
 def _resolve_normalizer_cache(state: ReviewState):
     cache_config = dict(state.get("normalizer_cache_config", {}) or {})
-    cache_path = str(cache_config.get("path") or os.getenv("NORMALIZER_CACHE_PATH", "")).strip()
+    cache_path = str(
+        cache_config.get("path") or os.getenv("NORMALIZER_CACHE_PATH", "")
+    ).strip()
     if cache_path:
         return FileBackedNormalizerCache(cache_path)
     return InMemoryNormalizerCache()
@@ -273,12 +308,18 @@ def _resolve_memory_store(state: ReviewState):
     enabled = memory_config.get("enabled")
     if enabled is None:
         enabled = _truthy(os.getenv("REVIEW_MEMORY_ENABLED", ""))
-    storage_path = str(memory_config.get("path") or os.getenv("REVIEW_MEMORY_PATH", "")).strip()
-    seeds_dir = str(memory_config.get("seeds_dir") or os.getenv("REVIEW_MEMORY_SEEDS_DIR", "")).strip()
+    storage_path = str(
+        memory_config.get("path") or os.getenv("REVIEW_MEMORY_PATH", "")
+    ).strip()
+    seeds_dir = str(
+        memory_config.get("seeds_dir") or os.getenv("REVIEW_MEMORY_SEEDS_DIR", "")
+    ).strip()
     if not storage_path and enabled:
         run_dir = str(state.get("run_dir", "") or "").strip()
         if run_dir:
-            storage_path = str(Path(run_dir).resolve().parent / "_memory" / "review_memory.json")
+            storage_path = str(
+                Path(run_dir).resolve().parent / "_memory" / "review_memory.json"
+            )
     if not storage_path:
         return NoopMemoryStore()
     return FileBackedMemoryStore(storage_path, seeds_dir=seeds_dir or None)
@@ -289,28 +330,47 @@ async def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
     cache = _resolve_normalizer_cache(state)
     cache_result = normalize_requirement_with_cache(requirement_doc, cache=cache)
     memory_store = _resolve_memory_store(state)
-    memory_hit_objects = memory_store.retrieve_similar(cache_result.requirement, limit=3)
+    memory_hit_objects = memory_store.retrieve_similar(
+        cache_result.requirement, limit=3
+    )
     memory_hits = [item.to_dict() for item in memory_hit_objects]
-    similar_reviews_referenced = [str(item.get("reference_id", "") or "").strip() for item in memory_hits if str(item.get("reference_id", "") or "").strip()]
+    similar_reviews_referenced = [
+        str(item.get("reference_id", "") or "").strip()
+        for item in memory_hits
+        if str(item.get("reference_id", "") or "").strip()
+    ]
     memory_retrieval_config = dict(state.get("memory_retrieval_config", {}) or {})
-    memory_mode = str(memory_retrieval_config.get("mode", "off") or "off").strip().lower() or "off"
+    memory_mode = (
+        str(memory_retrieval_config.get("mode", "off") or "off").strip().lower()
+        or "off"
+    )
     structured_memory_hits: list[dict[str, Any]] = []
     structured_memory_hits_objects: list[Any] = []
     memory_usage_notes: list[str] = []
     if memory_mode != "off":
         try:
-            memory_service = MemoryService.from_db_path(memory_retrieval_config.get("db_path"))
+            memory_service = MemoryService.from_db_path(
+                memory_retrieval_config.get("db_path")
+            )
             await memory_service.initialize()
             retrieval = await retrieve_memories_with_diagnostics_async(
                 memory_service=memory_service,
-                canonical_review_request=dict(state.get("canonical_review_request", {}) or {}),
+                canonical_review_request=dict(
+                    state.get("canonical_review_request", {}) or {}
+                ),
                 normalized_requirement=asdict(cache_result.requirement),
                 memory_mode=memory_mode,
             )
             structured_memory_hits_objects = list(retrieval.selected)
             structured_memory_hits = [item.to_dict() for item in retrieval.selected]
-            rejected_memory_candidates = [item.to_dict() for item in retrieval.rejected_candidates]
-            memory_usage_notes = [str(item.get("usage_note", "") or "").strip() for item in structured_memory_hits if str(item.get("usage_note", "") or "").strip()]
+            rejected_memory_candidates = [
+                item.to_dict() for item in retrieval.rejected_candidates
+            ]
+            memory_usage_notes = [
+                str(item.get("usage_note", "") or "").strip()
+                for item in structured_memory_hits
+                if str(item.get("usage_note", "") or "").strip()
+            ]
         except Exception:
             structured_memory_hits = []
             structured_memory_hits_objects = []
@@ -336,15 +396,37 @@ async def _prepare_review_context(state: ReviewState) -> dict[str, Any]:
 
 
 def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> ReviewState:
-    memory_hits = [dict(item) for item in context.get("memory_hits", []) or [] if isinstance(item, dict)]
-    similar_reviews_referenced = [str(item) for item in context.get("similar_reviews_referenced", []) or [] if str(item).strip()]
-    structured_memory_hits = [dict(item) for item in context.get("structured_memory_hits", []) or [] if isinstance(item, dict)]
-    rejected_memory_candidates = [
-        dict(item) for item in context.get("rejected_memory_candidates", []) or [] if isinstance(item, dict)
+    memory_hits = [
+        dict(item)
+        for item in context.get("memory_hits", []) or []
+        if isinstance(item, dict)
     ]
-    memory_usage_notes = [str(item) for item in context.get("memory_usage_notes", []) or [] if str(item).strip()]
-    memory_mode = str(context.get("memory_mode", "off") or "off").strip().lower() or "off"
-    update["normalized_requirement"] = dict(context.get("normalized_requirement", {}) or {})
+    similar_reviews_referenced = [
+        str(item)
+        for item in context.get("similar_reviews_referenced", []) or []
+        if str(item).strip()
+    ]
+    structured_memory_hits = [
+        dict(item)
+        for item in context.get("structured_memory_hits", []) or []
+        if isinstance(item, dict)
+    ]
+    rejected_memory_candidates = [
+        dict(item)
+        for item in context.get("rejected_memory_candidates", []) or []
+        if isinstance(item, dict)
+    ]
+    memory_usage_notes = [
+        str(item)
+        for item in context.get("memory_usage_notes", []) or []
+        if str(item).strip()
+    ]
+    memory_mode = (
+        str(context.get("memory_mode", "off") or "off").strip().lower() or "off"
+    )
+    update["normalized_requirement"] = dict(
+        context.get("normalized_requirement", {}) or {}
+    )
     update["memory_hits"] = memory_hits
     update["similar_reviews_referenced"] = similar_reviews_referenced
     update["structured_memory_hits"] = structured_memory_hits
@@ -355,7 +437,11 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
     update["memory_usage"] = {
         "memory_mode": memory_mode,
         "retrieved_count": len(structured_memory_hits),
-        "retrieved_memory_ids": [str(item.get("memory_id", "") or "").strip() for item in structured_memory_hits if str(item.get("memory_id", "") or "").strip()],
+        "retrieved_memory_ids": [
+            str(item.get("memory_id", "") or "").strip()
+            for item in structured_memory_hits
+            if str(item.get("memory_id", "") or "").strip()
+        ],
         "retrieved_memories": retrieved_memory_cards,
         "rejected_candidates": rejected_memory_candidates,
         "usage_notes": memory_usage_notes,
@@ -387,7 +473,9 @@ def _apply_review_context(update: ReviewState, context: dict[str, Any]) -> Revie
         parallel_review["memory_usage_notes"] = memory_usage_notes
         parallel_review["memory_usage"] = dict(update["memory_usage"])
         parallel_review["memory_influence"] = dict(meta.get("memory_influence", {}))
-        parallel_review["normalizer_cache_hit"] = bool(context.get("normalizer_cache_hit", False))
+        parallel_review["normalizer_cache_hit"] = bool(
+            context.get("normalizer_cache_hit", False)
+        )
         parallel_review["rag_enabled"] = bool(context.get("rag_enabled", False))
         update["parallel_review"] = parallel_review
     trace = dict(update.get("trace", {}) or {})
@@ -408,7 +496,9 @@ def _memory_cards(structured_memory_hits: list[dict[str, Any]]) -> list[dict[str
     return cards
 
 
-def _build_memory_influence(update: ReviewState, structured_memory_hits: list[dict[str, Any]]) -> dict[str, Any]:
+def _build_memory_influence(
+    update: ReviewState, structured_memory_hits: list[dict[str, Any]]
+) -> dict[str, Any]:
     known_memory_ids = {
         str(item.get("memory_id", "") or "").strip()
         for item in structured_memory_hits
@@ -432,14 +522,20 @@ def _build_memory_influence(update: ReviewState, structured_memory_hits: list[di
             }
         )
     refs_by_finding_id = {
-        str(item.get("finding_id", "") or "").strip(): list(item.get("memory_refs", []) or [])
+        str(item.get("finding_id", "") or "").strip(): list(
+            item.get("memory_refs", []) or []
+        )
         for item in findings
         if str(item.get("finding_id", "") or "").strip()
     }
     for item in parallel_review.get("open_questions", []) or []:
         if not isinstance(item, dict):
             continue
-        refs = [str(ref).strip() for ref in item.get("memory_refs", []) or [] if str(ref).strip()]
+        refs = [
+            str(ref).strip()
+            for ref in item.get("memory_refs", []) or []
+            if str(ref).strip()
+        ]
         if not refs:
             continue
         open_questions.append(
@@ -453,7 +549,11 @@ def _build_memory_influence(update: ReviewState, structured_memory_hits: list[di
         for item in clarification.get("questions", []) or []:
             if not isinstance(item, dict):
                 continue
-            refs = [str(ref).strip() for ref in item.get("memory_refs", []) or [] if str(ref).strip()]
+            refs = [
+                str(ref).strip()
+                for ref in item.get("memory_refs", []) or []
+                if str(ref).strip()
+            ]
             for finding_id in item.get("finding_ids", []) or []:
                 refs.extend(refs_by_finding_id.get(str(finding_id).strip(), []))
             refs = _unique_strings(refs)
@@ -504,7 +604,9 @@ def _unique_strings(values: list[str]) -> list[str]:
     return items
 
 
-def _resolve_review_profile_context(state: ReviewState) -> tuple[dict[str, Any], dict[str, Any]]:
+def _resolve_review_profile_context(
+    state: ReviewState,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     profile = dict(state.get("review_profile", {}) or {})
     pack = dict(state.get("review_profile_pack", {}) or {})
     return profile, pack
@@ -516,7 +618,9 @@ def _attach_profile_meta(meta: dict[str, Any], state: ReviewState) -> dict[str, 
         meta["review_profile"] = profile
         meta["selected_profile"] = str(profile.get("selected_profile", "") or "")
         meta["profile_routing_reason"] = str(profile.get("reason", "") or "")
-        meta["profile_routing_confidence"] = float(profile.get("confidence", 0.0) or 0.0)
+        meta["profile_routing_confidence"] = float(
+            profile.get("confidence", 0.0) or 0.0
+        )
         meta["secondary_profiles"] = list(profile.get("secondary_profiles", []) or [])
     if pack:
         meta["review_profile_pack"] = {
@@ -526,6 +630,7 @@ def _attach_profile_meta(meta: dict[str, Any], state: ReviewState) -> dict[str, 
             "rules_path": str(pack.get("rules_path", "") or ""),
         }
     return meta
+
 
 async def _reviewer_node(state: ReviewState) -> ReviewState:
     requested_mode = _resolve_requested_mode(state)
@@ -538,9 +643,15 @@ async def _reviewer_node(state: ReviewState) -> ReviewState:
     log.info("review 模式: %s", decision.selected_mode, extra={"node": "reviewer"})
 
     if decision.selected_mode == "skip":
-        update = _build_skip_reviewer_response(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+        update = _build_skip_reviewer_response(
+            state,
+            decision=decision,
+            override=str(state.get("review_mode_override", "") or "").strip().lower(),
+        )
         findings_count = len(list(update.get("review_results", []) or []))
-        log.info("review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"})
+        log.info(
+            "review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"}
+        )
         return _apply_review_context(update, review_context)
     if decision.selected_mode == "full":
         update = await _run_parallel_reviewer(
@@ -549,23 +660,35 @@ async def _reviewer_node(state: ReviewState) -> ReviewState:
             override=str(state.get("review_mode_override", "") or "").strip().lower(),
             review_context=review_context,
         )
-        findings_count = len(list(update.get("parallel_review", {}).get("findings", []) or []))
-        log.info("review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"})
+        findings_count = len(
+            list(update.get("parallel_review", {}).get("findings", []) or [])
+        )
+        log.info(
+            "review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"}
+        )
         return _apply_review_context(update, review_context)
-    update = await _run_single_reviewer(state, decision=decision, override=str(state.get("review_mode_override", "") or "").strip().lower())
+    update = await _run_single_reviewer(
+        state,
+        decision=decision,
+        override=str(state.get("review_mode_override", "") or "").strip().lower(),
+    )
     findings_count = len(list(update.get("review_results", []) or []))
     log.info("review 完成, %s 条 findings", findings_count, extra={"node": "reviewer"})
     return _apply_review_context(update, review_context)
 
 
-async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: str) -> ReviewState:
+async def _run_single_reviewer(
+    state: ReviewState, *, decision: Any, override: str
+) -> ReviewState:
     update = await reviewer_agent.run(state)
     trace: dict[str, Any] = dict(update.get("trace", state.get("trace", {})) or {})
     review_results = list(update.get("review_results", []) or [])
     review_open_questions = _derive_single_review_open_questions(review_results)
     review_risk_items = _derive_single_review_risk_items(review_results)
 
-    reviewer_trace = trace.get("reviewer") if isinstance(trace.get("reviewer"), dict) else {}
+    reviewer_trace = (
+        trace.get("reviewer") if isinstance(trace.get("reviewer"), dict) else {}
+    )
     selected_mode = "quick"
     meta = {
         "requested_mode": decision.requested_mode,
@@ -588,8 +711,12 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
         "finding_count": len(review_results),
         "open_questions_count": len(review_open_questions),
         "risk_items_count": len(review_risk_items),
-        "input_token_estimate": _estimate_tokens(int(reviewer_trace.get("input_chars", 0) or 0)),
-        "output_token_estimate": _estimate_tokens(int(reviewer_trace.get("output_chars", 0) or 0)),
+        "input_token_estimate": _estimate_tokens(
+            int(reviewer_trace.get("input_chars", 0) or 0)
+        ),
+        "output_token_estimate": _estimate_tokens(
+            int(reviewer_trace.get("output_chars", 0) or 0)
+        ),
         "duration_ms": int(reviewer_trace.get("duration_ms", 0) or 0),
         "tool_calls": [],
         "reviewer_insights": [
@@ -619,10 +746,16 @@ async def _run_single_reviewer(state: ReviewState, *, decision: Any, override: s
     return update
 
 
-def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override: str) -> ReviewState:
+def _build_skip_reviewer_response(
+    state: ReviewState, *, decision: Any, override: str
+) -> ReviewState:
     trace: dict[str, Any] = dict(state.get("trace", {}))
     message = "Manual review required because the submitted requirement is too sparse for automated triage."
-    reviewer_trace = trace_start("reviewer", model="none", input_chars=len(str(state.get("requirement_doc", "") or "")))
+    reviewer_trace = trace_start(
+        "reviewer",
+        model="none",
+        input_chars=len(str(state.get("requirement_doc", "") or "")),
+    )
     reviewer_trace.set_attr("review_mode", "skip")
     trace["reviewer"] = reviewer_trace.end(status="ok", output_chars=len(message))
     meta = {
@@ -646,7 +779,9 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
         "finding_count": 0,
         "open_questions_count": 0,
         "risk_items_count": 0,
-        "input_token_estimate": _estimate_tokens(len(str(state.get("requirement_doc", "") or ""))),
+        "input_token_estimate": _estimate_tokens(
+            len(str(state.get("requirement_doc", "") or ""))
+        ),
         "output_token_estimate": _estimate_tokens(len(message)),
         "duration_ms": 0,
         "tool_calls": [],
@@ -687,7 +822,12 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
             "manual_review_message": message,
             "partial_review": True,
         },
-        "review_open_questions": [{"question": "Provide a fuller requirement with scope, scenarios, and acceptance criteria.", "reviewers": ["manual"]}],
+        "review_open_questions": [
+            {
+                "question": "Provide a fuller requirement with scope, scenarios, and acceptance criteria.",
+                "reviewers": ["manual"],
+            }
+        ],
         "review_risk_items": [],
         "review_tool_calls": [],
         "reviewer_insights": list(meta.get("reviewer_insights", [])),
@@ -698,13 +838,16 @@ def _build_skip_reviewer_response(state: ReviewState, *, decision: Any, override
     }
 
 
-
-async def _invoke_parallel_review_manager(requirement_doc: str, run_dir: str, decision: Any, review_context: dict[str, Any]):
+async def _invoke_parallel_review_manager(
+    requirement_doc: str, run_dir: str, decision: Any, review_context: dict[str, Any]
+):
     kwargs = {
         "gating_decision": decision,
         "normalized_requirement": review_context["normalized_requirement_obj"],
         "memory_hits": list(review_context.get("memory_hits_objects", []) or []),
-        "retrieved_memories": list(review_context.get("structured_memory_hits_objects", []) or []),
+        "retrieved_memories": list(
+            review_context.get("structured_memory_hits_objects", []) or []
+        ),
         "memory_mode": str(review_context.get("memory_mode", "off") or "off"),
         "normalizer_cache_hit": bool(review_context.get("normalizer_cache_hit", False)),
         "rag_enabled": bool(review_context.get("rag_enabled", False)),
@@ -712,7 +855,11 @@ async def _invoke_parallel_review_manager(requirement_doc: str, run_dir: str, de
     supported = set(inspect.signature(run_parallel_review_async).parameters)
     filtered_kwargs = {key: value for key, value in kwargs.items() if key in supported}
     return await run_parallel_review_async(requirement_doc, run_dir, **filtered_kwargs)
-async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override: str, review_context: dict[str, Any]) -> ReviewState:
+
+
+async def _run_parallel_reviewer(
+    state: ReviewState, *, decision: Any, override: str, review_context: dict[str, Any]
+) -> ReviewState:
     requirement_doc = str(state.get("requirement_doc", "") or "")
     run_dir = str(state.get("run_dir", "") or "")
     trace: dict[str, Any] = dict(state.get("trace", {}))
@@ -721,24 +868,59 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     span.set_attr("reviewer_strategy", "asyncio.gather")
     started = perf_counter()
 
-    parallel_result = await _invoke_parallel_review_manager(requirement_doc, run_dir, decision, review_context)
+    parallel_result = await _invoke_parallel_review_manager(
+        requirement_doc, run_dir, decision, review_context
+    )
     aggregated = parallel_result.aggregated
     aggregated_meta = dict(aggregated.get("meta", {}) or {})
-    selected_mode = str(aggregated.get("review_mode", aggregated_meta.get("review_mode", "full")) or "full")
-    partial_review = bool(aggregated.get("partial_review", aggregated_meta.get("partial_review", False)))
-    reviewers_completed = list(aggregated.get("reviewers_completed", aggregated_meta.get("reviewers_completed", [])) or [])
-    reviewers_failed = list(aggregated.get("reviewers_failed", aggregated_meta.get("reviewers_failed", [])) or [])
-    reviewers_used = list(aggregated.get("reviewers_used", aggregated_meta.get("reviewers_used", [])) or [])
-    reviewers_skipped = list(aggregated.get("reviewers_skipped", aggregated_meta.get("reviewers_skipped", [])) or [])
-    manual_review_required = bool(aggregated.get("manual_review_required", aggregated_meta.get("manual_review_required", False)))
-    manual_review_message = str(aggregated.get("manual_review_message", aggregated_meta.get("manual_review_message", "")) or "").strip()
+    selected_mode = str(
+        aggregated.get("review_mode", aggregated_meta.get("review_mode", "full"))
+        or "full"
+    )
+    partial_review = bool(
+        aggregated.get("partial_review", aggregated_meta.get("partial_review", False))
+    )
+    reviewers_completed = list(
+        aggregated.get(
+            "reviewers_completed", aggregated_meta.get("reviewers_completed", [])
+        )
+        or []
+    )
+    reviewers_failed = list(
+        aggregated.get("reviewers_failed", aggregated_meta.get("reviewers_failed", []))
+        or []
+    )
+    reviewers_used = list(
+        aggregated.get("reviewers_used", aggregated_meta.get("reviewers_used", []))
+        or []
+    )
+    reviewers_skipped = list(
+        aggregated.get(
+            "reviewers_skipped", aggregated_meta.get("reviewers_skipped", [])
+        )
+        or []
+    )
+    manual_review_required = bool(
+        aggregated.get(
+            "manual_review_required",
+            aggregated_meta.get("manual_review_required", False),
+        )
+    )
+    manual_review_message = str(
+        aggregated.get(
+            "manual_review_message", aggregated_meta.get("manual_review_message", "")
+        )
+        or ""
+    ).strip()
     review_results = _build_parallel_review_results(state, aggregated)
     plan_review = _build_parallel_plan_review(aggregated)
     review_open_questions = list(aggregated.get("open_questions", []) or [])
     review_risk_items = list(aggregated.get("risk_items", []) or [])
     review_tool_calls = list(aggregated.get("tool_calls", []) or [])
     reviewer_insights = list(aggregated.get("reviewer_summaries", []) or [])
-    clarification = dict(aggregated.get("clarification", {}) or _not_needed_clarification())
+    clarification = dict(
+        aggregated.get("clarification", {}) or _not_needed_clarification()
+    )
     findings = list(aggregated.get("findings", []) or [])
 
     output_chars = len(json.dumps(aggregated, ensure_ascii=False))
@@ -758,8 +940,16 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
         "manual_review_required": manual_review_required,
         "manual_review_message": manual_review_message,
         "gating": dict(aggregated.get("gating", asdict(decision))),
-        "gating_reasons": list(aggregated_meta.get("gating_reasons", aggregated.get("gating", {}).get("reasons", [])) or []),
-        "reviewer_count": int(aggregated.get("reviewer_count", len(reviewers_completed)) or len(reviewers_completed)),
+        "gating_reasons": list(
+            aggregated_meta.get(
+                "gating_reasons", aggregated.get("gating", {}).get("reasons", [])
+            )
+            or []
+        ),
+        "reviewer_count": int(
+            aggregated.get("reviewer_count", len(reviewers_completed))
+            or len(reviewers_completed)
+        ),
         "reviewers_completed": reviewers_completed,
         "reviewers_failed": reviewers_failed,
         "reviewers_used": reviewers_used,
@@ -777,7 +967,9 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     meta = _attach_profile_meta(meta, state)
     trace[_PARALLEL_REVIEW_META_KEY] = meta
 
-    aggregated["meta"] = _attach_profile_meta(dict(aggregated.get("meta", {}) or {}), state)
+    aggregated["meta"] = _attach_profile_meta(
+        dict(aggregated.get("meta", {}) or {}), state
+    )
     aggregated["review_profile"] = dict(state.get("review_profile", {}) or {})
     aggregated["review_profile_pack"] = dict(state.get("review_profile_pack", {}) or {})
 
@@ -800,18 +992,22 @@ async def _run_parallel_reviewer(state: ReviewState, *, decision: Any, override:
     }
 
 
-def _build_parallel_review_results(state: ReviewState, aggregated: dict[str, Any]) -> list[dict[str, Any]]:
+def _build_parallel_review_results(
+    state: ReviewState, aggregated: dict[str, Any]
+) -> list[dict[str, Any]]:
     parsed_items = list(state.get("parsed_items", []) or [])
     findings = list(aggregated.get("findings", []) or [])
     open_questions = list(aggregated.get("open_questions", []) or [])
     risk_items = list(aggregated.get("risk_items", []) or [])
 
     has_scope_gap = any(
-        str(item.get("category", "")).lower() in {"scope", "acceptance"} and str(item.get("severity", "")).lower() == "high"
+        str(item.get("category", "")).lower() in {"scope", "acceptance"}
+        and str(item.get("severity", "")).lower() == "high"
         for item in findings
     )
     has_testability_gap = any(
-        str(item.get("category", "")).lower() == "testability" and str(item.get("severity", "")).lower() == "high"
+        str(item.get("category", "")).lower() == "testability"
+        and str(item.get("severity", "")).lower() == "high"
         for item in findings
     )
     issue_lines = [
@@ -819,7 +1015,11 @@ def _build_parallel_review_results(state: ReviewState, aggregated: dict[str, Any
         for item in findings[:2]
         if str(item.get("title", "") or "").strip()
     ]
-    question_lines = [str(item.get("question", "") or "").strip() for item in open_questions[:2] if str(item.get("question", "") or "").strip()]
+    question_lines = [
+        str(item.get("question", "") or "").strip()
+        for item in open_questions[:2]
+        if str(item.get("question", "") or "").strip()
+    ]
     suggestions = "; ".join(
         str(item.get("mitigation", "") or item.get("detail", "")).strip()
         for item in risk_items[:2]
@@ -848,12 +1048,18 @@ def _build_parallel_review_results(state: ReviewState, aggregated: dict[str, Any
 
 def _build_parallel_plan_review(aggregated: dict[str, Any]) -> dict[str, str]:
     summaries = {
-        str(item.get("reviewer", "") or "").strip().lower(): str(item.get("summary", "") or "").strip()
+        str(item.get("reviewer", "") or "").strip().lower(): str(
+            item.get("summary", "") or ""
+        ).strip()
         for item in list(aggregated.get("reviewer_summaries", []) or [])
         if isinstance(item, dict)
     }
     return {
-        "coverage": " ".join(part for part in (summaries.get("product", ""), summaries.get("security", "")) if part),
+        "coverage": " ".join(
+            part
+            for part in (summaries.get("product", ""), summaries.get("security", ""))
+            if part
+        ),
         "milestones": summaries.get("engineering", ""),
         "estimation": summaries.get("qa", ""),
     }
@@ -877,19 +1083,37 @@ def _compute_parallel_high_risk_ratio(review_results: list[dict[str, Any]]) -> f
     return high_count / total
 
 
-def _derive_single_review_open_questions(review_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _derive_single_review_open_questions(
+    review_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     questions: list[dict[str, Any]] = []
     for item in review_results:
-        issues = [str(issue).strip() for issue in list(item.get("issues", []) or []) if str(issue).strip()]
+        issues = [
+            str(issue).strip()
+            for issue in list(item.get("issues", []) or [])
+            if str(issue).strip()
+        ]
         if item.get("is_ambiguous") or issues:
-            question = str(item.get("description") or item.get("id") or "Clarify requirement intent").strip()
+            question = str(
+                item.get("description")
+                or item.get("id")
+                or "Clarify requirement intent"
+            ).strip()
             if not question:
                 question = "Clarify requirement intent"
-            questions.append({"question": question, "reviewers": ["single_reviewer"], "issues": issues})
+            questions.append(
+                {
+                    "question": question,
+                    "reviewers": ["single_reviewer"],
+                    "issues": issues,
+                }
+            )
     return questions
 
 
-def _derive_single_review_risk_items(review_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _derive_single_review_risk_items(
+    review_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for item in review_results:
         flags = sum(
@@ -902,11 +1126,19 @@ def _derive_single_review_risk_items(review_results: list[dict[str, Any]]) -> li
         if flags == 0:
             continue
         severity = "high" if flags >= 2 else "medium"
-        issues = [str(issue).strip() for issue in list(item.get("issues", []) or []) if str(issue).strip()]
+        issues = [
+            str(issue).strip()
+            for issue in list(item.get("issues", []) or [])
+            if str(issue).strip()
+        ]
         items.append(
             {
                 "title": str(item.get("id", "Requirement review risk")),
-                "detail": "; ".join(issues) or str(item.get("suggestions", "") or "Clarify the requirement before implementation."),
+                "detail": "; ".join(issues)
+                or str(
+                    item.get("suggestions", "")
+                    or "Clarify the requirement before implementation."
+                ),
                 "severity": severity,
                 "category": "review_quality",
                 "reviewers": ["single_reviewer"],
@@ -926,19 +1158,42 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
 
     workflow = StateGraph(ReviewState)
 
-    workflow.add_node("parser", _build_async_node("parser", parser_agent.run, progress_hook))
-    workflow.add_node("clarify", _build_async_node("clarify", _clarify_node, progress_hook))
-    workflow.add_node("parallel_start", _build_sync_node("parallel_start", _parallel_start_node, progress_hook))
-    workflow.add_node("planner", _build_async_node("planner", planner_agent.run, progress_hook))
-    workflow.add_node("risk", _build_async_node("risk", run_risk_analysis_from_review_state, progress_hook))
-    workflow.add_node("review_join", _build_sync_node("review_join", _review_join_node, progress_hook))
+    workflow.add_node(
+        "parser", _build_async_node("parser", parser_agent.run, progress_hook)
+    )
+    workflow.add_node(
+        "clarify", _build_async_node("clarify", _clarify_node, progress_hook)
+    )
+    workflow.add_node(
+        "parallel_start",
+        _build_sync_node("parallel_start", _parallel_start_node, progress_hook),
+    )
+    workflow.add_node(
+        "planner", _build_async_node("planner", planner_agent.run, progress_hook)
+    )
+    workflow.add_node(
+        "risk",
+        _build_async_node("risk", run_risk_analysis_from_review_state, progress_hook),
+    )
+    workflow.add_node(
+        "review_join", _build_sync_node("review_join", _review_join_node, progress_hook)
+    )
     workflow.add_node(
         "delivery_planning",
-        _build_async_node("delivery_planning", delivery_planning_agent.run, progress_hook),
+        _build_async_node(
+            "delivery_planning", delivery_planning_agent.run, progress_hook
+        ),
     )
-    workflow.add_node("reviewer", _build_async_node("reviewer", _reviewer_node, progress_hook))
-    workflow.add_node("route_decider", _build_sync_node("route_decider", _route_decider_node, progress_hook))
-    workflow.add_node("reporter", _build_async_node("reporter", reporter_agent.run, progress_hook))
+    workflow.add_node(
+        "reviewer", _build_async_node("reviewer", _reviewer_node, progress_hook)
+    )
+    workflow.add_node(
+        "route_decider",
+        _build_sync_node("route_decider", _route_decider_node, progress_hook),
+    )
+    workflow.add_node(
+        "reporter", _build_async_node("reporter", reporter_agent.run, progress_hook)
+    )
 
     workflow.set_entry_point("parser")
     workflow.add_edge("parser", "parallel_start")
@@ -950,18 +1205,9 @@ def build_review_graph(progress_hook: ProgressHook | None = None):
     workflow.add_edge("review_join", "delivery_planning")
     workflow.add_edge("delivery_planning", "reviewer")
     workflow.add_edge("reviewer", "route_decider")
-    workflow.add_conditional_edges("route_decider", _route_next, {"clarify": "clarify", "reporter": "reporter"})
+    workflow.add_conditional_edges(
+        "route_decider", _route_next, {"clarify": "clarify", "reporter": "reporter"}
+    )
     workflow.add_edge("reporter", END)
 
     return workflow.compile()
-
-
-
-
-
-
-
-
-
-
-

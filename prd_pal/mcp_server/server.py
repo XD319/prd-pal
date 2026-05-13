@@ -34,7 +34,11 @@ from prd_pal.service.review_service import (
     review_prd_for_mcp_async,
     review_requirement_for_mcp_async,
 )
-from prd_pal.templates import TemplateRegistryError, get_template_record, list_template_records
+from prd_pal.templates import (
+    TemplateRegistryError,
+    get_template_record,
+    list_template_records,
+)
 
 mcp = FastMCP("requirement-review-v1")
 
@@ -55,7 +59,9 @@ async def review_prd(
 ) -> dict[str, Any]:
     """Run the fuller MCP workflow-oriented review contract and return artifact-rich outputs."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="review_prd")
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="review_prd"
+        )
         client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
         return await review_prd_for_mcp_async(
             prd_text=prd_text,
@@ -71,12 +77,16 @@ async def review_prd(
     except (TypeError, ValueError) as exc:
         classified_error = _review_input_error_response(exc)
         if classified_error is not None:
-            return _error_response(classified_error["code"], classified_error["message"])
+            return _error_response(
+                classified_error["code"], classified_error["message"]
+            )
         return _error_response("INVALID_INPUT", str(exc))
     except Exception as exc:
         classified_error = _review_input_error_response(exc)
         if classified_error is not None:
-            return _error_response(classified_error["code"], classified_error["message"])
+            return _error_response(
+                classified_error["code"], classified_error["message"]
+            )
         return _error_response("INTERNAL_ERROR", f"review_prd failed: {exc}")
 
 
@@ -95,7 +105,9 @@ async def review_requirement(
         resolved_options = _merge_tool_options(metadata=metadata, options=options)
         if mode is not None:
             resolved_options = {**resolved_options, "mode": mode}
-        audited_options = _with_audit_context(options=resolved_options, ctx=ctx, tool_name="review_requirement")
+        audited_options = _with_audit_context(
+            options=resolved_options, ctx=ctx, tool_name="review_requirement"
+        )
         client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
         return await review_requirement_for_mcp_async(
             prd_text=prd_text,
@@ -111,13 +123,19 @@ async def review_requirement(
     except (TypeError, ValueError) as exc:
         classified_error = _review_input_error_response(exc)
         if classified_error is not None:
-            return _review_requirement_error_response(classified_error["code"], classified_error["message"])
+            return _review_requirement_error_response(
+                classified_error["code"], classified_error["message"]
+            )
         return _review_requirement_error_response("INVALID_INPUT", str(exc))
     except Exception as exc:
         classified_error = _review_input_error_response(exc)
         if classified_error is not None:
-            return _review_requirement_error_response(classified_error["code"], classified_error["message"])
-        return _review_requirement_error_response("INTERNAL_ERROR", f"review_requirement failed: {exc}")
+            return _review_requirement_error_response(
+                classified_error["code"], classified_error["message"]
+            )
+        return _review_requirement_error_response(
+            "INTERNAL_ERROR", f"review_requirement failed: {exc}"
+        )
 
 
 @mcp.tool()
@@ -132,7 +150,9 @@ async def prepare_agent_handoff(
 ) -> dict[str, Any]:
     """Prepare adapter-specific request payloads for downstream coding agents."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="prepare_agent_handoff")
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="prepare_agent_handoff"
+        )
         client_meta = _extract_client_metadata(ctx=ctx, options=audited_options)
         return await prepare_agent_handoff_for_mcp_async(
             agent=agent,
@@ -144,9 +164,13 @@ async def prepare_agent_handoff(
             invocation_meta={"client_metadata": client_meta} if client_meta else {},
         )
     except FileNotFoundError as exc:
-        return _prepare_agent_handoff_error_response(run_id=run_id, agent=agent, code="NOT_FOUND", message=str(exc))
+        return _prepare_agent_handoff_error_response(
+            run_id=run_id, agent=agent, code="NOT_FOUND", message=str(exc)
+        )
     except NotImplementedError as exc:
-        return _prepare_agent_handoff_error_response(run_id=run_id, agent=agent, code="NOT_IMPLEMENTED", message=str(exc))
+        return _prepare_agent_handoff_error_response(
+            run_id=run_id, agent=agent, code="NOT_IMPLEMENTED", message=str(exc)
+        )
     except (TypeError, ValueError) as exc:
         classified_error = _review_input_error_response(exc)
         if classified_error is not None:
@@ -156,7 +180,9 @@ async def prepare_agent_handoff(
                 code=classified_error["code"],
                 message=classified_error["message"],
             )
-        return _prepare_agent_handoff_error_response(run_id=run_id, agent=agent, code="INVALID_INPUT", message=str(exc))
+        return _prepare_agent_handoff_error_response(
+            run_id=run_id, agent=agent, code="INVALID_INPUT", message=str(exc)
+        )
     except Exception as exc:
         classified_error = _review_input_error_response(exc)
         if classified_error is not None:
@@ -173,6 +199,7 @@ async def prepare_agent_handoff(
             message=f"prepare_agent_handoff failed: {exc}",
         )
 
+
 @mcp.tool()
 def answer_review_clarification(
     run_id: str,
@@ -182,20 +209,31 @@ def answer_review_clarification(
 ) -> dict[str, Any]:
     """Apply user clarification answers to the persisted review result and return the refreshed facade payload."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="answer_review_clarification")
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="answer_review_clarification"
+        )
         return answer_review_clarification_for_mcp(
             run_id=run_id,
             answers=answers,
             options=audited_options,
         )
     except FileNotFoundError as exc:
-        return {"run_id": str(run_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+        return {
+            "run_id": str(run_id or ""),
+            "error": {"code": "not_found", "message": str(exc)},
+        }
     except (TypeError, ValueError) as exc:
-        return {"run_id": str(run_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+        return {
+            "run_id": str(run_id or ""),
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
     except Exception as exc:
         return {
             "run_id": str(run_id or ""),
-            "error": {"code": "internal_error", "message": f"answer_review_clarification failed: {exc}"},
+            "error": {
+                "code": "internal_error",
+                "message": f"answer_review_clarification failed: {exc}",
+            },
         }
 
 
@@ -252,14 +290,28 @@ async def generate_delivery_bundle(
 ) -> dict[str, Any]:
     """Generate or regenerate the standardized delivery bundle for a completed run."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="generate_delivery_bundle")
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="generate_delivery_bundle"
+        )
         return generate_delivery_bundle_for_mcp(run_id=run_id, options=audited_options)
     except FileNotFoundError as exc:
-        return {"run_id": str(run_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+        return {
+            "run_id": str(run_id or ""),
+            "error": {"code": "not_found", "message": str(exc)},
+        }
     except (TypeError, ValueError) as exc:
-        return {"run_id": str(run_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+        return {
+            "run_id": str(run_id or ""),
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
     except Exception as exc:
-        return {"run_id": str(run_id or ""), "error": {"code": "internal_error", "message": f"generate_delivery_bundle failed: {exc}"}}
+        return {
+            "run_id": str(run_id or ""),
+            "error": {
+                "code": "internal_error",
+                "message": f"generate_delivery_bundle failed: {exc}",
+            },
+        }
 
 
 @mcp.tool()
@@ -273,7 +325,9 @@ def approve_handoff(
 ) -> dict[str, Any]:
     """Apply one approval operation to a persisted delivery bundle and return updated record paths."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="approve_handoff", actor=reviewer)
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="approve_handoff", actor=reviewer
+        )
         return approve_handoff_for_mcp(
             bundle_id=bundle_id,
             action=action,
@@ -282,11 +336,23 @@ def approve_handoff(
             options=audited_options,
         )
     except FileNotFoundError as exc:
-        return {"bundle_id": str(bundle_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+        return {
+            "bundle_id": str(bundle_id or ""),
+            "error": {"code": "not_found", "message": str(exc)},
+        }
     except (TypeError, ValueError) as exc:
-        return {"bundle_id": str(bundle_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+        return {
+            "bundle_id": str(bundle_id or ""),
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
     except Exception as exc:
-        return {"bundle_id": str(bundle_id or ""), "error": {"code": "internal_error", "message": f"approve_handoff failed: {exc}"}}
+        return {
+            "bundle_id": str(bundle_id or ""),
+            "error": {
+                "code": "internal_error",
+                "message": f"approve_handoff failed: {exc}",
+            },
+        }
 
 
 @mcp.tool()
@@ -298,20 +364,38 @@ async def handoff_to_executor(
 ) -> dict[str, Any]:
     """Turn one approved delivery bundle into persisted execution tasks."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="handoff_to_executor")
-        return handoff_to_executor_for_mcp(bundle_id=bundle_id, execution_mode=execution_mode, options=audited_options)
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="handoff_to_executor"
+        )
+        return handoff_to_executor_for_mcp(
+            bundle_id=bundle_id, execution_mode=execution_mode, options=audited_options
+        )
     except FileNotFoundError as exc:
-        return {"bundle_id": str(bundle_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+        return {
+            "bundle_id": str(bundle_id or ""),
+            "error": {"code": "not_found", "message": str(exc)},
+        }
     except (TypeError, ValueError) as exc:
-        return {"bundle_id": str(bundle_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+        return {
+            "bundle_id": str(bundle_id or ""),
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
     except Exception as exc:
-        return {"bundle_id": str(bundle_id or ""), "error": {"code": "internal_error", "message": f"handoff_to_executor failed: {exc}"}}
+        return {
+            "bundle_id": str(bundle_id or ""),
+            "error": {
+                "code": "internal_error",
+                "message": f"handoff_to_executor failed: {exc}",
+            },
+        }
 
 
 @mcp.tool()
 def update_execution_task(
     task_id: str,
-    status: Literal["assigned", "in_progress", "waiting_review", "completed", "failed", "cancelled"],
+    status: Literal[
+        "assigned", "in_progress", "waiting_review", "completed", "failed", "cancelled"
+    ],
     actor: str = "",
     assigned_to: str = "",
     detail: str = "",
@@ -322,7 +406,9 @@ def update_execution_task(
 ) -> dict[str, Any]:
     """Persist one execution task status update from an external executor callback or polling loop."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="update_execution_task", actor=actor)
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="update_execution_task", actor=actor
+        )
         return update_execution_task_for_mcp(
             task_id=task_id,
             status=status,
@@ -334,11 +420,23 @@ def update_execution_task(
             options=audited_options,
         )
     except FileNotFoundError as exc:
-        return {"task_id": str(task_id or ""), "error": {"code": "not_found", "message": str(exc)}}
+        return {
+            "task_id": str(task_id or ""),
+            "error": {"code": "not_found", "message": str(exc)},
+        }
     except (TypeError, ValueError) as exc:
-        return {"task_id": str(task_id or ""), "error": {"code": "invalid_input", "message": str(exc)}}
+        return {
+            "task_id": str(task_id or ""),
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
     except Exception as exc:
-        return {"task_id": str(task_id or ""), "error": {"code": "internal_error", "message": f"update_execution_task failed: {exc}"}}
+        return {
+            "task_id": str(task_id or ""),
+            "error": {
+                "code": "internal_error",
+                "message": f"update_execution_task failed: {exc}",
+            },
+        }
 
 
 @mcp.tool()
@@ -349,13 +447,20 @@ def list_execution_tasks(
 ) -> dict[str, Any]:
     """List persisted execution tasks, optionally filtered by bundle or status."""
     try:
-        return list_execution_tasks_for_mcp(bundle_id=bundle_id, status=status, options=options)
+        return list_execution_tasks_for_mcp(
+            bundle_id=bundle_id, status=status, options=options
+        )
     except FileNotFoundError as exc:
         return {"error": {"code": "not_found", "message": str(exc)}}
     except (TypeError, ValueError) as exc:
         return {"error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
-        return {"error": {"code": "internal_error", "message": f"list_execution_tasks failed: {exc}"}}
+        return {
+            "error": {
+                "code": "internal_error",
+                "message": f"list_execution_tasks failed: {exc}",
+            }
+        }
 
 
 @mcp.tool()
@@ -366,13 +471,20 @@ def get_review_workspace(
 ) -> dict[str, Any]:
     """Query persisted review workspace state by run or bundle identifier."""
     try:
-        return get_review_workspace_for_mcp(run_id=run_id, bundle_id=bundle_id, options=options)
+        return get_review_workspace_for_mcp(
+            run_id=run_id, bundle_id=bundle_id, options=options
+        )
     except FileNotFoundError as exc:
         return {"error": {"code": "not_found", "message": str(exc)}}
     except (TypeError, ValueError) as exc:
         return {"error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
-        return {"error": {"code": "internal_error", "message": f"get_review_workspace failed: {exc}"}}
+        return {
+            "error": {
+                "code": "internal_error",
+                "message": f"get_review_workspace failed: {exc}",
+            }
+        }
 
 
 @mcp.tool()
@@ -387,7 +499,9 @@ def get_template_registry(
             template = get_template_record(str(template_id).strip(), version=version)
             return {"count": 1, "templates": [template]}
 
-        templates = list(list_template_records(template_type=template_type, version=version))
+        templates = list(
+            list_template_records(template_type=template_type, version=version)
+        )
         payload: dict[str, Any] = {"count": len(templates), "templates": templates}
         if template_type is not None:
             payload["template_type"] = template_type
@@ -395,11 +509,26 @@ def get_template_registry(
             payload["version"] = version
         return payload
     except TemplateRegistryError as exc:
-        return {"count": 0, "templates": [], "error": {"code": "not_found", "message": str(exc)}}
+        return {
+            "count": 0,
+            "templates": [],
+            "error": {"code": "not_found", "message": str(exc)},
+        }
     except (TypeError, ValueError) as exc:
-        return {"count": 0, "templates": [], "error": {"code": "invalid_input", "message": str(exc)}}
+        return {
+            "count": 0,
+            "templates": [],
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
     except Exception as exc:
-        return {"count": 0, "templates": [], "error": {"code": "internal_error", "message": f"get_template_registry failed: {exc}"}}
+        return {
+            "count": 0,
+            "templates": [],
+            "error": {
+                "code": "internal_error",
+                "message": f"get_template_registry failed: {exc}",
+            },
+        }
 
 
 @mcp.tool()
@@ -437,9 +566,20 @@ def get_audit_events(
             },
         }
     except (TypeError, ValueError) as exc:
-        return {"count": 0, "events": [], "error": {"code": "invalid_input", "message": str(exc)}}
+        return {
+            "count": 0,
+            "events": [],
+            "error": {"code": "invalid_input", "message": str(exc)},
+        }
     except Exception as exc:
-        return {"count": 0, "events": [], "error": {"code": "internal_error", "message": f"get_audit_events failed: {exc}"}}
+        return {
+            "count": 0,
+            "events": [],
+            "error": {
+                "code": "internal_error",
+                "message": f"get_audit_events failed: {exc}",
+            },
+        }
 
 
 @mcp.tool()
@@ -451,7 +591,9 @@ def retry_operation(
 ) -> dict[str, Any]:
     """Retry one non-blocking governance operation for a persisted run."""
     try:
-        audited_options = _with_audit_context(options=options, ctx=ctx, tool_name="retry_operation")
+        audited_options = _with_audit_context(
+            options=options, ctx=ctx, tool_name="retry_operation"
+        )
         outputs_root = audited_options.get("outputs_root", "outputs")
         result = retry_governance_operation(
             run_id=run_id,
@@ -488,7 +630,10 @@ def retry_operation(
         return {
             "run_id": str(run_id or ""),
             "operation": str(operation or ""),
-            "error": {"code": "internal_error", "message": f"retry_operation failed: {exc}"},
+            "error": {
+                "code": "internal_error",
+                "message": f"retry_operation failed: {exc}",
+            },
         }
 
 
@@ -500,13 +645,20 @@ def get_execution_status(
 ) -> dict[str, Any]:
     """Query persisted execution task status by bundle or task identifier."""
     try:
-        return get_execution_status_for_mcp(bundle_id=bundle_id, task_id=task_id, options=options)
+        return get_execution_status_for_mcp(
+            bundle_id=bundle_id, task_id=task_id, options=options
+        )
     except FileNotFoundError as exc:
         return {"error": {"code": "not_found", "message": str(exc)}}
     except (TypeError, ValueError) as exc:
         return {"error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
-        return {"error": {"code": "internal_error", "message": f"get_execution_status failed: {exc}"}}
+        return {
+            "error": {
+                "code": "internal_error",
+                "message": f"get_execution_status failed: {exc}",
+            }
+        }
 
 
 @mcp.tool()
@@ -529,7 +681,12 @@ def get_traceability(
     except (TypeError, ValueError) as exc:
         return {"error": {"code": "invalid_input", "message": str(exc)}}
     except Exception as exc:
-        return {"error": {"code": "internal_error", "message": f"get_traceability failed: {exc}"}}
+        return {
+            "error": {
+                "code": "internal_error",
+                "message": f"get_traceability failed: {exc}",
+            }
+        }
 
 
 def _with_audit_context(
@@ -548,8 +705,14 @@ def _with_audit_context(
     audit_context = dict(existing_context) if isinstance(existing_context, dict) else {}
 
     existing_client_metadata = audit_context.get("client_metadata")
-    merged_client_metadata = dict(existing_client_metadata) if isinstance(existing_client_metadata, dict) else {}
-    merged_client_metadata.update(_extract_client_metadata(ctx=ctx, options=updated_options))
+    merged_client_metadata = (
+        dict(existing_client_metadata)
+        if isinstance(existing_client_metadata, dict)
+        else {}
+    )
+    merged_client_metadata.update(
+        _extract_client_metadata(ctx=ctx, options=updated_options)
+    )
     if merged_client_metadata:
         audit_context["client_metadata"] = merged_client_metadata
 
@@ -585,7 +748,10 @@ def _merge_tool_options(
         merged.update(options)
     return merged
 
-def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None) -> dict[str, Any]:
+
+def _extract_client_metadata(
+    ctx: Context | None, options: dict[str, Any] | None
+) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
     if isinstance(options, dict):
         option_meta = options.get("client_metadata")
@@ -612,7 +778,11 @@ def _extract_client_metadata(ctx: Context | None, options: dict[str, Any] | None
         pass
 
     try:
-        client_info = getattr(getattr(ctx.request_context.session, "client_params", None), "clientInfo", None)
+        client_info = getattr(
+            getattr(ctx.request_context.session, "client_params", None),
+            "clientInfo",
+            None,
+        )
         if client_info is not None:
             if hasattr(client_info, "model_dump"):
                 metadata["client_info"] = client_info.model_dump(exclude_none=True)
@@ -698,6 +868,7 @@ def _prepare_agent_handoff_error_response(
         },
     }
 
+
 def main() -> None:
     """Start MCP server over stdio transport."""
     mcp.run(transport="stdio")
@@ -705,5 +876,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

@@ -114,7 +114,10 @@ class ArtifactPatchOp(AgentSchemaModel):
 
     @model_validator(mode="after")
     def validate_payload(self) -> ArtifactPatchOp:
-        if self.action in {ArtifactPatchAction.set_field, ArtifactPatchAction.replace_text}:
+        if self.action in {
+            ArtifactPatchAction.set_field,
+            ArtifactPatchAction.replace_text,
+        }:
             if not self.target.field:
                 raise ValueError("field is required for set_field and replace_text")
             if self.old_value is None:

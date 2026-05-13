@@ -9,11 +9,17 @@ from fastapi.testclient import TestClient
 from prd_pal.server import app as app_module
 
 
-def _utc_timestamp(year: int, month: int, day: int, hour: int, minute: int, second: int = 0) -> float:
-    return datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc).timestamp()
+def _utc_timestamp(
+    year: int, month: int, day: int, hour: int, minute: int, second: int = 0
+) -> float:
+    return datetime(
+        year, month, day, hour, minute, second, tzinfo=timezone.utc
+    ).timestamp()
 
 
-def test_list_runs_returns_empty_when_outputs_directory_has_no_runs(tmp_path, monkeypatch):
+def test_list_runs_returns_empty_when_outputs_directory_has_no_runs(
+    tmp_path, monkeypatch
+):
     monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
     app_module._jobs.clear()
 
@@ -131,17 +137,24 @@ def test_list_runs_returns_most_recent_runs_first(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert [item["run_id"] for item in payload["runs"]] == ["20260309T030405Z", "20260309T020304Z"]
+    assert [item["run_id"] for item in payload["runs"]] == [
+        "20260309T030405Z",
+        "20260309T020304Z",
+    ]
     app_module._jobs.clear()
 
 
 @pytest.mark.asyncio
-async def test_allocate_unique_run_dir_waits_out_same_second_collision(tmp_path, monkeypatch):
-    generated = iter([
-        "20260309T040506Z",
-        "20260309T040506Z",
-        "20260309T040507Z",
-    ])
+async def test_allocate_unique_run_dir_waits_out_same_second_collision(
+    tmp_path, monkeypatch
+):
+    generated = iter(
+        [
+            "20260309T040506Z",
+            "20260309T040506Z",
+            "20260309T040507Z",
+        ]
+    )
 
     monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
     monkeypatch.setattr(app_module, "make_run_id", lambda: next(generated))

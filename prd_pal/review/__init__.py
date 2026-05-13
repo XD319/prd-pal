@@ -1,9 +1,24 @@
 """Window A review helpers for gating and requirement normalization."""
 
-from .aggregator import AggregatedReview, AggregatedReviewArtifacts, aggregate_review_results
+from .aggregator import (
+    AggregatedReview,
+    AggregatedReviewArtifacts,
+    aggregate_review_results,
+)
 from .gating import GatingConfig, ReviewModeDecision, decide_review_mode
-from .memory_store import BaseMemoryStore, ChromaMemoryStore, FileBackedMemoryStore, MemoryHit, NoopMemoryStore
-from .normalizer import NormalizedRequirement, build_reviewer_input, build_reviewer_inputs, normalize_requirement
+from .memory_store import (
+    BaseMemoryStore,
+    ChromaMemoryStore,
+    FileBackedMemoryStore,
+    MemoryHit,
+    NoopMemoryStore,
+)
+from .normalizer import (
+    NormalizedRequirement,
+    build_reviewer_input,
+    build_reviewer_inputs,
+    normalize_requirement,
+)
 from .normalizer_cache import (
     BaseNormalizerCache,
     FileBackedNormalizerCache,
@@ -11,8 +26,16 @@ from .normalizer_cache import (
     NormalizerCacheResult,
     normalize_requirement_with_cache,
 )
-from .parallel_review_manager import ParallelReviewResult, run_parallel_review, run_parallel_review_async
-from .profile_router import ReviewProfileRoutingResult, load_profile_pack, route_review_profile
+from .parallel_review_manager import (
+    ParallelReviewResult,
+    run_parallel_review,
+    run_parallel_review_async,
+)
+from .profile_router import (
+    ReviewProfileRoutingResult,
+    load_profile_pack,
+    route_review_profile,
+)
 
 __all__ = [
     "AggregatedReview",

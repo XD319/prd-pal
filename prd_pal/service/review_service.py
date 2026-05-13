@@ -13,7 +13,10 @@ from typing import Any
 
 from prd_pal.connectors import ConnectorRegistry, get_connector_error_payload
 from prd_pal.review.aggregator import _render_review_report, _render_summary
-from prd_pal.review.clarification_gate import apply_clarification_answers, build_clarification_payload
+from prd_pal.review.clarification_gate import (
+    apply_clarification_answers,
+    build_clarification_payload,
+)
 from prd_pal.review.ingress_normalization import normalize_ingress_request
 from prd_pal.review.profile_router import load_profile_pack, route_review_profile
 from prd_pal.connectors.feishu import (
@@ -23,7 +26,11 @@ from prd_pal.connectors.feishu import (
     FeishuUnsupportedDocumentTypeError,
 )
 from prd_pal.draft_generator import generate_prd_v1_artifact
-from prd_pal.handoff import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
+from prd_pal.handoff import (
+    render_claude_code_prompt,
+    render_codex_prompt,
+    render_openclaw_prompt,
+)
 from prd_pal.task_bundle_generator import generate_task_bundle_v1_artifact
 from prd_pal.templates import get_adapter_prompt_template
 from prd_pal.monitoring import append_audit_event, retry_metadata_for_status
@@ -115,6 +122,7 @@ class ReviewResultNotReadyError(RuntimeError):
 class ReviewArtifactNotFoundError(FileNotFoundError):
     """Raised when a requested review artifact cannot be found."""
 
+
 @dataclass(frozen=True, slots=True)
 class ReviewInputErrorInfo:
     code: str
@@ -147,6 +155,7 @@ def classify_review_input_error(exc: Exception) -> ReviewInputErrorInfo | None:
     if not mapped_code:
         return None
     return ReviewInputErrorInfo(code=mapped_code, message=connector_error.message)
+
 
 _REVIEW_RESULT_ARTIFACT_FILENAMES: dict[str, str] = {
     "report_md": "report.md",
@@ -271,11 +280,21 @@ def _default_revision_stage_payload(report_payload: dict[str, Any]) -> dict[str,
     }
 
 
-def _with_revision_preferences(run_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
+def _with_revision_preferences(
+    run_dir: Path, payload: dict[str, Any]
+) -> dict[str, Any]:
     revised_path = run_dir / "revised_prd.md"
     confirmed_path = run_dir / CONFIRMED_PRD_FILENAME
-    draft_ref = str(revised_path.resolve()) if revised_path.exists() and revised_path.is_file() else ""
-    confirmed_ref = str(confirmed_path.resolve()) if confirmed_path.exists() and confirmed_path.is_file() else ""
+    draft_ref = (
+        str(revised_path.resolve())
+        if revised_path.exists() and revised_path.is_file()
+        else ""
+    )
+    confirmed_ref = (
+        str(confirmed_path.resolve())
+        if confirmed_path.exists() and confirmed_path.is_file()
+        else ""
+    )
     revision_confirmed = bool(payload.get("revision_confirmed")) and bool(confirmed_ref)
     if revision_confirmed:
         preferred_source = "confirmed_revision"
@@ -296,7 +315,9 @@ def _with_revision_preferences(run_dir: Path, payload: dict[str, Any]) -> dict[s
     }
 
 
-def _load_revision_stage_payload(run_dir: Path, report_payload: dict[str, Any]) -> dict[str, Any]:
+def _load_revision_stage_payload(
+    run_dir: Path, report_payload: dict[str, Any]
+) -> dict[str, Any]:
     default_payload = _default_revision_stage_payload(report_payload)
     stage_path = _revision_stage_path(run_dir)
     if not stage_path.exists() or not stage_path.is_file():
@@ -308,10 +329,14 @@ def _load_revision_stage_payload(run_dir: Path, report_payload: dict[str, Any]) 
 
     normalized = {**default_payload, **persisted}
     normalized["available"] = default_payload["available"]
-    if not default_payload["available"] and str(normalized.get("status", "") or "").strip() == "prompted":
+    if (
+        not default_payload["available"]
+        and str(normalized.get("status", "") or "").strip() == "prompted"
+    ):
         normalized["status"] = "unavailable"
     normalized["decision_required"] = bool(
-        normalized["available"] and str(normalized.get("status", "") or "").strip() == "prompted"
+        normalized["available"]
+        and str(normalized.get("status", "") or "").strip() == "prompted"
     )
     normalized["allow_continue_without_revision"] = bool(normalized["available"])
     return _with_revision_preferences(run_dir, normalized)
@@ -341,7 +366,9 @@ def record_revision_stage_decision(
         next_status = "skipped"
         entered_revision = False
     else:
-        raise ValueError(f"unsupported revision decision for run_id={run_id}: {normalized_decision}")
+        raise ValueError(
+            f"unsupported revision decision for run_id={run_id}: {normalized_decision}"
+        )
 
     payload = {
         "status": next_status,
@@ -374,7 +401,9 @@ def _build_source_context_snapshot(report_payload: dict[str, Any]) -> dict[str, 
     clarification = _derive_clarification(report_payload)
     return {
         "review_status": _derive_status(report_payload),
-        "review_summary": report_payload.get("summary") if isinstance(report_payload.get("summary"), dict) else {},
+        "review_summary": report_payload.get("summary")
+        if isinstance(report_payload.get("summary"), dict)
+        else {},
         "gating": _derive_gating(report_payload),
         "clarification": {
             "triggered": bool(clarification.get("triggered")),
@@ -410,12 +439,20 @@ def record_revision_input(
         raise ValueError(f"revision not entered for run_id={run_id}")
 
     normalized_basis = str(selected_review_basis or "").strip()
-    if normalized_basis not in {"all_review_suggestions", "partial_review_suggestions", "user_only"}:
-        raise ValueError(f"unsupported selected_review_basis for run_id={run_id}: {normalized_basis}")
+    if normalized_basis not in {
+        "all_review_suggestions",
+        "partial_review_suggestions",
+        "user_only",
+    }:
+        raise ValueError(
+            f"unsupported selected_review_basis for run_id={run_id}: {normalized_basis}"
+        )
 
     normalized_extra = str(extra_instructions or "").strip()
     normalized_notes = str(meeting_notes_text or "").strip()
-    normalized_file_ref = dict(meeting_notes_file_ref) if isinstance(meeting_notes_file_ref, dict) else {}
+    normalized_file_ref = (
+        dict(meeting_notes_file_ref) if isinstance(meeting_notes_file_ref, dict) else {}
+    )
     filename = str(normalized_file_ref.get("filename", "") or "").strip()
     extension = str(normalized_file_ref.get("extension", "") or "").strip().lower()
     if not extension and "." in filename:
@@ -423,7 +460,9 @@ def record_revision_input(
 
     if normalized_file_ref:
         if not normalized_notes:
-            raise ValueError("meeting notes file upload requires extracted text content")
+            raise ValueError(
+                "meeting notes file upload requires extracted text content"
+            )
         if extension and extension not in _SUPPORTED_MEETING_NOTES_EXTENSIONS:
             raise ValueError(f"unsupported meeting notes file extension: .{extension}")
         normalized_file_ref["filename"] = filename
@@ -443,7 +482,9 @@ def record_revision_input(
     _write_json_object(run_dir / REVISION_REQUEST_FILENAME, revision_request_payload)
 
     if normalized_notes:
-        (run_dir / MEETING_NOTES_FILENAME).write_text(normalized_notes, encoding="utf-8")
+        (run_dir / MEETING_NOTES_FILENAME).write_text(
+            normalized_notes, encoding="utf-8"
+        )
     else:
         (run_dir / MEETING_NOTES_FILENAME).unlink(missing_ok=True)
 
@@ -480,8 +521,14 @@ def record_revision_input(
         "run_id": str(run_id).strip(),
         "revision_stage": next_stage,
         "revision_request_path": str((run_dir / REVISION_REQUEST_FILENAME).resolve()),
-        "meeting_notes_path": str((run_dir / MEETING_NOTES_FILENAME).resolve()) if normalized_notes else "",
-        "meeting_notes_meta_path": str((run_dir / MEETING_NOTES_META_FILENAME).resolve()) if normalized_file_ref else "",
+        "meeting_notes_path": str((run_dir / MEETING_NOTES_FILENAME).resolve())
+        if normalized_notes
+        else "",
+        "meeting_notes_meta_path": str(
+            (run_dir / MEETING_NOTES_META_FILENAME).resolve()
+        )
+        if normalized_file_ref
+        else "",
     }
 
 
@@ -507,7 +554,9 @@ def confirm_revision_action(
         if not revised_path.exists() or not revised_path.is_file():
             raise ValueError(f"revised_prd.md not found for run_id={run_id}")
         confirmed_path = run_dir / CONFIRMED_PRD_FILENAME
-        confirmed_path.write_text(revised_path.read_text(encoding="utf-8"), encoding="utf-8")
+        confirmed_path.write_text(
+            revised_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
         next_stage = {
             **current_stage,
             "status": "confirmed",
@@ -521,25 +570,40 @@ def confirm_revision_action(
         audit_details = {"confirmed_revision_ref": next_stage["confirmed_revision_ref"]}
     elif normalized_action == "regenerate_revision":
         revision_request_path = run_dir / REVISION_REQUEST_FILENAME
-        revision_request = _load_json_object(revision_request_path) if revision_request_path.exists() else {}
+        revision_request = (
+            _load_json_object(revision_request_path)
+            if revision_request_path.exists()
+            else {}
+        )
         if not isinstance(revision_request, dict):
             revision_request = {}
-        existing_extra = str(revision_request.get("extra_instructions", "") or "").strip()
+        existing_extra = str(
+            revision_request.get("extra_instructions", "") or ""
+        ).strip()
         merged_extra = existing_extra
         if normalized_requirements:
             merged_extra = (
                 f"{existing_extra}\n\n[additional_requirements]\n{normalized_requirements}"
-                if existing_extra else normalized_requirements
+                if existing_extra
+                else normalized_requirements
             )
         revision_request.update(
             {
                 "run_id": str(run_id).strip(),
-                "selected_review_basis": str(revision_request.get("selected_review_basis") or "all_review_suggestions"),
+                "selected_review_basis": str(
+                    revision_request.get("selected_review_basis")
+                    or "all_review_suggestions"
+                ),
                 "extra_instructions": merged_extra,
-                "meeting_notes_text": str(revision_request.get("meeting_notes_text") or ""),
+                "meeting_notes_text": str(
+                    revision_request.get("meeting_notes_text") or ""
+                ),
                 "meeting_notes_file_ref": revision_request.get("meeting_notes_file_ref")
-                if isinstance(revision_request.get("meeting_notes_file_ref"), dict) else {},
-                "source_context_snapshot": _build_source_context_snapshot(report_payload),
+                if isinstance(revision_request.get("meeting_notes_file_ref"), dict)
+                else {},
+                "source_context_snapshot": _build_source_context_snapshot(
+                    report_payload
+                ),
                 "created_at": _utc_now_iso(),
             }
         )
@@ -572,7 +636,9 @@ def confirm_revision_action(
         audit_status = "skipped"
         audit_details = {}
     else:
-        raise ValueError(f"unsupported revision confirm action for run_id={run_id}: {normalized_action}")
+        raise ValueError(
+            f"unsupported revision confirm action for run_id={run_id}: {normalized_action}"
+        )
 
     next_stage = _with_revision_preferences(run_dir, next_stage)
     _write_json_object(_revision_stage_path(run_dir), next_stage)
@@ -599,7 +665,9 @@ def get_review_result_payload(
 
     report_path = run_dir / "report.json"
     if not report_path.exists() or not report_path.is_file():
-        raise ReviewResultNotReadyError(f"report.json not ready for run_id={normalized_run_id}")
+        raise ReviewResultNotReadyError(
+            f"report.json not ready for run_id={normalized_run_id}"
+        )
 
     try:
         result = json.loads(report_path.read_text(encoding="utf-8"))
@@ -616,16 +684,24 @@ def get_review_result_payload(
     status = _derive_status(result) if isinstance(result, dict) else "completed"
     gating = _derive_gating(result) if isinstance(result, dict) else {}
     reviewers_used = _derive_reviewers_used(result) if isinstance(result, dict) else []
-    reviewers_skipped = _derive_reviewers_skipped(result) if isinstance(result, dict) else []
+    reviewers_skipped = (
+        _derive_reviewers_skipped(result) if isinstance(result, dict) else []
+    )
     mode = _derive_review_mode(result) if isinstance(result, dict) else "quick"
     return {
         "run_id": normalized_run_id,
         "status": status,
         "mode": mode,
         "gating": gating,
-        "clarification": _derive_clarification(result) if isinstance(result, dict) else {},
-        "revision_stage": _load_revision_stage_payload(run_dir, result) if isinstance(result, dict) else {},
-        "artifact_patch": _derive_artifact_patch(result) if isinstance(result, dict) else {},
+        "clarification": _derive_clarification(result)
+        if isinstance(result, dict)
+        else {},
+        "revision_stage": _load_revision_stage_payload(run_dir, result)
+        if isinstance(result, dict)
+        else {},
+        "artifact_patch": _derive_artifact_patch(result)
+        if isinstance(result, dict)
+        else {},
         "reviewers_used": reviewers_used,
         "reviewers_skipped": reviewers_skipped,
         "result": result,
@@ -641,7 +717,9 @@ def get_review_artifact_preview_payload(
 ) -> dict[str, Any]:
     normalized_run_id = str(run_id or "").strip()
     normalized_artifact_key = str(artifact_key or "").strip()
-    result_payload = get_review_result_payload(run_id=normalized_run_id, outputs_root=outputs_root)
+    result_payload = get_review_result_payload(
+        run_id=normalized_run_id, outputs_root=outputs_root
+    )
     artifact_paths = result_payload.get("artifact_paths", {})
     raw_path = str(artifact_paths.get(normalized_artifact_key, "") or "").strip()
     if not raw_path:
@@ -670,7 +748,9 @@ def get_review_artifact_preview_payload(
     try:
         content = artifact_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
-        raise ValueError(f"artifact preview is only available for UTF-8 text files: {artifact_path.name}") from exc
+        raise ValueError(
+            f"artifact preview is only available for UTF-8 text files: {artifact_path.name}"
+        ) from exc
 
     suffix = artifact_path.suffix.lower()
     format_name = "text"
@@ -700,7 +780,9 @@ def _derive_status(result: dict[str, Any]) -> str:
     if not isinstance(trace, dict):
         return "completed"
 
-    reporter_span = trace.get("reporter") if isinstance(trace.get("reporter"), dict) else {}
+    reporter_span = (
+        trace.get("reporter") if isinstance(trace.get("reporter"), dict) else {}
+    )
     reporter_status = str(reporter_span.get("status", "") or "").strip().lower()
     if reporter_status in {"ok", "success", "completed", "partial_success", "skipped"}:
         return "completed"
@@ -716,31 +798,47 @@ def _derive_status(result: dict[str, Any]) -> str:
     return "completed"
 
 
-def _review_observability_details(review_result: dict[str, Any], review_profile: dict[str, Any]) -> dict[str, Any]:
+def _review_observability_details(
+    review_result: dict[str, Any], review_profile: dict[str, Any]
+) -> dict[str, Any]:
     meta = review_result.get("parallel_review_meta")
     if not isinstance(meta, dict):
         meta = review_result.get("parallel-review_meta")
     if not isinstance(meta, dict):
         meta = {}
-    memory_influence = meta.get("memory_influence") if isinstance(meta.get("memory_influence"), dict) else {}
+    memory_influence = (
+        meta.get("memory_influence")
+        if isinstance(meta.get("memory_influence"), dict)
+        else {}
+    )
     return {
         "selected_profile": str(review_profile.get("selected_profile", "") or ""),
         "profile_routing_reason": str(review_profile.get("reason", "") or ""),
         "profile_routing_confidence": _to_float(review_profile.get("confidence")),
         "secondary_profiles": list(review_profile.get("secondary_profiles", []) or []),
-        "memory_mode": str(review_result.get("memory_mode", meta.get("memory_mode", "off")) or "off"),
+        "memory_mode": str(
+            review_result.get("memory_mode", meta.get("memory_mode", "off")) or "off"
+        ),
         "retrieved_memories": list(meta.get("retrieved_memory_cards", []) or []),
-        "rejected_memory_candidates": list(meta.get("rejected_memory_candidates", []) or []),
+        "rejected_memory_candidates": list(
+            meta.get("rejected_memory_candidates", []) or []
+        ),
         "memory_influence": {
             "findings": list(memory_influence.get("findings", []) or []),
-            "clarification_questions": list(memory_influence.get("clarification_questions", []) or []),
+            "clarification_questions": list(
+                memory_influence.get("clarification_questions", []) or []
+            ),
             "open_questions": list(memory_influence.get("open_questions", []) or []),
         },
     }
 
 
 def _combine_operation_status(*statuses: str) -> str:
-    normalized = [str(status or "").strip().lower() for status in statuses if str(status or "").strip()]
+    normalized = [
+        str(status or "").strip().lower()
+        for status in statuses
+        if str(status or "").strip()
+    ]
     if not normalized:
         return "unknown"
 
@@ -748,7 +846,14 @@ def _combine_operation_status(*statuses: str) -> str:
     if all(status in success_statuses | {"skipped"} for status in normalized):
         return "ok"
     if any(status in {"failed", "error"} for status in normalized):
-        return "partial_success" if any(status in success_statuses | {"partial_success"} for status in normalized) else "failed"
+        return (
+            "partial_success"
+            if any(
+                status in success_statuses | {"partial_success"}
+                for status in normalized
+            )
+            else "failed"
+        )
     if any(status == "partial_success" for status in normalized):
         return "partial_success"
     return normalized[-1]
@@ -790,9 +895,15 @@ def _build_summary(run_output: dict[str, Any]) -> ReviewResultSummary:
         prd_v1_path=str(report_paths.get("prd_v1", "")),
         task_bundle_v1_path=str(report_paths.get("task_bundle_v1", "")),
         delivery_bundle_path=str(report_paths.get("delivery_bundle", "")),
-        high_risk_ratio=_to_float(result.get("high_risk_ratio") if isinstance(result, dict) else 0.0),
-        coverage_ratio=_to_float(metrics.get("coverage_ratio") if isinstance(metrics, dict) else 0.0),
-        revision_round=int((result.get("revision_round", 0) if isinstance(result, dict) else 0) or 0),
+        high_risk_ratio=_to_float(
+            result.get("high_risk_ratio") if isinstance(result, dict) else 0.0
+        ),
+        coverage_ratio=_to_float(
+            metrics.get("coverage_ratio") if isinstance(metrics, dict) else 0.0
+        ),
+        revision_round=int(
+            (result.get("revision_round", 0) if isinstance(result, dict) else 0) or 0
+        ),
         status=_derive_status(result if isinstance(result, dict) else {}),
     )
 
@@ -801,7 +912,9 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _publish_progress_event(run_id: str, event: str, node_name: str, state: dict[str, Any] | None = None) -> None:
+def _publish_progress_event(
+    run_id: str, event: str, node_name: str, state: dict[str, Any] | None = None
+) -> None:
     normalized_run_id = str(run_id or "").strip()
     if not normalized_run_id:
         return
@@ -884,16 +997,28 @@ def _format_ratio_percent(value: Any) -> str:
     return f"{normalized * 100:.0f}%"
 
 
-def _resolve_review_notification_summary(review_result: dict[str, Any], *, status: str) -> str:
+def _resolve_review_notification_summary(
+    review_result: dict[str, Any], *, status: str
+) -> str:
     clarification = _derive_clarification(review_result)
     if status == "clarification_required":
-        question_count = len([item for item in clarification.get("questions", []) if isinstance(item, dict)])
+        question_count = len(
+            [
+                item
+                for item in clarification.get("questions", [])
+                if isinstance(item, dict)
+            ]
+        )
         return (
             "Review requires clarification before follow-up. "
             f"{question_count} question(s) are waiting for an answer."
         )
 
-    metrics = review_result.get("metrics") if isinstance(review_result.get("metrics"), dict) else {}
+    metrics = (
+        review_result.get("metrics")
+        if isinstance(review_result.get("metrics"), dict)
+        else {}
+    )
     coverage_ratio = _format_ratio_percent(metrics.get("coverage_ratio"))
     high_risk_ratio = _format_ratio_percent(review_result.get("high_risk_ratio"))
     return f"Review completed. Coverage ratio {coverage_ratio}. High-risk ratio {high_risk_ratio}."
@@ -920,7 +1045,9 @@ def _dispatch_review_status_notification(
         return
 
     resolved_metadata = dict(metadata) if isinstance(metadata, dict) else {}
-    resolved_metadata.setdefault("review_run_status", str(review_status or "").strip().lower())
+    resolved_metadata.setdefault(
+        "review_run_status", str(review_status or "").strip().lower()
+    )
     _dispatch_notification(
         run_dir,
         notification_type=notification_type,
@@ -1000,7 +1127,9 @@ def _generate_delivery_bundle(
         raise ValueError(f"missing pack paths: {', '.join(missing)}")
 
     artifact_refs = (splitter or ArtifactSplitter()).split(result, run_dir)
-    bundle = DeliveryBundleBuilder().build(run_output=run_output, artifact_refs=artifact_refs, pack_paths=pack_paths)
+    bundle = DeliveryBundleBuilder().build(
+        run_output=run_output, artifact_refs=artifact_refs, pack_paths=pack_paths
+    )
     source_metadata = _extract_source_metadata(run_output)
     if source_metadata:
         bundle.metadata["source_metadata"] = source_metadata
@@ -1012,7 +1141,9 @@ def _generate_delivery_bundle(
         bundle.metadata["handoff_source"] = dict(handoff_source)
     bundle_path = DeliveryBundleBuilder().save(bundle, run_dir)
 
-    artifact_paths = {artifact_type: ref.path for artifact_type, ref in artifact_refs.items()}
+    artifact_paths = {
+        artifact_type: ref.path for artifact_type, ref in artifact_refs.items()
+    }
     artifact_paths["delivery_bundle"] = str(bundle_path)
     return artifact_paths, bundle
 
@@ -1069,14 +1200,20 @@ def _resolve_handoff_source(run_dir: Path, result: dict[str, Any]) -> dict[str, 
         return {
             "source": "confirmed_revision",
             "requirement_doc": confirmed_text,
-            "source_ref": str(Path(confirmed_ref).resolve()) if confirmed_ref else str((run_dir / "confirmed_prd.md").resolve()),
+            "source_ref": str(Path(confirmed_ref).resolve())
+            if confirmed_ref
+            else str((run_dir / "confirmed_prd.md").resolve()),
             "latest_revision_draft_ref": "",
         }
 
     draft_text = _read_text_if_present(Path(draft_ref)) if draft_ref else ""
     if not draft_text:
         draft_text = _read_text_if_present(run_dir / "revised_prd.md")
-    draft_ref_resolved = str(Path(draft_ref).resolve()) if draft_ref else str((run_dir / "revised_prd.md").resolve())
+    draft_ref_resolved = (
+        str(Path(draft_ref).resolve())
+        if draft_ref
+        else str((run_dir / "revised_prd.md").resolve())
+    )
 
     original_doc = str(result.get("requirement_doc", "") or "").strip()
     if not original_doc:
@@ -1108,7 +1245,11 @@ def _resolve_requirement_doc(
     has_source = isinstance(source, str) and bool(source.strip())
     if has_source:
         normalized_source = source.strip()
-        source_document = ConnectorRegistry().resolve(normalized_source).get_content(normalized_source)
+        source_document = (
+            ConnectorRegistry()
+            .resolve(normalized_source)
+            .get_content(normalized_source)
+        )
         return source_document.content_markdown, {
             "source_metadata": source_document.metadata.model_dump(mode="python"),
         }
@@ -1147,9 +1288,15 @@ def build_handoff_prompts(
     *,
     trace: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    codex_prompt_template = get_adapter_prompt_template("adapter.codex.handoff_markdown")
-    claude_code_prompt_template = get_adapter_prompt_template("adapter.claude_code.handoff_markdown")
-    openclaw_prompt_template = get_adapter_prompt_template("adapter.openclaw.handoff_markdown")
+    codex_prompt_template = get_adapter_prompt_template(
+        "adapter.codex.handoff_markdown"
+    )
+    claude_code_prompt_template = get_adapter_prompt_template(
+        "adapter.claude_code.handoff_markdown"
+    )
+    openclaw_prompt_template = get_adapter_prompt_template(
+        "adapter.openclaw.handoff_markdown"
+    )
     renderer_trace: dict[str, Any] = {
         "start": _utc_now_iso(),
         "end": "",
@@ -1187,8 +1334,16 @@ def build_handoff_prompts(
         output_dir = execution_pack_file.parent
         render_targets = (
             ("codex_prompt", output_dir / "codex_prompt.md", render_codex_prompt),
-            ("claude_code_prompt", output_dir / "claude_code_prompt.md", render_claude_code_prompt),
-            ("openclaw_prompt", output_dir / "openclaw_prompt.md", render_openclaw_prompt),
+            (
+                "claude_code_prompt",
+                output_dir / "claude_code_prompt.md",
+                render_claude_code_prompt,
+            ),
+            (
+                "openclaw_prompt",
+                output_dir / "openclaw_prompt.md",
+                render_openclaw_prompt,
+            ),
         )
         render_failures: list[str] = []
 
@@ -1209,7 +1364,9 @@ def build_handoff_prompts(
             renderer_trace["status"] = "failed"
         else:
             renderer_trace["status"] = "partial_success"
-        renderer_trace["error_message"] = ", ".join(render_failures) if render_failures else ""
+        renderer_trace["error_message"] = (
+            ", ".join(render_failures) if render_failures else ""
+        )
     except Exception as exc:
         handoff_render_error = str(exc)
         renderer_trace["status"] = "failed"
@@ -1220,7 +1377,9 @@ def build_handoff_prompts(
         renderer_trace["retry"] = retry_metadata_for_status(
             status=str(renderer_trace.get("status", "")),
             non_blocking=bool(renderer_trace.get("non_blocking")),
-            error_message=str(renderer_trace.get("error_message", "") or handoff_render_error),
+            error_message=str(
+                renderer_trace.get("error_message", "") or handoff_render_error
+            ),
         )
         if isinstance(trace, dict):
             trace["handoff_renderer"] = renderer_trace
@@ -1244,7 +1403,9 @@ def build_delivery_handoff_outputs(
         return {}
     run_dir = Path(run_dir_raw)
     run_dir.mkdir(parents=True, exist_ok=True)
-    resolved_audit_context = dict(audit_context) if isinstance(audit_context, dict) else {}
+    resolved_audit_context = (
+        dict(audit_context) if isinstance(audit_context, dict) else {}
+    )
 
     trace = result.get("trace")
     if not isinstance(trace, dict):
@@ -1252,13 +1413,19 @@ def build_delivery_handoff_outputs(
         result["trace"] = trace
 
     selected_handoff_source = _resolve_handoff_source(run_dir, result)
-    selected_requirement_doc = str(selected_handoff_source.get("requirement_doc", "") or "").strip()
+    selected_requirement_doc = str(
+        selected_handoff_source.get("requirement_doc", "") or ""
+    ).strip()
     if selected_requirement_doc:
         result["requirement_doc"] = selected_requirement_doc
     result["handoff_source"] = {
-        "selected_source": str(selected_handoff_source.get("source", "") or "original_prd_with_review"),
+        "selected_source": str(
+            selected_handoff_source.get("source", "") or "original_prd_with_review"
+        ),
         "source_ref": str(selected_handoff_source.get("source_ref", "") or ""),
-        "latest_revision_draft_ref": str(selected_handoff_source.get("latest_revision_draft_ref", "") or ""),
+        "latest_revision_draft_ref": str(
+            selected_handoff_source.get("latest_revision_draft_ref", "") or ""
+        ),
     }
 
     source_metadata = _extract_source_metadata(run_output)
@@ -1292,7 +1459,11 @@ def build_delivery_handoff_outputs(
         "claude_code_prompt_output": result.get("claude_code_prompt_handoff"),
     }
     builders = (
-        ("implementation_pack", ImplementationPackBuilder(), run_dir / "implementation_pack.json"),
+        (
+            "implementation_pack",
+            ImplementationPackBuilder(),
+            run_dir / "implementation_pack.json",
+        ),
         ("test_pack", TestPackBuilder(), run_dir / "test_pack.json"),
         ("execution_pack", ExecutionPackBuilder(), run_dir / "execution_pack.json"),
     )
@@ -1350,7 +1521,9 @@ def build_delivery_handoff_outputs(
     )
     trace["pack_builder"] = pack_builder_trace
 
-    prompt_paths = build_handoff_prompts(artifact_paths.get("execution_pack"), trace=trace)
+    prompt_paths = build_handoff_prompts(
+        artifact_paths.get("execution_pack"), trace=trace
+    )
     artifact_paths.update(prompt_paths)
 
     draft_generator_trace: dict[str, Any] = {
@@ -1379,9 +1552,13 @@ def build_delivery_handoff_outputs(
         draft_generator_trace["status"] = "failed"
         draft_generator_trace["error_message"] = str(exc)
     finally:
-        draft_generator_trace["end"] = str(draft_generator_trace.get("end", "") or _utc_now_iso())
+        draft_generator_trace["end"] = str(
+            draft_generator_trace.get("end", "") or _utc_now_iso()
+        )
         duration_ms = round((perf_counter() - draft_started) * 1000)
-        draft_generator_trace["duration_ms"] = max(duration_ms, int(draft_generator_trace.get("duration_ms", 0) or 0))
+        draft_generator_trace["duration_ms"] = max(
+            duration_ms, int(draft_generator_trace.get("duration_ms", 0) or 0)
+        )
         draft_generator_trace["retry"] = retry_metadata_for_status(
             status=str(draft_generator_trace.get("status", "")),
             non_blocking=bool(draft_generator_trace.get("non_blocking")),
@@ -1412,9 +1589,13 @@ def build_delivery_handoff_outputs(
         task_bundle_trace["status"] = "failed"
         task_bundle_trace["error_message"] = str(exc)
     finally:
-        task_bundle_trace["end"] = str(task_bundle_trace.get("end", "") or _utc_now_iso())
+        task_bundle_trace["end"] = str(
+            task_bundle_trace.get("end", "") or _utc_now_iso()
+        )
         duration_ms = round((perf_counter() - task_bundle_started) * 1000)
-        task_bundle_trace["duration_ms"] = max(duration_ms, int(task_bundle_trace.get("duration_ms", 0) or 0))
+        task_bundle_trace["duration_ms"] = max(
+            duration_ms, int(task_bundle_trace.get("duration_ms", 0) or 0)
+        )
         task_bundle_trace["retry"] = retry_metadata_for_status(
             status=str(task_bundle_trace.get("status", "")),
             non_blocking=bool(task_bundle_trace.get("non_blocking")),
@@ -1440,7 +1621,9 @@ def build_delivery_handoff_outputs(
             report_paths.update(artifact_paths)
         splitter = ArtifactSplitter()
         bundle_builder_trace["artifact_templates"] = splitter.template_trace()
-        bundle_artifact_paths, _bundle = _generate_delivery_bundle(run_output, splitter=splitter)
+        bundle_artifact_paths, _bundle = _generate_delivery_bundle(
+            run_output, splitter=splitter
+        )
         artifact_paths.update(bundle_artifact_paths)
         if isinstance(report_paths, dict):
             report_paths.update(bundle_artifact_paths)
@@ -1451,7 +1634,9 @@ def build_delivery_handoff_outputs(
         bundle_builder_trace["error_message"] = str(exc)
     finally:
         bundle_builder_trace["end"] = _utc_now_iso()
-        bundle_builder_trace["duration_ms"] = round((perf_counter() - bundle_started) * 1000)
+        bundle_builder_trace["duration_ms"] = round(
+            (perf_counter() - bundle_started) * 1000
+        )
         bundle_builder_trace["retry"] = retry_metadata_for_status(
             status=str(bundle_builder_trace.get("status", "")),
             non_blocking=bool(bundle_builder_trace.get("non_blocking")),
@@ -1477,7 +1662,9 @@ def build_delivery_handoff_outputs(
             trace_payload["source_metadata"] = source_metadata
         if parallel_review_meta:
             trace_payload["parallel-review_meta"] = parallel_review_meta
-        trace_path.write_text(json.dumps(trace_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        trace_path.write_text(
+            json.dumps(trace_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     report_json_raw = str(report_paths.get("report_json", "") or "")
     if report_json_raw:
@@ -1503,17 +1690,26 @@ def build_delivery_handoff_outputs(
                 report_payload["parallel-review_meta"] = parallel_review_meta
             report_payload["handoff_source"] = dict(result.get("handoff_source", {}))
             if str(result.get("requirement_doc", "") or "").strip():
-                report_payload["requirement_doc"] = str(result.get("requirement_doc", "") or "").strip()
+                report_payload["requirement_doc"] = str(
+                    result.get("requirement_doc", "") or ""
+                ).strip()
 
             artifacts = report_payload.get("artifacts")
             if not isinstance(artifacts, dict):
                 artifacts = {}
             artifacts.update(artifact_paths)
             report_payload["artifacts"] = artifacts
-            report_json_path.write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            report_json_path.write_text(
+                json.dumps(report_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
     handoff_renderer_trace = trace.get("handoff_renderer")
-    handoff_renderer_status = handoff_renderer_trace.get("status", "") if isinstance(handoff_renderer_trace, dict) else ""
+    handoff_renderer_status = (
+        handoff_renderer_trace.get("status", "")
+        if isinstance(handoff_renderer_trace, dict)
+        else ""
+    )
     bundle_operation_status = _combine_operation_status(
         str(pack_builder_trace.get("status", "")),
         str(draft_generator_trace.get("status", "")),
@@ -1530,7 +1726,9 @@ def build_delivery_handoff_outputs(
                 str(pack_builder_trace.get("error_message", "")),
                 str(draft_generator_trace.get("error_message", "")),
                 str(task_bundle_trace.get("error_message", "")),
-                str(handoff_renderer_trace.get("error_message", "")) if isinstance(handoff_renderer_trace, dict) else "",
+                str(handoff_renderer_trace.get("error_message", ""))
+                if isinstance(handoff_renderer_trace, dict)
+                else "",
                 str(bundle_builder_trace.get("error_message", "")),
             )
             if message
@@ -1583,7 +1781,9 @@ async def review_prd_text_async(
         raise TypeError("config_overrides['progress_hook'] must be callable")
     requested_run_id = str(run_id or "").strip()
 
-    def combined_progress_hook(event: str, node_name: str, state: dict[str, Any]) -> None:
+    def combined_progress_hook(
+        event: str, node_name: str, state: dict[str, Any]
+    ) -> None:
         if progress_hook is not None:
             progress_hook(event, node_name, state)
         _publish_progress_event(resolved_run_id, event, node_name, state)
@@ -1593,7 +1793,9 @@ async def review_prd_text_async(
         prd_path=prd_path,
         source=source,
     )
-    resolved_run_id = requested_run_id or make_unique_run_id(outputs_root, reserve_dir=True)
+    resolved_run_id = requested_run_id or make_unique_run_id(
+        outputs_root, reserve_dir=True
+    )
     run_dir = outputs_root / resolved_run_id
     canonical_request = _persist_canonical_review_request(
         run_dir=run_dir,
@@ -1629,19 +1831,31 @@ async def review_prd_text_async(
     if "review_memory_path" in overrides:
         run_review_kwargs["review_memory_path"] = overrides.get("review_memory_path")
     if "review_memory_enabled" in overrides:
-        run_review_kwargs["review_memory_enabled"] = overrides.get("review_memory_enabled")
+        run_review_kwargs["review_memory_enabled"] = overrides.get(
+            "review_memory_enabled"
+        )
     if "review_memory_seeds_dir" in overrides:
-        run_review_kwargs["review_memory_seeds_dir"] = overrides.get("review_memory_seeds_dir")
+        run_review_kwargs["review_memory_seeds_dir"] = overrides.get(
+            "review_memory_seeds_dir"
+        )
     if "review_memory_db_path" in overrides:
-        run_review_kwargs["review_memory_db_path"] = overrides.get("review_memory_db_path")
+        run_review_kwargs["review_memory_db_path"] = overrides.get(
+            "review_memory_db_path"
+        )
     if "review_memory_extract_enabled" in overrides:
-        run_review_kwargs["review_memory_extract_enabled"] = overrides.get("review_memory_extract_enabled")
+        run_review_kwargs["review_memory_extract_enabled"] = overrides.get(
+            "review_memory_extract_enabled"
+        )
     if "review_memory_max_kept" in overrides:
-        run_review_kwargs["review_memory_max_kept"] = overrides.get("review_memory_max_kept")
+        run_review_kwargs["review_memory_max_kept"] = overrides.get(
+            "review_memory_max_kept"
+        )
     if "review_memory_mode" in overrides:
         run_review_kwargs["review_memory_mode"] = overrides.get("review_memory_mode")
     if "normalizer_cache_path" in overrides:
-        run_review_kwargs["normalizer_cache_path"] = overrides.get("normalizer_cache_path")
+        run_review_kwargs["normalizer_cache_path"] = overrides.get(
+            "normalizer_cache_path"
+        )
 
     llm_runtime_overrides = _resolve_llm_config_overrides(overrides)
     if _should_dispatch_review_notifications(audit_context):
@@ -1658,7 +1872,11 @@ async def review_prd_text_async(
             "review run started",
             extra={
                 "run_id": resolved_run_id,
-                "source_type": "source" if source else "prd_path" if prd_path else "inline_text",
+                "source_type": "source"
+                if source
+                else "prd_path"
+                if prd_path
+                else "inline_text",
             },
         )
         try:
@@ -1690,11 +1908,19 @@ async def review_prd_text_async(
 
         review_result = run_output.get("result")
         if isinstance(review_result, dict):
-            review_metrics = review_result.get("metrics") if isinstance(review_result.get("metrics"), dict) else {}
+            review_metrics = (
+                review_result.get("metrics")
+                if isinstance(review_result.get("metrics"), dict)
+                else {}
+            )
             review_status = _derive_status(review_result)
-            observability = _review_observability_details(review_result, profile_payload)
+            observability = _review_observability_details(
+                review_result, profile_payload
+            )
             _append_audit_event_safe(
-                run_output.get("run_dir", outputs_root / str(run_output.get("run_id", "") or "")),
+                run_output.get(
+                    "run_dir", outputs_root / str(run_output.get("run_id", "") or "")
+                ),
                 operation="review",
                 status=review_status,
                 run_id=str(run_output.get("run_id", "") or ""),
@@ -1703,23 +1929,43 @@ async def review_prd_text_async(
                     "coverage_ratio": _to_float(review_metrics.get("coverage_ratio")),
                     "high_risk_ratio": _to_float(review_result.get("high_risk_ratio")),
                     "revision_round": int(review_result.get("revision_round", 0) or 0),
-                    "requirement_source": "source" if source else "prd_path" if prd_path else "inline_text",
+                    "requirement_source": "source"
+                    if source
+                    else "prd_path"
+                    if prd_path
+                    else "inline_text",
                     "has_source_metadata": bool(source_context),
-                    "review_mode": str(review_result.get("review_mode", review_result.get("mode", "quick")) or "quick"),
-                    "parallel_review_enabled": bool(review_result.get("parallel_review_meta") or review_result.get("parallel-review_meta")),
+                    "review_mode": str(
+                        review_result.get(
+                            "review_mode", review_result.get("mode", "quick")
+                        )
+                        or "quick"
+                    ),
+                    "parallel_review_enabled": bool(
+                        review_result.get("parallel_review_meta")
+                        or review_result.get("parallel-review_meta")
+                    ),
                     "selected_profile": observability["selected_profile"],
                     "profile_routing_reason": observability["profile_routing_reason"],
-                    "profile_routing_confidence": observability["profile_routing_confidence"],
+                    "profile_routing_confidence": observability[
+                        "profile_routing_confidence"
+                    ],
                     "secondary_profiles": observability["secondary_profiles"],
                     "memory_mode": observability["memory_mode"],
                     "retrieved_memories": observability["retrieved_memories"],
-                    "rejected_memory_candidates": observability["rejected_memory_candidates"],
+                    "rejected_memory_candidates": observability[
+                        "rejected_memory_candidates"
+                    ],
                     "memory_influence": observability["memory_influence"],
                 },
-                retry=retry_metadata_for_status(status=review_status, non_blocking=False),
+                retry=retry_metadata_for_status(
+                    status=review_status, non_blocking=False
+                ),
             )
 
-        combined_progress_hook("start", "finalize_artifacts", run_output.get("result", {}))
+        combined_progress_hook(
+            "start", "finalize_artifacts", run_output.get("result", {})
+        )
 
         try:
             build_delivery_handoff_outputs(run_output, audit_context=audit_context)
@@ -1732,29 +1978,48 @@ async def review_prd_text_async(
                     summary=f"Review artifacts could not be finalized: {str(exc) or type(exc).__name__}.",
                     audit_context=audit_context,
                 )
-            combined_progress_hook("end", "finalize_artifacts", {
-                "trace": {"finalize_artifacts": {"status": "error"}},
-                "error": str(exc),
-            })
+            combined_progress_hook(
+                "end",
+                "finalize_artifacts",
+                {
+                    "trace": {"finalize_artifacts": {"status": "error"}},
+                    "error": str(exc),
+                },
+            )
             raise
         else:
-            combined_progress_hook("end", "finalize_artifacts", {
-                "trace": {"finalize_artifacts": {"status": "ok"}},
-            })
+            combined_progress_hook(
+                "end",
+                "finalize_artifacts",
+                {
+                    "trace": {"finalize_artifacts": {"status": "ok"}},
+                },
+            )
 
-        if isinstance(review_result, dict) and _should_dispatch_review_notifications(audit_context):
+        if isinstance(review_result, dict) and _should_dispatch_review_notifications(
+            audit_context
+        ):
             clarification = _derive_clarification(review_result)
-            question_count = len([item for item in clarification.get("questions", []) if isinstance(item, dict)])
+            question_count = len(
+                [
+                    item
+                    for item in clarification.get("questions", [])
+                    if isinstance(item, dict)
+                ]
+            )
             notification_status = (
                 "clarification_required"
-                if clarification.get("triggered") and clarification.get("status") == "pending"
+                if clarification.get("triggered")
+                and clarification.get("status") == "pending"
                 else "completed"
             )
             _dispatch_review_status_notification(
                 run_output.get("run_dir", run_dir),
                 run_id=str(run_output.get("run_id", "") or resolved_run_id),
                 review_status=notification_status,
-                summary=_resolve_review_notification_summary(review_result, status=notification_status),
+                summary=_resolve_review_notification_summary(
+                    review_result, status=notification_status
+                ),
                 audit_context=audit_context,
                 metadata={
                     "clarification_status": str(clarification.get("status", "") or ""),
@@ -1786,7 +2051,9 @@ def review_prd_text(
                 config_overrides=config_overrides,
             )
         )
-    raise RuntimeError("review_prd_text cannot run inside an active event loop; use review_prd_text_async")
+    raise RuntimeError(
+        "review_prd_text cannot run inside an active event loop; use review_prd_text_async"
+    )
 
 
 def _read_prd_text(prd_text: str | None, prd_path: str | None) -> str:
@@ -1805,7 +2072,9 @@ def _read_prd_text(prd_text: str | None, prd_path: str | None) -> str:
     raise ValueError("Either prd_text or prd_path must be provided")
 
 
-def _attach_trace_invocation(summary: ReviewResultSummary, invocation_meta: dict[str, Any]) -> None:
+def _attach_trace_invocation(
+    summary: ReviewResultSummary, invocation_meta: dict[str, Any]
+) -> None:
     if not summary.run_trace_path:
         return
     trace_path = Path(summary.run_trace_path)
@@ -1825,7 +2094,9 @@ def _attach_trace_invocation(summary: ReviewResultSummary, invocation_meta: dict
         invocation_trace = {}
     invocation_trace.update(invocation_meta)
     trace_data["invocation"] = invocation_trace
-    trace_path.write_text(json.dumps(trace_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(
+        json.dumps(trace_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     # Keep report.json trace aligned with run_trace.json when possible.
     if summary.report_json_path:
@@ -1839,7 +2110,10 @@ def _attach_trace_invocation(summary: ReviewResultSummary, invocation_meta: dict
                         report_trace = {}
                     report_trace["invocation"] = invocation_trace
                     report_data["trace"] = report_trace
-                    report_path.write_text(json.dumps(report_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    report_path.write_text(
+                        json.dumps(report_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
             except Exception:
                 # Do not fail review completion because of metadata write-back.
                 pass
@@ -1876,13 +2150,17 @@ def generate_delivery_bundle_for_mcp(
     }
     artifact_paths, bundle = _generate_delivery_bundle(run_output)
     report_payload = _load_json_object(run_dir / "report.json")
-    artifacts = report_payload.get("artifacts") if isinstance(report_payload, dict) else {}
+    artifacts = (
+        report_payload.get("artifacts") if isinstance(report_payload, dict) else {}
+    )
     if not isinstance(artifacts, dict):
         artifacts = {}
     artifacts.update(artifact_paths)
     if isinstance(report_payload, dict):
         report_payload["artifacts"] = artifacts
-        (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "report.json").write_text(
+            json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     _append_audit_event_safe(
         run_dir,
@@ -1961,7 +2239,8 @@ def _resolve_approval_notification(
         return (
             NotificationType.blocked_by_risk,
             f"Bundle blocked by risk: {updated_bundle.bundle_id}",
-            normalized_comment or "Delivery bundle is blocked until identified risks are mitigated.",
+            normalized_comment
+            or "Delivery bundle is blocked until identified risks are mitigated.",
             metadata,
         )
 
@@ -1994,7 +2273,9 @@ def approve_handoff_for_mcp(
         raise TypeError("options must be an object")
     audit_context = _resolve_audit_context(resolved_options)
 
-    bundle_path = _locate_bundle_path(bundle_id, resolved_options.get("outputs_root", "outputs"))
+    bundle_path = _locate_bundle_path(
+        bundle_id, resolved_options.get("outputs_root", "outputs")
+    )
     bundle = DeliveryBundle.model_validate(_load_json_object(bundle_path))
     previous_status = str(bundle.status)
 
@@ -2005,10 +2286,17 @@ def approve_handoff_for_mcp(
         "reset_to_draft": reset_to_draft,
     }
     if action not in actions:
-        raise ValueError("action must be one of approve, need_more_info, block_by_risk, reset_to_draft")
+        raise ValueError(
+            "action must be one of approve, need_more_info, block_by_risk, reset_to_draft"
+        )
 
     updated_bundle = actions[action](bundle, reviewer, comment)
-    bundle_path.write_text(json.dumps(updated_bundle.model_dump(mode="python"), ensure_ascii=False, indent=2), encoding="utf-8")
+    bundle_path.write_text(
+        json.dumps(
+            updated_bundle.model_dump(mode="python"), ensure_ascii=False, indent=2
+        ),
+        encoding="utf-8",
+    )
     persisted_paths, status_snapshot = _persist_review_workspace_state(
         bundle_path=bundle_path,
         updated_bundle=updated_bundle,
@@ -2028,7 +2316,9 @@ def approve_handoff_for_mcp(
             "from_status": previous_status,
             "to_status": str(updated_bundle.status),
         },
-        retry=retry_metadata_for_status(status=str(updated_bundle.status), non_blocking=False),
+        retry=retry_metadata_for_status(
+            status=str(updated_bundle.status), non_blocking=False
+        ),
     )
     notification_spec = _resolve_approval_notification(
         action=action,
@@ -2052,7 +2342,9 @@ def approve_handoff_for_mcp(
     return {
         "bundle_id": updated_bundle.bundle_id,
         "status": updated_bundle.status,
-        "approval_history": [event.model_dump(mode="python") for event in updated_bundle.approval_history],
+        "approval_history": [
+            event.model_dump(mode="python") for event in updated_bundle.approval_history
+        ],
         "bundle_path": persisted_paths["bundle_path"],
         "approval_records_path": persisted_paths["approval_records_path"],
         "status_snapshot_path": persisted_paths["status_snapshot_path"],
@@ -2083,15 +2375,23 @@ def get_review_workspace_for_mcp(
 
     repository = ReviewWorkspaceRepository(run_dir)
     if not repository.delivery_bundle_path.exists():
-        raise FileNotFoundError(f"delivery_bundle.json not found for run_id={run_dir.name}")
+        raise FileNotFoundError(
+            f"delivery_bundle.json not found for run_id={run_dir.name}"
+        )
     if not repository.approval_records_path.exists():
-        raise FileNotFoundError(f"approval_records.json not found for run_id={run_dir.name}")
+        raise FileNotFoundError(
+            f"approval_records.json not found for run_id={run_dir.name}"
+        )
     if not repository.status_snapshot_path.exists():
-        raise FileNotFoundError(f"status_snapshot.json not found for run_id={run_dir.name}")
+        raise FileNotFoundError(
+            f"status_snapshot.json not found for run_id={run_dir.name}"
+        )
 
     bundle = repository.load_bundle()
     if bundle is None:
-        raise FileNotFoundError(f"delivery_bundle.json not found for run_id={run_dir.name}")
+        raise FileNotFoundError(
+            f"delivery_bundle.json not found for run_id={run_dir.name}"
+        )
 
     workspace = repository.load_workspace()
     return {
@@ -2103,9 +2403,15 @@ def get_review_workspace_for_mcp(
             "status": bundle.status,
             "source_run_id": bundle.source_run_id,
         },
-        "approval_history": [event.model_dump(mode="python") for event in workspace.approval_history],
-        "approval_records": [record.model_dump(mode="python") for record in workspace.approval_records],
-        "status_snapshot": workspace.status_snapshot.model_dump(mode="python") if workspace.status_snapshot is not None else None,
+        "approval_history": [
+            event.model_dump(mode="python") for event in workspace.approval_history
+        ],
+        "approval_records": [
+            record.model_dump(mode="python") for record in workspace.approval_records
+        ],
+        "status_snapshot": workspace.status_snapshot.model_dump(mode="python")
+        if workspace.status_snapshot is not None
+        else None,
         "paths": {
             "bundle_path": str(repository.delivery_bundle_path),
             "approval_records_path": str(repository.approval_records_path),
@@ -2130,7 +2436,9 @@ def _extract_parallel_review_payload(report_payload: dict[str, Any]) -> dict[str
     return dict(parallel_review) if isinstance(parallel_review, dict) else {}
 
 
-def _extract_parallel_review_meta_from_report(report_payload: dict[str, Any]) -> dict[str, Any]:
+def _extract_parallel_review_meta_from_report(
+    report_payload: dict[str, Any],
+) -> dict[str, Any]:
     legacy_meta = report_payload.get("parallel-review_meta")
     if isinstance(legacy_meta, dict):
         return dict(legacy_meta)
@@ -2138,11 +2446,17 @@ def _extract_parallel_review_meta_from_report(report_payload: dict[str, Any]) ->
     return dict(modern_meta) if isinstance(modern_meta, dict) else {}
 
 
-def _derive_single_review_findings(review_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _derive_single_review_findings(
+    review_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     for item in review_results:
         requirement_id = str(item.get("id", "") or "").strip()
-        issues = [str(issue).strip() for issue in list(item.get("issues", []) or []) if str(issue).strip()]
+        issues = [
+            str(issue).strip()
+            for issue in list(item.get("issues", []) or [])
+            if str(issue).strip()
+        ]
         suggestion = str(item.get("suggestions", "") or "").strip()
         flags = sum(
             [
@@ -2154,7 +2468,11 @@ def _derive_single_review_findings(review_results: list[dict[str, Any]]) -> list
         if flags == 0 and not issues and not suggestion:
             continue
 
-        detail = "; ".join(issues) or suggestion or "Requirement needs clarification before implementation."
+        detail = (
+            "; ".join(issues)
+            or suggestion
+            or "Requirement needs clarification before implementation."
+        )
         finding: dict[str, Any] = {
             "title": requirement_id or "Requirement review finding",
             "detail": detail,
@@ -2185,7 +2503,9 @@ def _derive_review_findings(report_payload: dict[str, Any]) -> list[dict[str, An
     return _derive_single_review_findings(review_results)
 
 
-def _derive_review_open_questions(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _derive_review_open_questions(
+    report_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
     questions = _copy_dict_list(report_payload.get("open_questions"))
     if questions:
         return questions
@@ -2218,9 +2538,18 @@ def _derive_review_risk_items(report_payload: dict[str, Any]) -> list[dict[str, 
 
     derived: list[dict[str, Any]] = []
     for risk in _copy_dict_list(report_payload.get("risks")):
-        title = str(risk.get("id", "") or risk.get("title", "") or "review-risk").strip()
-        detail = str(risk.get("description", "") or risk.get("detail", "") or "").strip()
-        severity = str(risk.get("impact", "") or risk.get("severity", "") or "medium").strip().lower() or "medium"
+        title = str(
+            risk.get("id", "") or risk.get("title", "") or "review-risk"
+        ).strip()
+        detail = str(
+            risk.get("description", "") or risk.get("detail", "") or ""
+        ).strip()
+        severity = (
+            str(risk.get("impact", "") or risk.get("severity", "") or "medium")
+            .strip()
+            .lower()
+            or "medium"
+        )
         derived.append(
             {
                 "title": title,
@@ -2295,13 +2624,21 @@ def _normalize_clarification_answers(answers: Any) -> list[dict[str, str]]:
         question_id = str(item.get("question_id", "") or "").strip()
         answer = str(item.get("answer", "") or "").strip()
         if not question_id or not answer:
-            raise ValueError("each clarification answer must include question_id and answer")
+            raise ValueError(
+                "each clarification answer must include question_id and answer"
+            )
         normalized.append({"question_id": question_id, "answer": answer})
     return normalized
 
 
-def _resolve_parallel_artifact_path(run_dir: Path, parallel_review: dict[str, Any], key: str, fallback_name: str) -> Path:
-    artifacts = parallel_review.get("artifacts") if isinstance(parallel_review.get("artifacts"), dict) else {}
+def _resolve_parallel_artifact_path(
+    run_dir: Path, parallel_review: dict[str, Any], key: str, fallback_name: str
+) -> Path:
+    artifacts = (
+        parallel_review.get("artifacts")
+        if isinstance(parallel_review.get("artifacts"), dict)
+        else {}
+    )
     raw_path = str(artifacts.get(key, "") or "").strip()
     candidate = Path(raw_path) if raw_path else run_dir / fallback_name
     if not candidate.is_absolute():
@@ -2309,23 +2646,39 @@ def _resolve_parallel_artifact_path(run_dir: Path, parallel_review: dict[str, An
     return candidate.resolve()
 
 
-def _persist_parallel_review_refresh(run_dir: Path, report_payload: dict[str, Any]) -> None:
+def _persist_parallel_review_refresh(
+    run_dir: Path, report_payload: dict[str, Any]
+) -> None:
     parallel_review = _extract_parallel_review_payload(report_payload)
     if not parallel_review:
         return
 
-    review_result_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_result_json", "review_result.json")
-    review_report_json_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_report_json", "review_report.json")
-    review_report_md_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_report_md", "review_report.md")
-    review_summary_md_path = _resolve_parallel_artifact_path(run_dir, parallel_review, "review_summary_md", "review_summary.md")
+    review_result_path = _resolve_parallel_artifact_path(
+        run_dir, parallel_review, "review_result_json", "review_result.json"
+    )
+    review_report_json_path = _resolve_parallel_artifact_path(
+        run_dir, parallel_review, "review_report_json", "review_report.json"
+    )
+    review_report_md_path = _resolve_parallel_artifact_path(
+        run_dir, parallel_review, "review_report_md", "review_report.md"
+    )
+    review_summary_md_path = _resolve_parallel_artifact_path(
+        run_dir, parallel_review, "review_summary_md", "review_summary.md"
+    )
 
     _write_json_object(review_result_path, parallel_review)
     _write_json_object(review_report_json_path, parallel_review)
-    review_report_md_path.write_text(_render_review_report(parallel_review), encoding="utf-8")
-    review_summary_md_path.write_text(_render_summary(parallel_review), encoding="utf-8")
+    review_report_md_path.write_text(
+        _render_review_report(parallel_review), encoding="utf-8"
+    )
+    review_summary_md_path.write_text(
+        _render_summary(parallel_review), encoding="utf-8"
+    )
 
 
-def _extract_clarification_patch_context(report_payload: dict[str, Any]) -> dict[str, Any]:
+def _extract_clarification_patch_context(
+    report_payload: dict[str, Any],
+) -> dict[str, Any]:
     direct = report_payload.get("clarification_patch_context")
     if isinstance(direct, dict):
         return dict(direct)
@@ -2338,7 +2691,9 @@ async def _load_patch_prompt_context_async(
     *,
     patch_context: dict[str, Any],
 ) -> tuple[str, int, list[dict[str, Any]]] | None:
-    artifact_version_id = str(patch_context.get("artifact_version_id", "") or "").strip()
+    artifact_version_id = str(
+        patch_context.get("artifact_version_id", "") or ""
+    ).strip()
     workspace_db_path = str(patch_context.get("workspace_db_path", "") or "").strip()
     if not artifact_version_id or not workspace_db_path:
         return None
@@ -2371,12 +2726,18 @@ async def _load_patch_prompt_context_async(
     )
 
 
-def _write_clarification_patch_payload(run_dir: Path, report_payload: dict[str, Any], artifact_patch: dict[str, Any]) -> None:
+def _write_clarification_patch_payload(
+    run_dir: Path, report_payload: dict[str, Any], artifact_patch: dict[str, Any]
+) -> None:
     report_payload["artifact_patch"] = artifact_patch
     if isinstance(report_payload.get("parallel_review_meta"), dict):
-        report_payload["parallel_review_meta"]["artifact_patch_status"] = artifact_patch.get("status", "")
+        report_payload["parallel_review_meta"]["artifact_patch_status"] = (
+            artifact_patch.get("status", "")
+        )
     if isinstance(report_payload.get("parallel-review_meta"), dict):
-        report_payload["parallel-review_meta"]["artifact_patch_status"] = artifact_patch.get("status", "")
+        report_payload["parallel-review_meta"]["artifact_patch_status"] = (
+            artifact_patch.get("status", "")
+        )
     _write_json_object(run_dir / "report.json", report_payload)
 
 
@@ -2401,13 +2762,17 @@ def answer_review_clarification(
     parallel_review = _extract_parallel_review_payload(report_payload)
     if parallel_review:
         current_findings = _copy_dict_list(parallel_review.get("findings"))
-        updated_findings, updated_clarification = apply_clarification_answers(current_findings, clarification, normalized_answers)
+        updated_findings, updated_clarification = apply_clarification_answers(
+            current_findings, clarification, normalized_answers
+        )
         parallel_review["findings"] = updated_findings
         parallel_review["clarification"] = updated_clarification
         report_payload["parallel_review"] = parallel_review
     else:
         current_findings = _copy_dict_list(report_payload.get("findings"))
-        updated_findings, updated_clarification = apply_clarification_answers(current_findings, clarification, normalized_answers)
+        updated_findings, updated_clarification = apply_clarification_answers(
+            current_findings, clarification, normalized_answers
+        )
         if current_findings:
             report_payload["findings"] = updated_findings
 
@@ -2415,14 +2780,19 @@ def answer_review_clarification(
     report_payload["review_clarification"] = updated_clarification
 
     if isinstance(report_payload.get("parallel_review_meta"), dict):
-        report_payload["parallel_review_meta"]["clarification_status"] = updated_clarification.get("status", "not_needed")
+        report_payload["parallel_review_meta"]["clarification_status"] = (
+            updated_clarification.get("status", "not_needed")
+        )
     if isinstance(report_payload.get("parallel-review_meta"), dict):
-        report_payload["parallel-review_meta"]["clarification_status"] = updated_clarification.get("status", "not_needed")
+        report_payload["parallel-review_meta"]["clarification_status"] = (
+            updated_clarification.get("status", "not_needed")
+        )
 
     _write_json_object(report_path, report_payload)
     _persist_parallel_review_refresh(run_dir, report_payload)
     pending_questions = [
-        item for item in updated_clarification.get("questions", [])
+        item
+        for item in updated_clarification.get("questions", [])
         if isinstance(item, dict) and item.get("id")
     ]
     answered_question_ids = [item["question_id"] for item in normalized_answers]
@@ -2436,7 +2806,9 @@ def answer_review_clarification(
             "question_ids": answered_question_ids,
             "answered_count": len(answered_question_ids),
             "remaining_question_count": len(pending_questions),
-            "clarification_status": str(updated_clarification.get("status", "") or "answered"),
+            "clarification_status": str(
+                updated_clarification.get("status", "") or "answered"
+            ),
         },
     )
     return get_review_result_payload(run_id=run_id, outputs_root=outputs_root)
@@ -2472,7 +2844,9 @@ async def answer_review_clarification_async(
         "status": "context_available",
         "context": resolved_patch_context,
     }
-    prompt_context = await _load_patch_prompt_context_async(patch_context=resolved_patch_context)
+    prompt_context = await _load_patch_prompt_context_async(
+        patch_context=resolved_patch_context
+    )
     if prompt_context is not None:
         artifact_id, base_version, blocks = prompt_context
         questions = [
@@ -2493,10 +2867,14 @@ async def answer_review_clarification_async(
                 }
             )
         merged_question = "\n".join(
-            f"- {entry['question_id']}: {entry['question']}" for entry in prompt_questions if entry["question"]
+            f"- {entry['question_id']}: {entry['question']}"
+            for entry in prompt_questions
+            if entry["question"]
         )
         merged_answer = "\n".join(
-            f"- {entry['question_id']}: {entry['answer']}" for entry in prompt_questions if entry["answer"]
+            f"- {entry['question_id']}: {entry['answer']}"
+            for entry in prompt_questions
+            if entry["answer"]
         )
         artifact_patch_payload["prompt"] = build_clarification_to_patch_prompt(
             artifact_id=artifact_id,
@@ -2546,7 +2924,9 @@ def answer_review_clarification_for_mcp(
                 outputs_root=outputs_root,
                 audit_context=resolved_options.get("audit_context"),
                 patch=patch if isinstance(patch, dict) else None,
-                patch_context=patch_context if isinstance(patch_context, dict) else None,
+                patch_context=patch_context
+                if isinstance(patch_context, dict)
+                else None,
             )
         )
     else:
@@ -2566,7 +2946,9 @@ def answer_review_clarification_for_mcp(
         status="completed",
     )
     payload = _build_review_requirement_payload(summary)
-    if isinstance(answer_result, dict) and isinstance(answer_result.get("artifact_patch"), dict):
+    if isinstance(answer_result, dict) and isinstance(
+        answer_result.get("artifact_patch"), dict
+    ):
         payload["artifact_patch"] = dict(answer_result["artifact_patch"])
     return payload
 
@@ -2630,26 +3012,38 @@ def _derive_reviewers_skipped(report_payload: dict[str, Any]) -> list[dict[str, 
 
 
 def _derive_review_mode(report_payload: dict[str, Any]) -> str:
-    review_mode = str(report_payload.get("mode", report_payload.get("review_mode", "")) or "").strip()
+    review_mode = str(
+        report_payload.get("mode", report_payload.get("review_mode", "")) or ""
+    ).strip()
     if review_mode:
         return review_mode
 
     parallel_review = _extract_parallel_review_payload(report_payload)
-    review_mode = str(parallel_review.get("mode", parallel_review.get("review_mode", "")) or "").strip()
+    review_mode = str(
+        parallel_review.get("mode", parallel_review.get("review_mode", "")) or ""
+    ).strip()
     if review_mode:
         return review_mode
 
     parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
-    review_mode = str(parallel_review_meta.get("selected_mode", "") or parallel_review_meta.get("review_mode", "") or "").strip()
+    review_mode = str(
+        parallel_review_meta.get("selected_mode", "")
+        or parallel_review_meta.get("review_mode", "")
+        or ""
+    ).strip()
     return review_mode or "quick"
 
 
-def _derive_review_report_path(summary: ReviewResultSummary, report_payload: dict[str, Any]) -> str:
+def _derive_review_report_path(
+    summary: ReviewResultSummary, report_payload: dict[str, Any]
+) -> str:
     parallel_review_meta = _extract_parallel_review_meta_from_report(report_payload)
     artifact_paths = parallel_review_meta.get("artifact_paths")
     if isinstance(artifact_paths, dict):
         review_result_json = str(
-            artifact_paths.get("review_result_json", "") or artifact_paths.get("review_report_json", "") or ""
+            artifact_paths.get("review_result_json", "")
+            or artifact_paths.get("review_report_json", "")
+            or ""
         ).strip()
         if review_result_json:
             return review_result_json
@@ -2657,12 +3051,15 @@ def _derive_review_report_path(summary: ReviewResultSummary, report_payload: dic
     parallel_review = _extract_parallel_review_payload(report_payload)
     artifacts = parallel_review.get("artifacts")
     if isinstance(artifacts, dict):
-        review_result_json = str(artifacts.get("review_result_json", "") or artifacts.get("review_report_json", "") or "").strip()
+        review_result_json = str(
+            artifacts.get("review_result_json", "")
+            or artifacts.get("review_report_json", "")
+            or ""
+        ).strip()
         if review_result_json:
             return review_result_json
 
     return summary.report_json_path or summary.report_md_path
-
 
 
 def _derive_memory_hits(report_payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2688,7 +3085,11 @@ def _derive_similar_reviews_referenced(report_payload: dict[str, Any]) -> list[s
         _extract_parallel_review_payload(report_payload),
         _extract_parallel_review_meta_from_report(report_payload),
     ):
-        direct = source.get("similar_reviews_referenced") if isinstance(source, dict) else None
+        direct = (
+            source.get("similar_reviews_referenced")
+            if isinstance(source, dict)
+            else None
+        )
         if isinstance(direct, list):
             return [str(item) for item in direct if str(item).strip()]
     return []
@@ -2714,6 +3115,7 @@ def _derive_rag_enabled(report_payload: dict[str, Any]) -> bool:
         if isinstance(source, dict) and "rag_enabled" in source:
             return bool(source.get("rag_enabled"))
     return False
+
 
 def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str, Any]:
     report_payload = _load_json_object(Path(summary.report_json_path))
@@ -2759,7 +3161,11 @@ def _build_review_requirement_payload(summary: ReviewResultSummary) -> dict[str,
             "similar_reviews_referenced": similar_reviews_referenced,
             "normalizer_cache_hit": normalizer_cache_hit,
             "rag_enabled": rag_enabled,
-            **({"summary": report_payload.get("summary")} if isinstance(report_payload.get("summary"), dict) else {}),
+            **(
+                {"summary": report_payload.get("summary")}
+                if isinstance(report_payload.get("summary"), dict)
+                else {}
+            ),
             **meta,
         },
     }
@@ -2775,10 +3181,14 @@ def _build_cached_node_outputs(report_payload: dict[str, Any]) -> dict[str, Any]
         "implementation_plan": report_payload.get("implementation_plan", {}),
         "test_plan": report_payload.get("test_plan", {}),
         "codex_prompt_handoff": report_payload.get("codex_prompt_handoff", {}),
-        "claude_code_prompt_handoff": report_payload.get("claude_code_prompt_handoff", {}),
+        "claude_code_prompt_handoff": report_payload.get(
+            "claude_code_prompt_handoff", {}
+        ),
         "review_results": report_payload.get("review_results", []),
         "parallel_review": report_payload.get("parallel_review", {}),
-        "parallel_review_meta": report_payload.get("parallel_review_meta", report_payload.get("parallel-review_meta", {})),
+        "parallel_review_meta": report_payload.get(
+            "parallel_review_meta", report_payload.get("parallel-review_meta", {})
+        ),
         "review_open_questions": report_payload.get("review_open_questions", []),
         "review_risk_items": report_payload.get("review_risk_items", []),
         "final_report": report_payload.get("final_report", ""),
@@ -2808,7 +3218,9 @@ async def _attach_selective_rerun_plan_if_requested(
         return payload
 
     report_payload = _load_json_object(Path(summary.report_json_path))
-    prd_v1 = str(selective.get("prd_v1") or "").strip() or _read_optional_text(summary.prd_v1_path)
+    prd_v1 = str(selective.get("prd_v1") or "").strip() or _read_optional_text(
+        summary.prd_v1_path
+    )
     prd_v2 = str(selective.get("prd_v2") or "").strip() or str(prd_text or "").strip()
     if not prd_v1 or not prd_v2:
         return payload
@@ -2825,6 +3237,8 @@ async def _attach_selective_rerun_plan_if_requested(
     meta["rerun_plan"] = rerun_plan
     payload["meta"] = meta
     return payload
+
+
 async def _review_summary_for_mcp_async(
     *,
     prd_text: str | None,
@@ -2851,7 +3265,28 @@ async def _review_summary_for_mcp_async(
     mode = resolved_options.get("mode")
     if isinstance(mode, str) and mode.strip():
         config_overrides["mode"] = mode.strip()
-    for option_key in ("review_memory_path", "review_memory_enabled", "review_memory_seeds_dir", "review_memory_db_path", "review_memory_extract_enabled", "review_memory_max_kept", "review_memory_mode", "normalizer_cache_path", "fast_llm", "smart_llm", "strategic_llm", "temperature", "llm_kwargs", "reasoning_effort", "FAST_LLM", "SMART_LLM", "STRATEGIC_LLM", "TEMPERATURE", "LLM_KWARGS", "REASONING_EFFORT"):
+    for option_key in (
+        "review_memory_path",
+        "review_memory_enabled",
+        "review_memory_seeds_dir",
+        "review_memory_db_path",
+        "review_memory_extract_enabled",
+        "review_memory_max_kept",
+        "review_memory_mode",
+        "normalizer_cache_path",
+        "fast_llm",
+        "smart_llm",
+        "strategic_llm",
+        "temperature",
+        "llm_kwargs",
+        "reasoning_effort",
+        "FAST_LLM",
+        "SMART_LLM",
+        "STRATEGIC_LLM",
+        "TEMPERATURE",
+        "LLM_KWARGS",
+        "REASONING_EFFORT",
+    ):
         if option_key in resolved_options:
             config_overrides[option_key] = resolved_options.get(option_key)
 
@@ -2868,6 +3303,7 @@ async def _review_summary_for_mcp_async(
         trace_meta.update(invocation_meta)
     _attach_trace_invocation(summary, trace_meta)
     return summary
+
 
 async def review_prd_for_mcp_async(
     *,
@@ -2960,7 +3396,9 @@ async def prepare_agent_handoff_for_mcp_async(
     outputs_root = str(resolved_options.get("outputs_root", "outputs"))
     delivery_bundle_path = Path(outputs_root) / resolved_run_id / "delivery_bundle.json"
     if not delivery_bundle_path.exists():
-        generate_delivery_bundle_for_mcp(run_id=resolved_run_id, options=resolved_options)
+        generate_delivery_bundle_for_mcp(
+            run_id=resolved_run_id, options=resolved_options
+        )
 
     from prd_pal.service.execution_service import prepare_agent_handoff_for_run_for_mcp
 
@@ -2969,6 +3407,7 @@ async def prepare_agent_handoff_for_mcp_async(
         agent=agent,
         options=resolved_options,
     )
+
 
 def review_prd_for_mcp(
     *,
@@ -2990,15 +3429,6 @@ def review_prd_for_mcp(
                 invocation_meta=invocation_meta,
             )
         )
-    raise RuntimeError("review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async")
-
-
-
-
-
-
-
-
-
-
-
+    raise RuntimeError(
+        "review_prd_for_mcp cannot run inside an active event loop; use review_prd_for_mcp_async"
+    )

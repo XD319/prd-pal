@@ -11,7 +11,11 @@ from prd_pal.monitoring import (
     retry_metadata_for_status,
     retry_operation,
 )
-from prd_pal.notifications import BaseNotifier, dispatch_notification, read_notification_records
+from prd_pal.notifications import (
+    BaseNotifier,
+    dispatch_notification,
+    read_notification_records,
+)
 from prd_pal.service.review_service import build_delivery_handoff_outputs
 
 
@@ -24,9 +28,15 @@ class _BrokenNotifier(BaseNotifier):
 
 
 def test_retry_metadata_for_status_captures_failure_and_blocked_dependency() -> None:
-    failed = retry_metadata_for_status(status="failed", non_blocking=True, error_message="renderer boom")
-    blocked = retry_metadata_for_status(status="skipped", non_blocking=True, error_message="execution_pack_path_missing")
-    exhausted = build_retry_metadata(retryable=True, attempt=3, max_attempts=3, last_error="still failing")
+    failed = retry_metadata_for_status(
+        status="failed", non_blocking=True, error_message="renderer boom"
+    )
+    blocked = retry_metadata_for_status(
+        status="skipped", non_blocking=True, error_message="execution_pack_path_missing"
+    )
+    exhausted = build_retry_metadata(
+        retryable=True, attempt=3, max_attempts=3, last_error="still failing"
+    )
 
     assert failed["retryable"] is True
     assert failed["state"] == "available"
@@ -41,14 +51,20 @@ def test_retry_metadata_for_status_captures_failure_and_blocked_dependency() -> 
     assert exhausted["recommended_action"] == "escalate"
 
 
-def test_build_delivery_handoff_outputs_persists_retry_metadata_for_non_blocking_steps(tmp_path) -> None:
+def test_build_delivery_handoff_outputs_persists_retry_metadata_for_non_blocking_steps(
+    tmp_path,
+) -> None:
     run_id = "20260308T040506Z"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
     report_json_path = run_dir / "report.json"
     trace_path = run_dir / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(run_dir),
@@ -58,7 +74,13 @@ def test_build_delivery_handoff_outputs_persists_retry_metadata_for_non_blocking
             "run_trace": str(trace_path),
         },
         "result": {
-            "parsed_items": [{"id": "REQ-001", "description": "Broken payload", "acceptance_criteria": []}],
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Broken payload",
+                    "acceptance_criteria": [],
+                }
+            ],
             "tasks": "invalid",
             "risks": [],
             "implementation_plan": {},
@@ -76,7 +98,12 @@ def test_build_delivery_handoff_outputs_persists_retry_metadata_for_non_blocking
 
     assert trace_payload["pack_builder"]["retry"]["retryable"] is True
     assert trace_payload["pack_builder"]["retry"]["state"] == "available"
-    assert trace_payload["pack_builder"]["packs"]["implementation_pack"]["retry"]["retryable"] is True
+    assert (
+        trace_payload["pack_builder"]["packs"]["implementation_pack"]["retry"][
+            "retryable"
+        ]
+        is True
+    )
 
     assert trace_payload["handoff_renderer"]["retry"]["retryable"] is True
     assert trace_payload["handoff_renderer"]["retry"]["state"] == "blocked"
@@ -91,8 +118,12 @@ def test_retry_operation_replays_failed_artifact_generation(tmp_path) -> None:
     run_dir.mkdir(parents=True)
     report_json_path = run_dir / "report.json"
     trace_path = run_dir / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     failed_run_output = {
         "run_dir": str(run_dir),
@@ -102,7 +133,13 @@ def test_retry_operation_replays_failed_artifact_generation(tmp_path) -> None:
             "run_trace": str(trace_path),
         },
         "result": {
-            "parsed_items": [{"id": "REQ-001", "description": "Broken payload", "acceptance_criteria": []}],
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Broken payload",
+                    "acceptance_criteria": [],
+                }
+            ],
             "tasks": "invalid",
             "risks": [],
             "implementation_plan": {},
@@ -115,10 +152,31 @@ def test_retry_operation_replays_failed_artifact_generation(tmp_path) -> None:
     build_delivery_handoff_outputs(failed_run_output)
 
     valid_report_payload = {
-        "parsed_items": [{"id": "REQ-001", "description": "Support login", "acceptance_criteria": ["Login succeeds"]}],
-        "review_results": [{"id": "REQ-001", "description": "Support login", "issues": []}],
-        "tasks": [{"id": "TASK-001", "title": "Implement login", "requirement_ids": ["REQ-001"]}],
-        "risks": [{"id": "RISK-001", "description": "Auth regression", "impact": "low", "mitigation": "Run tests"}],
+        "parsed_items": [
+            {
+                "id": "REQ-001",
+                "description": "Support login",
+                "acceptance_criteria": ["Login succeeds"],
+            }
+        ],
+        "review_results": [
+            {"id": "REQ-001", "description": "Support login", "issues": []}
+        ],
+        "tasks": [
+            {
+                "id": "TASK-001",
+                "title": "Implement login",
+                "requirement_ids": ["REQ-001"],
+            }
+        ],
+        "risks": [
+            {
+                "id": "RISK-001",
+                "description": "Auth regression",
+                "impact": "low",
+                "mitigation": "Run tests",
+            }
+        ],
         "implementation_plan": {
             "implementation_steps": ["Implement login safely"],
             "target_modules": ["backend.auth"],
@@ -143,7 +201,9 @@ def test_retry_operation_replays_failed_artifact_generation(tmp_path) -> None:
         },
         "trace": {},
     }
-    report_json_path.write_text(json.dumps(valid_report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps(valid_report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     result = retry_operation(run_id, "artifact_generation", outputs_root=tmp_path)
     events = read_audit_events(run_dir)
@@ -183,7 +243,9 @@ def test_retry_operation_replays_failed_notification_dispatch(tmp_path) -> None:
     assert result["before_status"] == "failed"
     assert result["after_status"] == "dispatched"
     assert result["notifications_retried"] == 1
-    retried = [item for item in notifications if item["dispatch_status"] == "dispatched"]
+    retried = [
+        item for item in notifications if item["dispatch_status"] == "dispatched"
+    ]
     assert len(retried) == 2
     assert {item["channel"] for item in retried} == {"feishu", "wecom"}
     assert audit_events[-1]["operation"] == "retry_operation"

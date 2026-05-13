@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .audit import append_audit_event, query_audit_events, read_audit_events
+from .audit import append_audit_event, read_audit_events
 
 
 class RetryOperationError(ValueError):
@@ -42,7 +42,9 @@ def build_retry_metadata(
     state: str = "",
 ) -> dict[str, Any]:
     normalized_attempt = max(1, int(attempt or 1))
-    normalized_max_attempts = max(normalized_attempt, int(max_attempts or normalized_attempt))
+    normalized_max_attempts = max(
+        normalized_attempt, int(max_attempts or normalized_attempt)
+    )
     normalized_last_error = str(last_error or "").strip()
 
     if state:
@@ -147,14 +149,23 @@ def _operation_error_message(event: dict[str, Any]) -> str:
 
 
 def _latest_operation_event(run_dir: Path, operation: str) -> dict[str, Any] | None:
-    candidates = [event for event in read_audit_events(run_dir) if str(event.get("operation") or "") == operation]
+    candidates = [
+        event
+        for event in read_audit_events(run_dir)
+        if str(event.get("operation") or "") == operation
+    ]
     if not candidates:
         return None
     return candidates[-1]
 
 
-def _retry_bundle_generation(run_id: str, run_dir: Path, audit_context: dict[str, Any]) -> dict[str, Any]:
-    from prd_pal.service.review_service import _load_json_object, build_delivery_handoff_outputs
+def _retry_bundle_generation(
+    run_id: str, run_dir: Path, audit_context: dict[str, Any]
+) -> dict[str, Any]:
+    from prd_pal.service.review_service import (
+        _load_json_object,
+        build_delivery_handoff_outputs,
+    )
 
     report_payload = _load_json_object(run_dir / "report.json")
     if not report_payload:
@@ -178,7 +189,9 @@ def _retry_bundle_generation(run_id: str, run_dir: Path, audit_context: dict[str
             "delivery_bundle": str(run_dir / "delivery_bundle.json"),
         },
     }
-    artifact_paths = build_delivery_handoff_outputs(run_output, audit_context=audit_context)
+    artifact_paths = build_delivery_handoff_outputs(
+        run_output, audit_context=audit_context
+    )
 
     next_event = _latest_operation_event(run_dir, "bundle_generation") or {}
     return {
@@ -209,16 +222,26 @@ def _latest_failed_notification_records(run_dir: Path) -> list[dict[str, Any]]:
     return list(latest_by_notification_id.values())
 
 
-def _retry_notification_dispatch(run_id: str, run_dir: Path, audit_context: dict[str, Any]) -> dict[str, Any]:
+def _retry_notification_dispatch(
+    run_id: str, run_dir: Path, audit_context: dict[str, Any]
+) -> dict[str, Any]:
     from prd_pal.notifications import dispatch_notification
 
     failed_records = _latest_failed_notification_records(run_dir)
     if not failed_records:
-        raise RetryTargetNotApplicableError(f"no failed notification dispatch records found for run_id={run_id}")
+        raise RetryTargetNotApplicableError(
+            f"no failed notification dispatch records found for run_id={run_id}"
+        )
 
     previous_status = "failed"
     previous_error = "; ".join(
-        sorted({str(record.get("error_message") or "").strip() for record in failed_records if str(record.get("error_message") or "").strip()})
+        sorted(
+            {
+                str(record.get("error_message") or "").strip()
+                for record in failed_records
+                if str(record.get("error_message") or "").strip()
+            }
+        )
     )
 
     dispatch_results = []
@@ -232,7 +255,9 @@ def _retry_notification_dispatch(run_id: str, run_dir: Path, audit_context: dict
                 run_id=str(record.get("run_id") or run_id),
                 bundle_id=str(record.get("bundle_id") or "").strip(),
                 task_id=str(record.get("task_id") or "").strip(),
-                metadata=record.get("metadata") if isinstance(record.get("metadata"), dict) else {},
+                metadata=record.get("metadata")
+                if isinstance(record.get("metadata"), dict)
+                else {},
                 audit_context=audit_context,
             )
         )
@@ -275,15 +300,21 @@ def retry_operation(
 ) -> dict[str, Any]:
     normalized_operation = normalize_retry_operation(operation)
     run_dir = _resolve_run_dir(run_id, outputs_root)
-    resolved_audit_context = dict(audit_context) if isinstance(audit_context, dict) else {}
+    resolved_audit_context = (
+        dict(audit_context) if isinstance(audit_context, dict) else {}
+    )
 
     try:
         if normalized_operation == "bundle_generation":
             result = _retry_bundle_generation(run_id, run_dir, resolved_audit_context)
         elif normalized_operation == "notification_dispatch":
-            result = _retry_notification_dispatch(run_id, run_dir, resolved_audit_context)
+            result = _retry_notification_dispatch(
+                run_id, run_dir, resolved_audit_context
+            )
         else:  # pragma: no cover - guarded by normalize_retry_operation
-            raise RetryOperationNotSupportedError(f"unsupported retry operation: {normalized_operation}")
+            raise RetryOperationNotSupportedError(
+                f"unsupported retry operation: {normalized_operation}"
+            )
     except Exception as exc:
         append_audit_event(
             run_dir,

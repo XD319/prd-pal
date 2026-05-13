@@ -5,7 +5,12 @@ from typing import Any
 
 import pytest
 
-from prd_pal.connectors import ConnectorRegistry, NotionConnector, SourceType, get_connector_error_payload
+from prd_pal.connectors import (
+    ConnectorRegistry,
+    NotionConnector,
+    SourceType,
+    get_connector_error_payload,
+)
 from prd_pal.connectors.errors import ConnectorRateLimitError, ConnectorValidationError
 from prd_pal.connectors.notion import (
     NotionAuthenticationError,
@@ -49,7 +54,9 @@ class _FakeNotionHTTPClient:
             )
         )
         if not self._responses:
-            raise AssertionError("Unexpected Notion HTTP request with no prepared response")
+            raise AssertionError(
+                "Unexpected Notion HTTP request with no prepared response"
+            )
         return self._responses.pop(0)
 
 
@@ -80,7 +87,9 @@ def _page_payload(*, title: str = "Product Spec") -> dict[str, Any]:
 @pytest.fixture
 def notion_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MARRDP_NOTION_TOKEN", "secret_notion_token")
-    monkeypatch.setenv("MARRDP_NOTION_API_BASE_URL", "https://api.notion.example.test/v1")
+    monkeypatch.setenv(
+        "MARRDP_NOTION_API_BASE_URL", "https://api.notion.example.test/v1"
+    )
     monkeypatch.setenv("MARRDP_NOTION_API_VERSION", "2022-06-28")
 
 
@@ -101,7 +110,9 @@ def test_connector_registry_routes_notion_sources() -> None:
 def test_notion_connector_requires_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MARRDP_NOTION_TOKEN", raising=False)
 
-    with pytest.raises(NotionAuthenticationError, match="authentication failed") as exc_info:
+    with pytest.raises(
+        NotionAuthenticationError, match="authentication failed"
+    ) as exc_info:
         NotionConnector().get_content(f"notion://page/{NOTION_PAGE_ID}")
 
     payload = get_connector_error_payload(exc_info.value)
@@ -118,7 +129,9 @@ def test_notion_connector_validates_base_url(monkeypatch: pytest.MonkeyPatch) ->
         NotionConnector().get_content(NOTION_PAGE_URL)
 
 
-def test_notion_connector_get_content_fetches_page_blocks_and_metadata(notion_env: None) -> None:
+def test_notion_connector_get_content_fetches_page_blocks_and_metadata(
+    notion_env: None,
+) -> None:
     http_client = _FakeNotionHTTPClient(
         [
             NotionHTTPResponse(status_code=200, json_body=_page_payload(), headers={}),
@@ -220,7 +233,10 @@ def test_notion_connector_get_content_fetches_page_blocks_and_metadata(notion_en
     assert document.source_type == SourceType.notion
     assert document.source == NOTION_PAGE_URL
     assert document.title == "Product Spec"
-    assert document.content_markdown == "# **Launch Review**\n\n- Parent item\n  *Nested detail*\n\nSecond page of blocks"
+    assert (
+        document.content_markdown
+        == "# **Launch Review**\n\n- Parent item\n  *Nested detail*\n\nSecond page of blocks"
+    )
     assert document.metadata.mime_type == "text/markdown"
     assert document.metadata.extra == {
         "source_kind": "https_url",
@@ -241,8 +257,13 @@ def test_notion_connector_get_content_fetches_page_blocks_and_metadata(notion_en
         f"/blocks/{NOTION_PAGE_ID}/children",
     ]
     assert http_client.requests[1].params == {"page_size": 100}
-    assert http_client.requests[3].params == {"page_size": 100, "start_cursor": "cursor-2"}
-    assert http_client.requests[0].headers["Authorization"] == "Bearer secret_notion_token"
+    assert http_client.requests[3].params == {
+        "page_size": 100,
+        "start_cursor": "cursor-2",
+    }
+    assert (
+        http_client.requests[0].headers["Authorization"] == "Bearer secret_notion_token"
+    )
     assert http_client.requests[0].headers["Notion-Version"] == "2022-06-28"
 
 
@@ -286,39 +307,174 @@ def test_notion_connector_blocks_to_markdown_covers_supported_block_types() -> N
 
     markdown = connector._blocks_to_markdown(  # noqa: SLF001
         [
-            {"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": "Plain", "annotations": {}, "text": {"content": "Plain"}}]}},
-            {"type": "heading_1", "heading_1": {"rich_text": [{"plain_text": "H1", "annotations": {}, "text": {"content": "H1"}}]}},
-            {"type": "heading_2", "heading_2": {"rich_text": [{"plain_text": "H2", "annotations": {}, "text": {"content": "H2"}}]}},
-            {"type": "heading_3", "heading_3": {"rich_text": [{"plain_text": "H3", "annotations": {}, "text": {"content": "H3"}}]}},
+            {
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [
+                        {
+                            "plain_text": "Plain",
+                            "annotations": {},
+                            "text": {"content": "Plain"},
+                        }
+                    ]
+                },
+            },
+            {
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [
+                        {
+                            "plain_text": "H1",
+                            "annotations": {},
+                            "text": {"content": "H1"},
+                        }
+                    ]
+                },
+            },
+            {
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [
+                        {
+                            "plain_text": "H2",
+                            "annotations": {},
+                            "text": {"content": "H2"},
+                        }
+                    ]
+                },
+            },
+            {
+                "type": "heading_3",
+                "heading_3": {
+                    "rich_text": [
+                        {
+                            "plain_text": "H3",
+                            "annotations": {},
+                            "text": {"content": "H3"},
+                        }
+                    ]
+                },
+            },
             {
                 "type": "bulleted_list_item",
-                "bulleted_list_item": {"rich_text": [{"plain_text": "Bullet", "annotations": {}, "text": {"content": "Bullet"}}]},
+                "bulleted_list_item": {
+                    "rich_text": [
+                        {
+                            "plain_text": "Bullet",
+                            "annotations": {},
+                            "text": {"content": "Bullet"},
+                        }
+                    ]
+                },
                 "children": [
                     {
                         "type": "numbered_list_item",
                         "numbered_list_item": {
-                            "rich_text": [{"plain_text": "Nested Number", "annotations": {}, "text": {"content": "Nested Number"}}]
+                            "rich_text": [
+                                {
+                                    "plain_text": "Nested Number",
+                                    "annotations": {},
+                                    "text": {"content": "Nested Number"},
+                                }
+                            ]
                         },
                     }
                 ],
             },
-            {"type": "numbered_list_item", "numbered_list_item": {"rich_text": [{"plain_text": "Number", "annotations": {}, "text": {"content": "Number"}}]}},
-            {"type": "code", "code": {"language": "python", "rich_text": [{"plain_text": "print('hi')", "annotations": {}, "text": {"content": "print('hi')"}}]}},
+            {
+                "type": "numbered_list_item",
+                "numbered_list_item": {
+                    "rich_text": [
+                        {
+                            "plain_text": "Number",
+                            "annotations": {},
+                            "text": {"content": "Number"},
+                        }
+                    ]
+                },
+            },
+            {
+                "type": "code",
+                "code": {
+                    "language": "python",
+                    "rich_text": [
+                        {
+                            "plain_text": "print('hi')",
+                            "annotations": {},
+                            "text": {"content": "print('hi')"},
+                        }
+                    ],
+                },
+            },
             {
                 "type": "toggle",
-                "toggle": {"rich_text": [{"plain_text": "More", "annotations": {}, "text": {"content": "More"}}]},
+                "toggle": {
+                    "rich_text": [
+                        {
+                            "plain_text": "More",
+                            "annotations": {},
+                            "text": {"content": "More"},
+                        }
+                    ]
+                },
                 "children": [
                     {
                         "type": "paragraph",
-                        "paragraph": {"rich_text": [{"plain_text": "Hidden", "annotations": {}, "text": {"content": "Hidden"}}]},
+                        "paragraph": {
+                            "rich_text": [
+                                {
+                                    "plain_text": "Hidden",
+                                    "annotations": {},
+                                    "text": {"content": "Hidden"},
+                                }
+                            ]
+                        },
                     }
                 ],
             },
-            {"type": "to_do", "to_do": {"checked": False, "rich_text": [{"plain_text": "Todo", "annotations": {}, "text": {"content": "Todo"}}]}},
-            {"type": "to_do", "to_do": {"checked": True, "rich_text": [{"plain_text": "Done", "annotations": {}, "text": {"content": "Done"}}]}},
-            {"type": "quote", "quote": {"rich_text": [{"plain_text": "Quoted", "annotations": {}, "text": {"content": "Quoted"}}]}},
+            {
+                "type": "to_do",
+                "to_do": {
+                    "checked": False,
+                    "rich_text": [
+                        {
+                            "plain_text": "Todo",
+                            "annotations": {},
+                            "text": {"content": "Todo"},
+                        }
+                    ],
+                },
+            },
+            {
+                "type": "to_do",
+                "to_do": {
+                    "checked": True,
+                    "rich_text": [
+                        {
+                            "plain_text": "Done",
+                            "annotations": {},
+                            "text": {"content": "Done"},
+                        }
+                    ],
+                },
+            },
+            {
+                "type": "quote",
+                "quote": {
+                    "rich_text": [
+                        {
+                            "plain_text": "Quoted",
+                            "annotations": {},
+                            "text": {"content": "Quoted"},
+                        }
+                    ]
+                },
+            },
             {"type": "divider", "divider": {}},
-            {"type": "image", "image": {"external": {"url": "https://example.com/image.png"}}},
+            {
+                "type": "image",
+                "image": {"external": {"url": "https://example.com/image.png"}},
+            },
             {
                 "type": "table",
                 "table": {"table_width": 2},
@@ -327,8 +483,20 @@ def test_notion_connector_blocks_to_markdown_covers_supported_block_types() -> N
                         "type": "table_row",
                         "table_row": {
                             "cells": [
-                                [{"plain_text": "Name", "annotations": {}, "text": {"content": "Name"}}],
-                                [{"plain_text": "Value", "annotations": {}, "text": {"content": "Value"}}],
+                                [
+                                    {
+                                        "plain_text": "Name",
+                                        "annotations": {},
+                                        "text": {"content": "Name"},
+                                    }
+                                ],
+                                [
+                                    {
+                                        "plain_text": "Value",
+                                        "annotations": {},
+                                        "text": {"content": "Value"},
+                                    }
+                                ],
                             ]
                         },
                     },
@@ -336,8 +504,20 @@ def test_notion_connector_blocks_to_markdown_covers_supported_block_types() -> N
                         "type": "table_row",
                         "table_row": {
                             "cells": [
-                                [{"plain_text": "A", "annotations": {}, "text": {"content": "A"}}],
-                                [{"plain_text": "1", "annotations": {}, "text": {"content": "1"}}],
+                                [
+                                    {
+                                        "plain_text": "A",
+                                        "annotations": {},
+                                        "text": {"content": "A"},
+                                    }
+                                ],
+                                [
+                                    {
+                                        "plain_text": "1",
+                                        "annotations": {},
+                                        "text": {"content": "1"},
+                                    }
+                                ],
                             ]
                         },
                     },

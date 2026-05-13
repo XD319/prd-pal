@@ -50,4 +50,3 @@ class RoadmapDiffOutput(AgentSchemaModel):
     removed: list[RoadmapDiffItem] = Field(default_factory=list)
     changed: list[RoadmapDiffItem] = Field(default_factory=list)
     unchanged_count: int = 0
-

@@ -10,7 +10,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from prd_pal.service.review_service import _load_json_object, _resolve_outputs_root, _resolve_run_dir
+from prd_pal.service.review_service import (
+    _load_json_object,
+    _resolve_outputs_root,
+    _resolve_run_dir,
+)
 from prd_pal.service.report_service import RUN_ID_PATTERN
 
 
@@ -94,19 +98,35 @@ def _extract_parallel_review(report: dict[str, Any]) -> dict[str, Any]:
 def _extract_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
     payload = _extract_parallel_review(report)
     findings = payload.get("findings")
-    return [item for item in findings if isinstance(item, dict)] if isinstance(findings, list) else []
+    return (
+        [item for item in findings if isinstance(item, dict)]
+        if isinstance(findings, list)
+        else []
+    )
 
 
 def _extract_risks(report: dict[str, Any]) -> list[dict[str, Any]]:
     payload = _extract_parallel_review(report)
-    risks = payload.get("risk_items") or report.get("review_risk_items") or report.get("risks")
-    return [item for item in risks if isinstance(item, dict)] if isinstance(risks, list) else []
+    risks = (
+        payload.get("risk_items")
+        or report.get("review_risk_items")
+        or report.get("risks")
+    )
+    return (
+        [item for item in risks if isinstance(item, dict)]
+        if isinstance(risks, list)
+        else []
+    )
 
 
 def _extract_open_questions(report: dict[str, Any]) -> list[dict[str, Any]]:
     payload = _extract_parallel_review(report)
     questions = payload.get("open_questions") or report.get("review_open_questions")
-    return [item for item in questions if isinstance(item, dict)] if isinstance(questions, list) else []
+    return (
+        [item for item in questions if isinstance(item, dict)]
+        if isinstance(questions, list)
+        else []
+    )
 
 
 def _normalize_text(value: Any) -> str:
@@ -122,7 +142,9 @@ def _finding_requirement_id(finding: dict[str, Any], index: int) -> str:
     return f"unknown:{index}"
 
 
-def _group_findings_by_requirement(findings: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _group_findings_by_requirement(
+    findings: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for index, finding in enumerate(findings):
         grouped.setdefault(_finding_requirement_id(finding, index), []).append(finding)
@@ -166,23 +188,34 @@ def _metric_number(report: dict[str, Any], metric_name: str) -> float:
     if metric_name == "finding_count":
         candidates = [
             report.get("finding_count"),
-            report.get("meta", {}).get("finding_count") if isinstance(report.get("meta"), dict) else None,
-            parallel_meta.get("finding_count") if isinstance(parallel_meta, dict) else None,
+            report.get("meta", {}).get("finding_count")
+            if isinstance(report.get("meta"), dict)
+            else None,
+            parallel_meta.get("finding_count")
+            if isinstance(parallel_meta, dict)
+            else None,
             dashed_meta.get("finding_count") if isinstance(dashed_meta, dict) else None,
             len(_extract_findings(report)),
         ]
     elif metric_name == "coverage":
         candidates = [
             metrics.get("coverage_pct") if isinstance(metrics, dict) else None,
-            metrics.get("coverage_ratio") * 100 if isinstance(metrics, dict) and isinstance(metrics.get("coverage_ratio"), (int, float)) else None,
+            metrics.get("coverage_ratio") * 100
+            if isinstance(metrics, dict)
+            and isinstance(metrics.get("coverage_ratio"), (int, float))
+            else None,
             report.get("coverage_pct"),
-            report.get("coverage_ratio") * 100 if isinstance(report.get("coverage_ratio"), (int, float)) else None,
+            report.get("coverage_ratio") * 100
+            if isinstance(report.get("coverage_ratio"), (int, float))
+            else None,
         ]
     elif metric_name == "risk_score":
         candidates = [
             metrics.get("risk_score") if isinstance(metrics, dict) else None,
             report.get("risk_score"),
-            report.get("summary", {}).get("risk_score") if isinstance(report.get("summary"), dict) else None,
+            report.get("summary", {}).get("risk_score")
+            if isinstance(report.get("summary"), dict)
+            else None,
         ]
     else:
         candidates = []
@@ -201,7 +234,9 @@ def _extract_timestamp(run_dir: Path, report: dict[str, Any]) -> str:
 
     run_dt: datetime | None = None
     if RUN_ID_PATTERN.fullmatch(run_dir.name):
-        run_dt = datetime.strptime(run_dir.name, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        run_dt = datetime.strptime(run_dir.name, "%Y%m%dT%H%M%SZ").replace(
+            tzinfo=timezone.utc
+        )
     if run_dt is None:
         run_dt = datetime.fromtimestamp(run_dir.stat().st_mtime, tz=timezone.utc)
     return run_dt.isoformat()
@@ -217,7 +252,9 @@ def _extract_duration_ms(report: dict[str, Any]) -> float | None:
         metrics.get("duration_ms") if isinstance(metrics, dict) else None,
         parallel_meta.get("duration_ms") if isinstance(parallel_meta, dict) else None,
         dashed_meta.get("duration_ms") if isinstance(dashed_meta, dict) else None,
-        trace.get("reporter", {}).get("duration_ms") if isinstance(trace, dict) and isinstance(trace.get("reporter"), dict) else None,
+        trace.get("reporter", {}).get("duration_ms")
+        if isinstance(trace, dict) and isinstance(trace.get("reporter"), dict)
+        else None,
     ]
     for candidate in candidates:
         if isinstance(candidate, (int, float)):
@@ -230,10 +267,16 @@ def _iter_run_dirs(outputs_root: str | Path) -> list[Path]:
     if not root.exists() or not root.is_dir():
         return []
 
-    run_dirs = [item for item in root.iterdir() if item.is_dir() and RUN_ID_PATTERN.fullmatch(item.name)]
+    run_dirs = [
+        item
+        for item in root.iterdir()
+        if item.is_dir() and RUN_ID_PATTERN.fullmatch(item.name)
+    ]
     run_dirs.sort(
         key=lambda path: (
-            datetime.strptime(path.name, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc).timestamp(),
+            datetime.strptime(path.name, "%Y%m%dT%H%M%SZ")
+            .replace(tzinfo=timezone.utc)
+            .timestamp(),
             path.name,
         ),
         reverse=True,
@@ -253,14 +296,18 @@ def _find_best_risk_match(
     best_candidate: dict[str, Any] | None = None
     best_score = 0.0
     source_desc = _normalize_text(
-        source_risk.get("description", "") or source_risk.get("detail", "") or source_risk.get("title", "")
+        source_risk.get("description", "")
+        or source_risk.get("detail", "")
+        or source_risk.get("title", "")
     )
     if not source_desc:
         return None
 
     for candidate_key, candidate in candidates.items():
         candidate_desc = _normalize_text(
-            candidate.get("description", "") or candidate.get("detail", "") or candidate.get("title", "")
+            candidate.get("description", "")
+            or candidate.get("detail", "")
+            or candidate.get("title", "")
         )
         if not candidate_desc:
             continue
@@ -275,7 +322,9 @@ def _find_best_risk_match(
     return best_key, best_candidate
 
 
-def compare_runs(run_id_a: str, run_id_b: str, outputs_root: str = "outputs") -> ComparisonResult:
+def compare_runs(
+    run_id_a: str, run_id_b: str, outputs_root: str = "outputs"
+) -> ComparisonResult:
     report_a = _load_report(run_id_a, outputs_root)
     report_b = _load_report(run_id_b, outputs_root)
 
@@ -291,29 +340,64 @@ def compare_runs(run_id_a: str, run_id_b: str, outputs_root: str = "outputs") ->
             status = "added"
         else:
             status = "removed"
-        finding_diffs.append(FindingDiffItem(requirement_id=requirement_id, status=status, before=before, after=after))
+        finding_diffs.append(
+            FindingDiffItem(
+                requirement_id=requirement_id, status=status, before=before, after=after
+            )
+        )
 
-    risks_a = {_risk_key(risk, index): risk for index, risk in enumerate(_extract_risks(report_a))}
-    remaining_risks_b = {_risk_key(risk, index): risk for index, risk in enumerate(_extract_risks(report_b))}
+    risks_a = {
+        _risk_key(risk, index): risk
+        for index, risk in enumerate(_extract_risks(report_a))
+    }
+    remaining_risks_b = {
+        _risk_key(risk, index): risk
+        for index, risk in enumerate(_extract_risks(report_b))
+    }
     risk_diffs: list[RiskDiffItem] = []
     for key, risk in risks_a.items():
         match = _find_best_risk_match(risk, key, remaining_risks_b)
         if match is None:
-            risk_diffs.append(RiskDiffItem(match_key=key, status="removed", before=risk, after=None))
+            risk_diffs.append(
+                RiskDiffItem(match_key=key, status="removed", before=risk, after=None)
+            )
             continue
         matched_key, matched_risk = match
         del remaining_risks_b[matched_key]
-        status = "unchanged" if _stable_jsonish(risk) == _stable_jsonish(matched_risk) else "changed"
-        risk_diffs.append(RiskDiffItem(match_key=matched_key or key, status=status, before=risk, after=matched_risk))
+        status = (
+            "unchanged"
+            if _stable_jsonish(risk) == _stable_jsonish(matched_risk)
+            else "changed"
+        )
+        risk_diffs.append(
+            RiskDiffItem(
+                match_key=matched_key or key,
+                status=status,
+                before=risk,
+                after=matched_risk,
+            )
+        )
     for key, risk in remaining_risks_b.items():
-        risk_diffs.append(RiskDiffItem(match_key=key, status="added", before=None, after=risk))
+        risk_diffs.append(
+            RiskDiffItem(match_key=key, status="added", before=None, after=risk)
+        )
 
-    questions_a = {_question_key(question, index): question for index, question in enumerate(_extract_open_questions(report_a))}
-    questions_b = {_question_key(question, index): question for index, question in enumerate(_extract_open_questions(report_b))}
+    questions_a = {
+        _question_key(question, index): question
+        for index, question in enumerate(_extract_open_questions(report_a))
+    }
+    questions_b = {
+        _question_key(question, index): question
+        for index, question in enumerate(_extract_open_questions(report_b))
+    }
     open_question_diff = OpenQuestionDiff(
         added=[questions_b[key] for key in sorted(set(questions_b) - set(questions_a))],
-        resolved=[questions_a[key] for key in sorted(set(questions_a) - set(questions_b))],
-        unchanged=[questions_b[key] for key in sorted(set(questions_a) & set(questions_b))],
+        resolved=[
+            questions_a[key] for key in sorted(set(questions_a) - set(questions_b))
+        ],
+        unchanged=[
+            questions_b[key] for key in sorted(set(questions_a) & set(questions_b))
+        ],
     )
 
     metrics = {
@@ -327,9 +411,15 @@ def compare_runs(run_id_a: str, run_id_b: str, outputs_root: str = "outputs") ->
 
     summary = {
         "findings_added": sum(1 for item in finding_diffs if item.status == "added"),
-        "findings_removed": sum(1 for item in finding_diffs if item.status == "removed"),
-        "findings_changed": sum(1 for item in finding_diffs if item.status == "changed"),
-        "findings_unchanged": sum(1 for item in finding_diffs if item.status == "unchanged"),
+        "findings_removed": sum(
+            1 for item in finding_diffs if item.status == "removed"
+        ),
+        "findings_changed": sum(
+            1 for item in finding_diffs if item.status == "changed"
+        ),
+        "findings_unchanged": sum(
+            1 for item in finding_diffs if item.status == "unchanged"
+        ),
         "risks_added": sum(1 for item in risk_diffs if item.status == "added"),
         "risks_removed": sum(1 for item in risk_diffs if item.status == "removed"),
         "risks_changed": sum(1 for item in risk_diffs if item.status == "changed"),
@@ -365,7 +455,9 @@ def get_trend_data(outputs_root: str = "outputs", limit: int = 20) -> TrendData:
                 timestamp=_extract_timestamp(run_dir, report),
                 total_findings=len(findings),
                 high_severity_count=sum(
-                    1 for item in findings if _normalize_text(item.get("severity", "")) == "high"
+                    1
+                    for item in findings
+                    if _normalize_text(item.get("severity", "")) == "high"
                 ),
                 risk_score=_metric_number(report, "risk_score"),
                 coverage_pct=_metric_number(report, "coverage"),
@@ -409,8 +501,12 @@ def get_run_stats_summary(outputs_root: str = "outputs") -> StatsSummary:
                 issue_counter[issue_type] += 1
 
     total_runs = len(run_dirs)
-    average_findings = (sum(finding_counts) / len(finding_counts)) if finding_counts else 0.0
-    average_duration_ms = (sum(duration_values) / len(duration_values)) if duration_values else 0.0
+    average_findings = (
+        (sum(finding_counts) / len(finding_counts)) if finding_counts else 0.0
+    )
+    average_duration_ms = (
+        (sum(duration_values) / len(duration_values)) if duration_values else 0.0
+    )
     top_issue_types = [
         IssueTypeCount(issue_type=issue_type, count=count)
         for issue_type, count in issue_counter.most_common(5)

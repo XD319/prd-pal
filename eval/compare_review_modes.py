@@ -21,14 +21,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from prd_pal.service import review_service
+from prd_pal.service import review_service  # noqa: E402
 
 DEFAULT_CASE_IDS = ("prd_case_08", "prd_case_11")
 MODES = ("single_review", "parallel_review")
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Compare single_review and parallel_review outputs.")
+    parser = argparse.ArgumentParser(
+        description="Compare single_review and parallel_review outputs."
+    )
     parser.add_argument(
         "--cases",
         type=Path,
@@ -61,7 +63,9 @@ def _load_cases(cases_path: Path) -> list[dict[str, Any]]:
         raise FileNotFoundError(f"Cases file not found: {cases_path}")
 
     cases: list[dict[str, Any]] = []
-    for index, line in enumerate(cases_path.read_text(encoding="utf-8").splitlines(), start=1):
+    for index, line in enumerate(
+        cases_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
         stripped = line.strip()
         if not stripped:
             continue
@@ -78,9 +82,15 @@ def _load_cases(cases_path: Path) -> list[dict[str, Any]]:
     return cases
 
 
-def _select_cases(cases: list[dict[str, Any]], requested_case_ids: list[str] | None) -> list[dict[str, Any]]:
+def _select_cases(
+    cases: list[dict[str, Any]], requested_case_ids: list[str] | None
+) -> list[dict[str, Any]]:
     case_ids = requested_case_ids or list(DEFAULT_CASE_IDS)
-    unique_case_ids = list(dict.fromkeys(str(case_id).strip() for case_id in case_ids if str(case_id).strip()))
+    unique_case_ids = list(
+        dict.fromkeys(
+            str(case_id).strip() for case_id in case_ids if str(case_id).strip()
+        )
+    )
     if len(unique_case_ids) < 2:
         raise ValueError("At least two case ids are required for comparison.")
 
@@ -121,7 +131,9 @@ def _extract_duration_ms(report_payload: dict[str, Any], wall_time_ms: int) -> i
     return int(wall_time_ms)
 
 
-def _summarize_run(summary: review_service.ReviewResultSummary, wall_time_ms: int) -> dict[str, Any]:
+def _summarize_run(
+    summary: review_service.ReviewResultSummary, wall_time_ms: int
+) -> dict[str, Any]:
     review_payload = review_service._build_review_requirement_payload(summary)
     report_payload = _load_json_object(summary.report_json_path)
     return {
@@ -141,7 +153,9 @@ def _summarize_run(summary: review_service.ReviewResultSummary, wall_time_ms: in
     }
 
 
-def _build_delta(single_mode: dict[str, Any], parallel_mode: dict[str, Any]) -> dict[str, int]:
+def _build_delta(
+    single_mode: dict[str, Any], parallel_mode: dict[str, Any]
+) -> dict[str, int]:
     comparable_fields = (
         "findings_count",
         "open_questions_count",
@@ -214,7 +228,9 @@ def run_comparison(
         "token_usage": "not available",
         "cases": rows,
     }
-    report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return payload
 
 

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from prd_pal.connectors import ConnectorAuthConfig, ConnectorAuthType, get_connector_error_payload
+from prd_pal.connectors import (
+    ConnectorAuthConfig,
+    ConnectorAuthType,
+    get_connector_error_payload,
+)
 from prd_pal.connectors.errors import (
     ConnectorAuthError,
     ConnectorErrorCode,
@@ -27,12 +31,17 @@ from prd_pal.connectors.errors import (
             "auth_type 'basic' requires both username and password",
         ),
         (
-            {"auth_type": ConnectorAuthType.oauth_client_credentials, "client_id": "client-id"},
+            {
+                "auth_type": ConnectorAuthType.oauth_client_credentials,
+                "client_id": "client-id",
+            },
             "auth_type 'oauth_client_credentials' requires both client_id and client_secret",
         ),
     ],
 )
-def test_connector_auth_config_validation(auth_config: dict[str, object], expected_message: str) -> None:
+def test_connector_auth_config_validation(
+    auth_config: dict[str, object], expected_message: str
+) -> None:
     with pytest.raises(ValueError, match=expected_message):
         ConnectorAuthConfig(**auth_config)
 
@@ -83,7 +92,9 @@ def test_connector_auth_config_accepts_valid_oauth_credentials() -> None:
         ),
     ],
 )
-def test_connector_errors_expose_common_payload_shape(exc: Exception, expected_code: ConnectorErrorCode, expected_retryable: bool) -> None:
+def test_connector_errors_expose_common_payload_shape(
+    exc: Exception, expected_code: ConnectorErrorCode, expected_retryable: bool
+) -> None:
     payload = get_connector_error_payload(exc)
 
     assert payload is not None
@@ -92,4 +103,3 @@ def test_connector_errors_expose_common_payload_shape(exc: Exception, expected_c
     assert payload.source
     assert payload.retryable is expected_retryable
     assert payload.details["connector"] in {"feishu", "url"}
-

@@ -18,7 +18,13 @@ from .builders import (
     build_test_pack,
 )
 from .bundle_builder import DeliveryBundleBuilder
-from .delivery_bundle import ApprovalEvent, ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
+from .delivery_bundle import (
+    ApprovalEvent,
+    ArtifactRef,
+    BundleStatus,
+    DeliveryArtifacts,
+    DeliveryBundle,
+)
 from .schemas import (
     AgentHandoff,
     BaseTaskPack,

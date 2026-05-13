@@ -25,8 +25,17 @@ async def review(
     memory_evidence = build_memory_evidence(memory_context)
     memory_notes = build_memory_notes(memory_context, memory_mode=memory_mode)
 
-    query = " ".join([requirement.summary, *requirement.modules[:4], *requirement.dependency_hints[:4], reviewer_input[:200]]).strip()
-    tool_result = get_reviewer_toolbox().local_risk_catalog.run(reviewer="engineering", query=query)
+    query = " ".join(
+        [
+            requirement.summary,
+            *requirement.modules[:4],
+            *requirement.dependency_hints[:4],
+            reviewer_input[:200],
+        ]
+    ).strip()
+    tool_result = get_reviewer_toolbox().local_risk_catalog.run(
+        reviewer="engineering", query=query
+    )
     evidence = tuple([*memory_evidence, *tool_result.evidence])
     tool_calls = (tool_result.tool_call,) if tool_result.tool_call else ()
 
@@ -55,13 +64,21 @@ async def review(
         )
 
     if requirement.roles and len(requirement.roles) >= 4:
-        open_questions.append("Which engineering team owns each module and integration boundary?")
+        open_questions.append(
+            "Which engineering team owns each module and integration boundary?"
+        )
 
-    ambiguity_type = "missing_implementation_boundaries" if requirement.dependency_hints and not requirement.modules else ""
-    clarification_question = "Which modules, service boundaries, and owners are impacted by this requirement?" if ambiguity_type else ""
-    reviewer_status_detail = (
-        f"Engineering review completed with {len(findings)} findings, {len(risks)} risks, and {len(evidence)} evidence hits."
+    ambiguity_type = (
+        "missing_implementation_boundaries"
+        if requirement.dependency_hints and not requirement.modules
+        else ""
     )
+    clarification_question = (
+        "Which modules, service boundaries, and owners are impacted by this requirement?"
+        if ambiguity_type
+        else ""
+    )
+    reviewer_status_detail = f"Engineering review completed with {len(findings)} findings, {len(risks)} risks, and {len(evidence)} evidence hits."
 
     await asyncio.sleep(0)
     return ReviewerResult(
@@ -75,5 +92,8 @@ async def review(
         ambiguity_type=ambiguity_type,
         clarification_question=clarification_question,
         reviewer_status_detail=reviewer_status_detail,
-        notes=("Evidence prioritized from local risk catalog for dependency and architecture signals.", *memory_notes),
+        notes=(
+            "Evidence prioritized from local risk catalog for dependency and architecture signals.",
+            *memory_notes,
+        ),
     )

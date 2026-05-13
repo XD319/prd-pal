@@ -6,13 +6,19 @@ from pathlib import Path
 import pytest
 
 from prd_pal.mcp_server import server as mcp_server
-from prd_pal.notifications import BaseNotifier, dispatch_notification, read_notification_records
+from prd_pal.notifications import (
+    BaseNotifier,
+    dispatch_notification,
+    read_notification_records,
+)
 from prd_pal.service import execution_service, review_service
 from prd_pal.service.review_service import ReviewResultSummary
 
 
 @pytest.mark.asyncio
-async def test_review_prd_routes_to_review_service_with_mock(monkeypatch, sample_prd_text: str):
+async def test_review_prd_routes_to_review_service_with_mock(
+    monkeypatch, sample_prd_text: str
+):
     fixed = ReviewResultSummary(
         run_id="20260304T120000Z",
         report_md_path="outputs/20260304T120000Z/report.md",
@@ -40,8 +46,12 @@ async def test_review_prd_routes_to_review_service_with_mock(monkeypatch, sample
         assert isinstance(config_overrides, dict)
         return fixed
 
-    monkeypatch.setattr(review_service, "review_prd_text", lambda *args, **kwargs: fixed)
-    monkeypatch.setattr(review_service, "review_prd_text_async", fake_review_prd_text_async)
+    monkeypatch.setattr(
+        review_service, "review_prd_text", lambda *args, **kwargs: fixed
+    )
+    monkeypatch.setattr(
+        review_service, "review_prd_text_async", fake_review_prd_text_async
+    )
 
     result = await mcp_server.review_prd(prd_text=sample_prd_text)
 
@@ -82,9 +92,13 @@ async def test_review_prd_rejects_invalid_prd_path():
 
 
 @pytest.mark.asyncio
-async def test_review_prd_supports_local_source_and_persists_source_metadata(tmp_path, monkeypatch):
+async def test_review_prd_supports_local_source_and_persists_source_metadata(
+    tmp_path, monkeypatch
+):
     source_path = tmp_path / "sample_prd.md"
-    source_path.write_text("# Campus Recruitment PRD\n\nEnable recruiter login.", encoding="utf-8")
+    source_path.write_text(
+        "# Campus Recruitment PRD\n\nEnable recruiter login.", encoding="utf-8"
+    )
     fixed_run_id = "20260308T010203Z"
 
     async def fake_run_review(
@@ -171,8 +185,12 @@ async def test_review_prd_supports_local_source_and_persists_source_metadata(tmp
             "run_trace": str(run_dir / "run_trace.json"),
         }
         (run_dir / "report.md").write_text(result["final_report"], encoding="utf-8")
-        (run_dir / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-        (run_dir / "run_trace.json").write_text(json.dumps(result["trace"], ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "report.json").write_text(
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (run_dir / "run_trace.json").write_text(
+            json.dumps(result["trace"], ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return {
             "run_id": resolved_run_id,
             "run_dir": str(run_dir),
@@ -182,32 +200,48 @@ async def test_review_prd_supports_local_source_and_persists_source_metadata(tmp
 
     monkeypatch.setattr(review_service, "run_review", fake_run_review)
 
-    result = await mcp_server.review_prd(source=str(source_path), options={"outputs_root": str(tmp_path)})
+    result = await mcp_server.review_prd(
+        source=str(source_path), options={"outputs_root": str(tmp_path)}
+    )
 
     assert "error" not in result
     resolved_run_id = result["run_id"]
-    report_payload = json.loads((tmp_path / resolved_run_id / "report.json").read_text(encoding="utf-8"))
-    trace_payload = json.loads((tmp_path / resolved_run_id / "run_trace.json").read_text(encoding="utf-8"))
-    bundle_payload = json.loads((tmp_path / resolved_run_id / "delivery_bundle.json").read_text(encoding="utf-8"))
+    report_payload = json.loads(
+        (tmp_path / resolved_run_id / "report.json").read_text(encoding="utf-8")
+    )
+    trace_payload = json.loads(
+        (tmp_path / resolved_run_id / "run_trace.json").read_text(encoding="utf-8")
+    )
+    bundle_payload = json.loads(
+        (tmp_path / resolved_run_id / "delivery_bundle.json").read_text(
+            encoding="utf-8"
+        )
+    )
     assert report_payload["source_metadata"]["mime_type"] == "text/markdown"
     assert trace_payload["source_metadata"]["extra"]["extension"] == ".md"
-    assert bundle_payload["metadata"]["source_metadata"]["size_bytes"] == source_path.stat().st_size
+    assert (
+        bundle_payload["metadata"]["source_metadata"]["size_bytes"]
+        == source_path.stat().st_size
+    )
 
 
 @pytest.mark.asyncio
 async def test_review_prd_feishu_source_requires_credentials(tmp_path, monkeypatch):
     monkeypatch.delenv("MARRDP_FEISHU_APP_ID", raising=False)
     monkeypatch.delenv("MARRDP_FEISHU_APP_SECRET", raising=False)
-    result = await mcp_server.review_prd(source="feishu://wiki/space/doc-token", options={"outputs_root": str(tmp_path)})
+    result = await mcp_server.review_prd(
+        source="feishu://wiki/space/doc-token", options={"outputs_root": str(tmp_path)}
+    )
 
     assert result["status"] == "failed"
     assert result["error"]["code"] == "AUTHENTICATION_FAILED"
     assert "MARRDP_FEISHU_APP_ID" in result["error"]["message"]
 
 
-
 @pytest.mark.asyncio
-async def test_review_requirement_feishu_source_requires_credentials(tmp_path, monkeypatch):
+async def test_review_requirement_feishu_source_requires_credentials(
+    tmp_path, monkeypatch
+):
     monkeypatch.delenv("MARRDP_FEISHU_APP_ID", raising=False)
     monkeypatch.delenv("MARRDP_FEISHU_APP_SECRET", raising=False)
 
@@ -221,7 +255,9 @@ async def test_review_requirement_feishu_source_requires_credentials(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_review_requirement_routes_to_review_service_with_metadata_alias(monkeypatch):
+async def test_review_requirement_routes_to_review_service_with_metadata_alias(
+    monkeypatch,
+):
     captured: dict[str, object] = {}
 
     async def fake_review_requirement_for_mcp_async(
@@ -248,12 +284,22 @@ async def test_review_requirement_routes_to_review_service_with_metadata_alias(m
             "review_mode": "single_review",
         }
 
-    monkeypatch.setattr(mcp_server, "review_requirement_for_mcp_async", fake_review_requirement_for_mcp_async)
+    monkeypatch.setattr(
+        mcp_server,
+        "review_requirement_for_mcp_async",
+        fake_review_requirement_for_mcp_async,
+    )
 
     result = await mcp_server.review_requirement(
         prd_text="mock prd",
-        metadata={"outputs_root": "metadata-root", "client_metadata": {"channel": "cli"}},
-        options={"outputs_root": "options-root", "review_mode_override": "parallel_review"},
+        metadata={
+            "outputs_root": "metadata-root",
+            "client_metadata": {"channel": "cli"},
+        },
+        options={
+            "outputs_root": "options-root",
+            "review_mode_override": "parallel_review",
+        },
     )
 
     assert "error" not in result
@@ -267,9 +313,14 @@ async def test_review_requirement_routes_to_review_service_with_metadata_alias(m
 
 
 @pytest.mark.asyncio
-async def test_review_requirement_returns_review_only_payload_for_single_review(tmp_path, monkeypatch):
+async def test_review_requirement_returns_review_only_payload_for_single_review(
+    tmp_path, monkeypatch
+):
     source_path = tmp_path / "sample_prd.md"
-    source_path.write_text("# Campus Recruitment PRD\n\nClarify recruiter login success metrics.", encoding="utf-8")
+    source_path.write_text(
+        "# Campus Recruitment PRD\n\nClarify recruiter login success metrics.",
+        encoding="utf-8",
+    )
     fixed_run_id = "20260308T030405Z"
 
     async def fake_run_review(
@@ -381,8 +432,12 @@ async def test_review_requirement_returns_review_only_payload_for_single_review(
             "run_trace": str(run_dir / "run_trace.json"),
         }
         (run_dir / "report.md").write_text(result["final_report"], encoding="utf-8")
-        (run_dir / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-        (run_dir / "run_trace.json").write_text(json.dumps(result["trace"], ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "report.json").write_text(
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (run_dir / "run_trace.json").write_text(
+            json.dumps(result["trace"], ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return {
             "run_id": resolved_run_id,
             "run_dir": str(run_dir),
@@ -392,7 +447,9 @@ async def test_review_requirement_returns_review_only_payload_for_single_review(
 
     monkeypatch.setattr(review_service, "run_review", fake_run_review)
 
-    result = await mcp_server.review_requirement(source=str(source_path), options={"outputs_root": str(tmp_path)})
+    result = await mcp_server.review_requirement(
+        source=str(source_path), options={"outputs_root": str(tmp_path)}
+    )
 
     assert "error" not in result
     assert result["review_id"] == result["run_id"]
@@ -400,20 +457,28 @@ async def test_review_requirement_returns_review_only_payload_for_single_review(
     assert result["report_path"] == str(tmp_path / result["run_id"] / "report.json")
     assert len(result["findings"]) == 1
     assert result["findings"][0]["requirement_id"] == "REQ-001"
-    assert result["open_questions"][0]["question"].startswith("What measurable success metric")
+    assert result["open_questions"][0]["question"].startswith(
+        "What measurable success metric"
+    )
     assert result["risk_items"][0]["severity"] == "high"
     assert result["conflicts"] == []
     assert "status" not in result
     assert "metrics" not in result
     assert "artifacts" not in result
+
+
 def test_get_report_rejects_invalid_run_id_via_tool_handler(tmp_path):
-    result = mcp_server.get_report(run_id="../escape", options={"outputs_root": str(tmp_path)})
+    result = mcp_server.get_report(
+        run_id="../escape", options={"outputs_root": str(tmp_path)}
+    )
 
     assert result["error"]["code"] == "invalid_run_id"
 
 
 def test_get_report_returns_not_found_via_tool_handler(tmp_path):
-    result = mcp_server.get_report(run_id="20260304T010203Z", options={"outputs_root": str(tmp_path)})
+    result = mcp_server.get_report(
+        run_id="20260304T010203Z", options={"outputs_root": str(tmp_path)}
+    )
 
     assert result["error"]["code"] == "not_found"
 
@@ -424,12 +489,20 @@ async def test_generate_delivery_bundle_success(tmp_path, sample_report_json: di
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
     report_payload = sample_report_json
-    (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (run_dir / "report.md").write_text("# Report", encoding="utf-8")
-    for filename in ("implementation_pack.json", "test_pack.json", "execution_pack.json"):
+    for filename in (
+        "implementation_pack.json",
+        "test_pack.json",
+        "execution_pack.json",
+    ):
         (run_dir / filename).write_text("{}", encoding="utf-8")
 
-    result = await mcp_server.generate_delivery_bundle(run_id=run_id, options={"outputs_root": str(tmp_path)})
+    result = await mcp_server.generate_delivery_bundle(
+        run_id=run_id, options={"outputs_root": str(tmp_path)}
+    )
 
     assert "error" not in result
     assert result["bundle_id"] == f"bundle-{run_id}"
@@ -439,7 +512,9 @@ async def test_generate_delivery_bundle_success(tmp_path, sample_report_json: di
 
 @pytest.mark.asyncio
 async def test_generate_delivery_bundle_missing_run_returns_error(tmp_path):
-    result = await mcp_server.generate_delivery_bundle(run_id="20260304T010203Z", options={"outputs_root": str(tmp_path)})
+    result = await mcp_server.generate_delivery_bundle(
+        run_id="20260304T010203Z", options={"outputs_root": str(tmp_path)}
+    )
 
     assert result["error"]["code"] == "not_found"
 
@@ -455,19 +530,45 @@ def test_approve_handoff_success(tmp_path):
         "status": "draft",
         "source_run_id": run_id,
         "artifacts": {
-            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
-            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
-            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
-            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
-            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
-            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
-            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
-            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+            "prd_review_report": {
+                "artifact_type": "prd_review_report",
+                "path": str(run_dir / "prd_review_report.md"),
+            },
+            "open_questions": {
+                "artifact_type": "open_questions",
+                "path": str(run_dir / "open_questions.md"),
+            },
+            "scope_boundary": {
+                "artifact_type": "scope_boundary",
+                "path": str(run_dir / "scope_boundary.md"),
+            },
+            "tech_design_draft": {
+                "artifact_type": "tech_design_draft",
+                "path": str(run_dir / "tech_design_draft.md"),
+            },
+            "test_checklist": {
+                "artifact_type": "test_checklist",
+                "path": str(run_dir / "test_checklist.md"),
+            },
+            "implementation_pack": {
+                "artifact_type": "implementation_pack",
+                "path": str(run_dir / "implementation_pack.json"),
+            },
+            "test_pack": {
+                "artifact_type": "test_pack",
+                "path": str(run_dir / "test_pack.json"),
+            },
+            "execution_pack": {
+                "artifact_type": "execution_pack",
+                "path": str(run_dir / "execution_pack.json"),
+            },
         },
         "approval_history": [],
         "metadata": {},
     }
-    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "delivery_bundle.json").write_text(
+        json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     result = mcp_server.approve_handoff(
         bundle_id=f"bundle-{run_id}",
@@ -477,8 +578,12 @@ def test_approve_handoff_success(tmp_path):
         options={"outputs_root": str(tmp_path)},
     )
 
-    approval_records_payload = json.loads((run_dir / "approval_records.json").read_text(encoding="utf-8"))
-    snapshot_payload = json.loads((run_dir / "status_snapshot.json").read_text(encoding="utf-8"))
+    approval_records_payload = json.loads(
+        (run_dir / "approval_records.json").read_text(encoding="utf-8")
+    )
+    snapshot_payload = json.loads(
+        (run_dir / "status_snapshot.json").read_text(encoding="utf-8")
+    )
 
     assert "error" not in result
     assert result["status"] == "approved"
@@ -487,9 +592,17 @@ def test_approve_handoff_success(tmp_path):
     assert result["status_snapshot_path"] == str(run_dir / "status_snapshot.json")
     assert result["status_snapshot"]["bundle_status"] == "approved"
     assert approval_records_payload["approval_records"][0]["action"] == "approve"
-    assert approval_records_payload["approval_records"][0]["from_bundle_status"] == "draft"
-    assert approval_records_payload["approval_records"][0]["to_bundle_status"] == "approved"
-    assert approval_records_payload["approval_records"][0]["workspace_status"] == "confirmed"
+    assert (
+        approval_records_payload["approval_records"][0]["from_bundle_status"] == "draft"
+    )
+    assert (
+        approval_records_payload["approval_records"][0]["to_bundle_status"]
+        == "approved"
+    )
+    assert (
+        approval_records_payload["approval_records"][0]["workspace_status"]
+        == "confirmed"
+    )
     assert approval_records_payload["approval_records"][0]["reviewer"] == "alice"
     assert snapshot_payload["run_id"] == run_id
     assert snapshot_payload["bundle_id"] == f"bundle-{run_id}"
@@ -508,14 +621,38 @@ def test_approve_handoff_invalid_transition_returns_error(tmp_path):
         "status": "approved",
         "source_run_id": run_id,
         "artifacts": {
-            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
-            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
-            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
-            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
-            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
-            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
-            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
-            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+            "prd_review_report": {
+                "artifact_type": "prd_review_report",
+                "path": str(run_dir / "prd_review_report.md"),
+            },
+            "open_questions": {
+                "artifact_type": "open_questions",
+                "path": str(run_dir / "open_questions.md"),
+            },
+            "scope_boundary": {
+                "artifact_type": "scope_boundary",
+                "path": str(run_dir / "scope_boundary.md"),
+            },
+            "tech_design_draft": {
+                "artifact_type": "tech_design_draft",
+                "path": str(run_dir / "tech_design_draft.md"),
+            },
+            "test_checklist": {
+                "artifact_type": "test_checklist",
+                "path": str(run_dir / "test_checklist.md"),
+            },
+            "implementation_pack": {
+                "artifact_type": "implementation_pack",
+                "path": str(run_dir / "implementation_pack.json"),
+            },
+            "test_pack": {
+                "artifact_type": "test_pack",
+                "path": str(run_dir / "test_pack.json"),
+            },
+            "execution_pack": {
+                "artifact_type": "execution_pack",
+                "path": str(run_dir / "execution_pack.json"),
+            },
         },
         "approval_history": [],
         "metadata": {},
@@ -543,9 +680,16 @@ def test_approve_handoff_invalid_transition_returns_error(tmp_path):
         "workspace_status": "confirmed",
         "updated_at": "2026-03-07T12:00:00+00:00",
     }
-    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "approval_records.json").write_text(json.dumps(original_approval_records, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "status_snapshot.json").write_text(json.dumps(original_snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "delivery_bundle.json").write_text(
+        json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "approval_records.json").write_text(
+        json.dumps(original_approval_records, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / "status_snapshot.json").write_text(
+        json.dumps(original_snapshot, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     result = mcp_server.approve_handoff(
         bundle_id=f"bundle-{run_id}",
@@ -555,9 +699,15 @@ def test_approve_handoff_invalid_transition_returns_error(tmp_path):
         options={"outputs_root": str(tmp_path)},
     )
 
-    reloaded_bundle = json.loads((run_dir / "delivery_bundle.json").read_text(encoding="utf-8"))
-    approval_records_payload = json.loads((run_dir / "approval_records.json").read_text(encoding="utf-8"))
-    snapshot_payload = json.loads((run_dir / "status_snapshot.json").read_text(encoding="utf-8"))
+    reloaded_bundle = json.loads(
+        (run_dir / "delivery_bundle.json").read_text(encoding="utf-8")
+    )
+    approval_records_payload = json.loads(
+        (run_dir / "approval_records.json").read_text(encoding="utf-8")
+    )
+    snapshot_payload = json.loads(
+        (run_dir / "status_snapshot.json").read_text(encoding="utf-8")
+    )
 
     assert result["error"]["code"] == "invalid_input"
     assert reloaded_bundle["status"] == "approved"
@@ -575,19 +725,45 @@ def _write_review_workspace_fixture(tmp_path, run_id: str = "20260307T010205Z") 
         "status": "draft",
         "source_run_id": run_id,
         "artifacts": {
-            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
-            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
-            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
-            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
-            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
-            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
-            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
-            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+            "prd_review_report": {
+                "artifact_type": "prd_review_report",
+                "path": str(run_dir / "prd_review_report.md"),
+            },
+            "open_questions": {
+                "artifact_type": "open_questions",
+                "path": str(run_dir / "open_questions.md"),
+            },
+            "scope_boundary": {
+                "artifact_type": "scope_boundary",
+                "path": str(run_dir / "scope_boundary.md"),
+            },
+            "tech_design_draft": {
+                "artifact_type": "tech_design_draft",
+                "path": str(run_dir / "tech_design_draft.md"),
+            },
+            "test_checklist": {
+                "artifact_type": "test_checklist",
+                "path": str(run_dir / "test_checklist.md"),
+            },
+            "implementation_pack": {
+                "artifact_type": "implementation_pack",
+                "path": str(run_dir / "implementation_pack.json"),
+            },
+            "test_pack": {
+                "artifact_type": "test_pack",
+                "path": str(run_dir / "test_pack.json"),
+            },
+            "execution_pack": {
+                "artifact_type": "execution_pack",
+                "path": str(run_dir / "execution_pack.json"),
+            },
         },
         "approval_history": [],
         "metadata": {},
     }
-    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "delivery_bundle.json").write_text(
+        json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     result = mcp_server.approve_handoff(
         bundle_id=f"bundle-{run_id}",
@@ -605,7 +781,9 @@ def test_get_review_workspace_by_run_id_returns_workspace_state(tmp_path):
     run_id = "20260304T010206Z"
     bundle_id = _write_review_workspace_fixture(tmp_path, run_id=run_id)
 
-    result = mcp_server.get_review_workspace(run_id=run_id, options={"outputs_root": str(tmp_path)})
+    result = mcp_server.get_review_workspace(
+        run_id=run_id, options={"outputs_root": str(tmp_path)}
+    )
 
     assert "error" not in result
     assert result["run_id"] == run_id
@@ -623,7 +801,9 @@ def test_get_review_workspace_by_bundle_id_returns_workspace_state(tmp_path):
     run_id = "20260304T010207Z"
     bundle_id = _write_review_workspace_fixture(tmp_path, run_id=run_id)
 
-    result = mcp_server.get_review_workspace(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    result = mcp_server.get_review_workspace(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
 
     assert "error" not in result
     assert result["run_id"] == run_id
@@ -638,7 +818,9 @@ def test_get_review_workspace_missing_files_returns_error(tmp_path):
     bundle_id = _write_review_workspace_fixture(tmp_path, run_id=run_id)
     (tmp_path / run_id / "status_snapshot.json").unlink()
 
-    result = mcp_server.get_review_workspace(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    result = mcp_server.get_review_workspace(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
 
     assert result["error"]["code"] == "not_found"
     assert "status_snapshot.json" in result["error"]["message"]
@@ -690,15 +872,29 @@ def _write_approved_bundle_fixture(tmp_path, run_id: str = "20260307T010206Z") -
         "handoff_strategy": "sequential",
     }
 
-    (run_dir / "implementation_pack.json").write_text(json.dumps(implementation_pack, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "test_pack.json").write_text(json.dumps(test_pack, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "execution_pack.json").write_text(json.dumps(execution_pack, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "implementation_pack.json").write_text(
+        json.dumps(implementation_pack, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "test_pack.json").write_text(
+        json.dumps(test_pack, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "execution_pack.json").write_text(
+        json.dumps(execution_pack, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (run_dir / "report.json").write_text(
         json.dumps(
             {
                 "parsed_items": [{"id": "REQ-001", "description": "Support login"}],
-                "review_results": [{"id": "REQ-001", "issues": ["Clarify SSO provider"]}],
-                "tasks": [{"id": "TASK-001", "title": "Implement login", "requirement_ids": ["REQ-001"]}],
+                "review_results": [
+                    {"id": "REQ-001", "issues": ["Clarify SSO provider"]}
+                ],
+                "tasks": [
+                    {
+                        "id": "TASK-001",
+                        "title": "Implement login",
+                        "requirement_ids": ["REQ-001"],
+                    }
+                ],
             },
             ensure_ascii=False,
             indent=2,
@@ -712,19 +908,47 @@ def _write_approved_bundle_fixture(tmp_path, run_id: str = "20260307T010206Z") -
         "status": "approved",
         "source_run_id": run_id,
         "artifacts": {
-            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
-            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
-            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
-            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
-            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
-            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
-            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
-            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+            "prd_review_report": {
+                "artifact_type": "prd_review_report",
+                "path": str(run_dir / "prd_review_report.md"),
+            },
+            "open_questions": {
+                "artifact_type": "open_questions",
+                "path": str(run_dir / "open_questions.md"),
+            },
+            "scope_boundary": {
+                "artifact_type": "scope_boundary",
+                "path": str(run_dir / "scope_boundary.md"),
+            },
+            "tech_design_draft": {
+                "artifact_type": "tech_design_draft",
+                "path": str(run_dir / "tech_design_draft.md"),
+            },
+            "test_checklist": {
+                "artifact_type": "test_checklist",
+                "path": str(run_dir / "test_checklist.md"),
+            },
+            "implementation_pack": {
+                "artifact_type": "implementation_pack",
+                "path": str(run_dir / "implementation_pack.json"),
+            },
+            "test_pack": {
+                "artifact_type": "test_pack",
+                "path": str(run_dir / "test_pack.json"),
+            },
+            "execution_pack": {
+                "artifact_type": "execution_pack",
+                "path": str(run_dir / "execution_pack.json"),
+            },
         },
         "approval_history": [],
-        "metadata": {"source_report_paths": {"report_json": str(run_dir / "report.json")}},
+        "metadata": {
+            "source_report_paths": {"report_json": str(run_dir / "report.json")}
+        },
     }
-    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "delivery_bundle.json").write_text(
+        json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return bundle_payload["bundle_id"]
 
 
@@ -733,8 +957,12 @@ async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_
     bundle_id = _write_approved_bundle_fixture(tmp_path)
     run_dir = tmp_path / "20260307T010206Z"
 
-    result = await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
-    tasks_payload = json.loads((run_dir / "execution_tasks.json").read_text(encoding="utf-8"))["tasks"]
+    result = await mcp_server.handoff_to_executor(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
+    tasks_payload = json.loads(
+        (run_dir / "execution_tasks.json").read_text(encoding="utf-8")
+    )["tasks"]
     notifications = read_notification_records(run_dir)
     task_by_source = {item["source_pack_type"]: item for item in tasks_payload}
 
@@ -745,21 +973,43 @@ async def test_handoff_to_executor_creates_persisted_tasks_and_traceability(tmp_
     assert (run_dir / "traceability_map.json").exists()
     assert (run_dir / "codex_request.json").exists()
     assert (run_dir / "claude_code_request.json").exists()
-    assert task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["request_path"].endswith("codex_request.json")
-    assert task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["request_path"].endswith("claude_code_request.json")
-    assert task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["request_type"] == "codex.run_pack"
-    assert task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["request_type"] == "claude_code.run_pack"
-    assert Path(task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
-    assert Path(task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["context_path"]).exists()
+    assert task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"][
+        "request_path"
+    ].endswith("codex_request.json")
+    assert task_by_source["test_pack"]["metadata"]["adapter_artifacts"][
+        "request_path"
+    ].endswith("claude_code_request.json")
+    assert (
+        task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"][
+            "request_type"
+        ]
+        == "codex.run_pack"
+    )
+    assert (
+        task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["request_type"]
+        == "claude_code.run_pack"
+    )
+    assert Path(
+        task_by_source["implementation_pack"]["metadata"]["adapter_artifacts"][
+            "context_path"
+        ]
+    ).exists()
+    assert Path(
+        task_by_source["test_pack"]["metadata"]["adapter_artifacts"]["context_path"]
+    ).exists()
     assert len(notifications) == 2
-    assert {item["event_type"] for item in notifications} == {"executor_handoff_created"}
+    assert {item["event_type"] for item in notifications} == {
+        "executor_handoff_created"
+    }
     assert {item["channel"] for item in notifications} == {"feishu", "wecom"}
     assert all(item["dispatch_status"] == "dispatched" for item in notifications)
     assert all(item["payload"]["dry_run"] is True for item in notifications)
 
 
 @pytest.mark.asyncio
-async def test_prepare_agent_handoff_returns_requests_for_all_supported_agents(tmp_path):
+async def test_prepare_agent_handoff_returns_requests_for_all_supported_agents(
+    tmp_path,
+):
     bundle_id = _write_approved_bundle_fixture(tmp_path)
     run_dir = tmp_path / "20260307T010206Z"
 
@@ -775,7 +1025,11 @@ async def test_prepare_agent_handoff_returns_requests_for_all_supported_agents(t
     assert result["bundle_id"] == bundle_id
     assert result["status"] == "prepared"
     assert result["request_count"] == 3
-    assert {item["agent"] for item in result["requests"]} == {"codex", "claude_code", "openclaw"}
+    assert {item["agent"] for item in result["requests"]} == {
+        "codex",
+        "claude_code",
+        "openclaw",
+    }
     assert (run_dir / "codex_request.json").exists()
     assert (run_dir / "claude_code_request.json").exists()
     assert (run_dir / "openclaw_request.json").exists()
@@ -786,20 +1040,26 @@ async def test_prepare_agent_handoff_returns_requests_for_all_supported_agents(t
 
 
 @pytest.mark.asyncio
-async def test_handoff_to_executor_returns_invalid_input_when_adapter_is_missing(tmp_path, monkeypatch):
+async def test_handoff_to_executor_returns_invalid_input_when_adapter_is_missing(
+    tmp_path, monkeypatch
+):
     bundle_id = _write_approved_bundle_fixture(tmp_path, run_id="20260307T010207Z")
     original_router = execution_service.ExecutorRouter
 
     monkeypatch.setattr(
         execution_service,
         "ExecutorRouter",
-        lambda default_mode=execution_service.ExecutionMode.agent_assisted: original_router(
-            default_mode=default_mode,
-            pack_specs=(("implementation_pack", "unknown_adapter"),),
+        lambda default_mode=execution_service.ExecutionMode.agent_assisted: (
+            original_router(
+                default_mode=default_mode,
+                pack_specs=(("implementation_pack", "unknown_adapter"),),
+            )
         ),
     )
 
-    result = await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    result = await mcp_server.handoff_to_executor(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
 
     assert result["error"]["code"] == "invalid_input"
     assert "unknown_adapter" in result["error"]["message"]
@@ -810,9 +1070,13 @@ async def test_handoff_to_executor_returns_invalid_input_when_adapter_is_missing
 async def test_get_execution_status_returns_bundle_tasks_and_task_lookup(tmp_path):
     bundle_id = _write_approved_bundle_fixture(tmp_path)
     run_dir = tmp_path / "20260307T010206Z"
-    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    await mcp_server.handoff_to_executor(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
 
-    by_bundle = mcp_server.get_execution_status(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    by_bundle = mcp_server.get_execution_status(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
     by_task = mcp_server.get_execution_status(
         task_id="bundle-20260307T010206Z:implementation_pack",
         options={"outputs_root": str(tmp_path)},
@@ -822,7 +1086,10 @@ async def test_get_execution_status_returns_bundle_tasks_and_task_lookup(tmp_pat
     assert by_bundle["tasks"][0]["bundle_id"] == bundle_id
     assert by_bundle["tasks"][0]["metadata"]["adapter_artifacts"]["request_path"]
     assert by_task["task"]["task_id"] == "bundle-20260307T010206Z:implementation_pack"
-    assert by_task["task"]["metadata"]["adapter_artifacts"]["request_type"] == "codex.run_pack"
+    assert (
+        by_task["task"]["metadata"]["adapter_artifacts"]["request_type"]
+        == "codex.run_pack"
+    )
     assert by_task["traceability"]["counts"]["total"] == 1
     assert (run_dir / "execution_tasks.json").exists()
 
@@ -830,22 +1097,31 @@ async def test_get_execution_status_returns_bundle_tasks_and_task_lookup(tmp_pat
 @pytest.mark.asyncio
 async def test_get_traceability_supports_bundle_and_requirement_queries(tmp_path):
     bundle_id = _write_approved_bundle_fixture(tmp_path)
-    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    await mcp_server.handoff_to_executor(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
 
-    by_bundle = mcp_server.get_traceability(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
-    by_requirement = mcp_server.get_traceability(requirement_id="REQ-001", options={"outputs_root": str(tmp_path)})
+    by_bundle = mcp_server.get_traceability(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
+    by_requirement = mcp_server.get_traceability(
+        requirement_id="REQ-001", options={"outputs_root": str(tmp_path)}
+    )
 
     assert by_bundle["bundle_id"] == bundle_id
     assert by_bundle["counts"]["full"] >= 1
     assert by_requirement["count"] >= 1
     assert by_requirement["links"][0]["requirement_id"] == "REQ-001"
 
+
 @pytest.mark.asyncio
 async def test_update_execution_task_tool_persists_callback_writeback(tmp_path):
     run_id = "20260307T010208Z"
     bundle_id = _write_approved_bundle_fixture(tmp_path, run_id=run_id)
     run_dir = tmp_path / run_id
-    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    await mcp_server.handoff_to_executor(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
 
     assigned = mcp_server.update_execution_task(
         task_id=f"{bundle_id}:implementation_pack",
@@ -864,17 +1140,24 @@ async def test_update_execution_task_tool_persists_callback_writeback(tmp_path):
         options={"outputs_root": str(tmp_path)},
     )
 
-    snapshot_payload = json.loads((run_dir / "status_snapshot.json").read_text(encoding="utf-8"))
+    snapshot_payload = json.loads(
+        (run_dir / "status_snapshot.json").read_text(encoding="utf-8")
+    )
     trace_payload = json.loads((run_dir / "run_trace.json").read_text(encoding="utf-8"))
 
     assert "error" not in assigned
     assert "error" not in in_progress
     assert assigned["task"]["status"] == "assigned"
     assert assigned["task"]["assigned_to"] == "codex-worker-1"
-    assert assigned["task"]["metadata"]["artifact_paths"]["claim_receipt"].endswith("claim.json")
+    assert assigned["task"]["metadata"]["artifact_paths"]["claim_receipt"].endswith(
+        "claim.json"
+    )
     assert in_progress["task"]["status"] == "in_progress"
     assert snapshot_payload["execution"]["counts"]["in_progress"] == 1
-    assert snapshot_payload["execution"]["last_task_id"] == f"{bundle_id}:implementation_pack"
+    assert (
+        snapshot_payload["execution"]["last_task_id"]
+        == f"{bundle_id}:implementation_pack"
+    )
     assert trace_payload["execution_updates"][-1]["to_status"] == "in_progress"
     assert trace_payload["execution_updates"][-1]["actor"] == "codex-worker-1"
 
@@ -883,7 +1166,9 @@ async def test_update_execution_task_tool_persists_callback_writeback(tmp_path):
 async def test_list_execution_tasks_tool_supports_status_filter(tmp_path):
     run_id = "20260307T010209Z"
     bundle_id = _write_approved_bundle_fixture(tmp_path, run_id=run_id)
-    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    await mcp_server.handoff_to_executor(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
     mcp_server.update_execution_task(
         task_id=f"{bundle_id}:implementation_pack",
         status="assigned",
@@ -892,9 +1177,15 @@ async def test_list_execution_tasks_tool_supports_status_filter(tmp_path):
         options={"outputs_root": str(tmp_path)},
     )
 
-    by_bundle = mcp_server.list_execution_tasks(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
-    assigned_only = mcp_server.list_execution_tasks(status="assigned", options={"outputs_root": str(tmp_path)})
-    pending_only = mcp_server.list_execution_tasks(status="pending", options={"outputs_root": str(tmp_path)})
+    by_bundle = mcp_server.list_execution_tasks(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
+    assigned_only = mcp_server.list_execution_tasks(
+        status="assigned", options={"outputs_root": str(tmp_path)}
+    )
+    pending_only = mcp_server.list_execution_tasks(
+        status="pending", options={"outputs_root": str(tmp_path)}
+    )
 
     assert by_bundle["count"] == 2
     assert assigned_only["count"] == 1
@@ -903,8 +1194,9 @@ async def test_list_execution_tasks_tool_supports_status_filter(tmp_path):
     assert pending_only["tasks"][0]["task_id"] == f"{bundle_id}:test_pack"
 
 
-
-def _write_draft_notification_bundle_fixture(tmp_path, run_id: str = "20260307T010210Z") -> tuple[str, Path]:
+def _write_draft_notification_bundle_fixture(
+    tmp_path, run_id: str = "20260307T010210Z"
+) -> tuple[str, Path]:
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
     bundle_id = f"bundle-{run_id}"
@@ -915,19 +1207,45 @@ def _write_draft_notification_bundle_fixture(tmp_path, run_id: str = "20260307T0
         "status": "draft",
         "source_run_id": run_id,
         "artifacts": {
-            "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
-            "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
-            "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
-            "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
-            "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
-            "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
-            "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
-            "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+            "prd_review_report": {
+                "artifact_type": "prd_review_report",
+                "path": str(run_dir / "prd_review_report.md"),
+            },
+            "open_questions": {
+                "artifact_type": "open_questions",
+                "path": str(run_dir / "open_questions.md"),
+            },
+            "scope_boundary": {
+                "artifact_type": "scope_boundary",
+                "path": str(run_dir / "scope_boundary.md"),
+            },
+            "tech_design_draft": {
+                "artifact_type": "tech_design_draft",
+                "path": str(run_dir / "tech_design_draft.md"),
+            },
+            "test_checklist": {
+                "artifact_type": "test_checklist",
+                "path": str(run_dir / "test_checklist.md"),
+            },
+            "implementation_pack": {
+                "artifact_type": "implementation_pack",
+                "path": str(run_dir / "implementation_pack.json"),
+            },
+            "test_pack": {
+                "artifact_type": "test_pack",
+                "path": str(run_dir / "test_pack.json"),
+            },
+            "execution_pack": {
+                "artifact_type": "execution_pack",
+                "path": str(run_dir / "execution_pack.json"),
+            },
         },
         "approval_history": [],
         "metadata": {},
     }
-    (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "delivery_bundle.json").write_text(
+        json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return bundle_id, run_dir
 
 
@@ -954,15 +1272,23 @@ def test_approve_handoff_writes_notifications_for_review_follow_up_states(tmp_pa
     assert "error" not in need_more_info
     assert "error" not in blocked
     assert len(notifications) == 4
-    approval_notifications = [item for item in notifications if item["event_type"] == "approval_requested"]
-    blocked_notifications = [item for item in notifications if item["event_type"] == "blocked_by_risk"]
+    approval_notifications = [
+        item for item in notifications if item["event_type"] == "approval_requested"
+    ]
+    blocked_notifications = [
+        item for item in notifications if item["event_type"] == "blocked_by_risk"
+    ]
     assert len(approval_notifications) == 2
     assert len(blocked_notifications) == 2
     assert {item["channel"] for item in approval_notifications} == {"feishu", "wecom"}
     assert {item["channel"] for item in blocked_notifications} == {"feishu", "wecom"}
     assert approval_notifications[0]["metadata"]["tool_name"] == "approve_handoff"
-    assert {item["summary"] for item in approval_notifications} == {"Missing owner for OAuth onboarding"}
-    assert {item["summary"] for item in blocked_notifications} == {"Critical auth regression risk"}
+    assert {item["summary"] for item in approval_notifications} == {
+        "Missing owner for OAuth onboarding"
+    }
+    assert {item["summary"] for item in blocked_notifications} == {
+        "Critical auth regression risk"
+    }
 
 
 @pytest.mark.asyncio
@@ -970,7 +1296,9 @@ async def test_update_execution_task_completed_writes_notification_record(tmp_pa
     run_id = "20260307T010211Z"
     bundle_id = _write_approved_bundle_fixture(tmp_path, run_id=run_id)
     run_dir = tmp_path / run_id
-    await mcp_server.handoff_to_executor(bundle_id=bundle_id, options={"outputs_root": str(tmp_path)})
+    await mcp_server.handoff_to_executor(
+        bundle_id=bundle_id, options={"outputs_root": str(tmp_path)}
+    )
 
     mcp_server.update_execution_task(
         task_id=f"{bundle_id}:implementation_pack",
@@ -997,11 +1325,17 @@ async def test_update_execution_task_completed_writes_notification_record(tmp_pa
     notifications = read_notification_records(run_dir)
 
     assert "error" not in completed
-    completion_notifications = [item for item in notifications if item["event_type"] == "execution_completed"]
+    completion_notifications = [
+        item for item in notifications if item["event_type"] == "execution_completed"
+    ]
     assert len(completion_notifications) == 2
     assert {item["channel"] for item in completion_notifications} == {"feishu", "wecom"}
-    assert {item["task_id"] for item in completion_notifications} == {f"{bundle_id}:implementation_pack"}
-    assert {item["summary"] for item in completion_notifications} == {"implemented and validated"}
+    assert {item["task_id"] for item in completion_notifications} == {
+        f"{bundle_id}:implementation_pack"
+    }
+    assert {item["summary"] for item in completion_notifications} == {
+        "implemented and validated"
+    }
     assert all(item["payload"]["dry_run"] is True for item in completion_notifications)
 
 
@@ -1028,7 +1362,9 @@ def test_get_template_registry_supports_type_and_id_filters() -> None:
     assert "error" not in by_type
     assert by_type["template_type"] == "adapter_prompt"
     assert by_type["count"] == 3
-    assert {item["template_type"] for item in by_type["templates"]} == {"adapter_prompt"}
+    assert {item["template_type"] for item in by_type["templates"]} == {
+        "adapter_prompt"
+    }
     assert "error" not in by_id
     assert by_id["count"] == 1
     assert by_id["templates"][0]["template_id"] == "review.parser"
@@ -1052,7 +1388,9 @@ class _BrokenNotifier(BaseNotifier):
 
 
 def test_get_audit_events_filters_by_event_type_and_status(tmp_path):
-    bundle_id, run_dir = _write_draft_notification_bundle_fixture(tmp_path, run_id="20260307T010212Z")
+    bundle_id, run_dir = _write_draft_notification_bundle_fixture(
+        tmp_path, run_id="20260307T010212Z"
+    )
 
     mcp_server.approve_handoff(
         bundle_id=bundle_id,
@@ -1071,7 +1409,9 @@ def test_get_audit_events_filters_by_event_type_and_status(tmp_path):
 
     assert "error" not in result
     assert result["count"] == 2
-    assert {event["details"]["event_type"] for event in result["events"]} == {"blocked_by_risk"}
+    assert {event["details"]["event_type"] for event in result["events"]} == {
+        "blocked_by_risk"
+    }
     assert {event["status"] for event in result["events"]} == {"dispatched"}
 
 
@@ -1101,7 +1441,9 @@ def test_retry_operation_tool_retries_failed_notification_dispatch(tmp_path):
     assert result["before_status"] == "failed"
     assert result["after_status"] == "dispatched"
     assert result["notifications_retried"] == 1
-    retried = [item for item in notifications if item["dispatch_status"] == "dispatched"]
+    retried = [
+        item for item in notifications if item["dispatch_status"] == "dispatched"
+    ]
     assert len(retried) == 2
     assert {item["channel"] for item in retried} == {"feishu", "wecom"}
 
@@ -1119,6 +1461,7 @@ def test_retry_operation_tool_rejects_invalid_operation(tmp_path):
     assert result["error"]["code"] == "invalid_operation"
     assert "operation must be one of" in result["error"]["message"]
 
+
 @pytest.mark.asyncio
 async def test_review_prd_notion_source_requires_credentials(tmp_path, monkeypatch):
     monkeypatch.delenv("MARRDP_NOTION_TOKEN", raising=False)
@@ -1133,7 +1476,9 @@ async def test_review_prd_notion_source_requires_credentials(tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_review_requirement_notion_source_requires_credentials(tmp_path, monkeypatch):
+async def test_review_requirement_notion_source_requires_credentials(
+    tmp_path, monkeypatch
+):
     monkeypatch.delenv("MARRDP_NOTION_TOKEN", raising=False)
 
     result = await mcp_server.review_requirement(
@@ -1143,5 +1488,3 @@ async def test_review_requirement_notion_source_requires_credentials(tmp_path, m
 
     assert result["error"]["code"] == "AUTHENTICATION_FAILED"
     assert "MARRDP_NOTION_TOKEN" in result["error"]["message"]
-
-

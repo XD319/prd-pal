@@ -12,18 +12,33 @@ from dotenv import load_dotenv
 
 from .doctor import render_doctor_report, run_doctor
 from .service.report_service import get_report_for_mcp
-from .service.review_service import prepare_agent_handoff_for_mcp_async, review_prd_text_async
+from .service.review_service import (
+    prepare_agent_handoff_for_mcp_async,
+    review_prd_text_async,
+)
 from .utils.logging import setup_logging
 
 
 def _add_review_input_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--input", dest="prd_path", type=str, help="Path to the requirement document")
-    parser.add_argument("--text", dest="prd_text", type=str, help="Inline requirement text")
+    parser.add_argument(
+        "--input", dest="prd_path", type=str, help="Path to the requirement document"
+    )
+    parser.add_argument(
+        "--text", dest="prd_text", type=str, help="Inline requirement text"
+    )
     parser.add_argument("--source", type=str, help="Connector-backed source reference")
     parser.add_argument("--run-id", type=str, help="Optional run_id override")
-    parser.add_argument("--outputs-root", type=str, default="outputs", help="Outputs directory")
-    parser.add_argument("--mode", choices=["auto", "quick", "full"], help="Review mode preference")
-    parser.add_argument("--review-mode-override", type=str, help="Explicit workflow review mode override")
+    parser.add_argument(
+        "--outputs-root", type=str, default="outputs", help="Outputs directory"
+    )
+    parser.add_argument(
+        "--mode", choices=["auto", "quick", "full"], help="Review mode preference"
+    )
+    parser.add_argument(
+        "--review-mode-override",
+        type=str,
+        help="Explicit workflow review mode override",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
 
 
@@ -36,11 +51,17 @@ def _build_modern_parser() -> argparse.ArgumentParser:
 
     report_parser = subparsers.add_parser("report", help="Fetch a generated report")
     report_parser.add_argument("--run-id", required=True, help="Review run_id")
-    report_parser.add_argument("--format", choices=["md", "json"], default="md", help="Report format")
-    report_parser.add_argument("--outputs-root", type=str, default="outputs", help="Outputs directory")
+    report_parser.add_argument(
+        "--format", choices=["md", "json"], default="md", help="Report format"
+    )
+    report_parser.add_argument(
+        "--outputs-root", type=str, default="outputs", help="Outputs directory"
+    )
     report_parser.add_argument("--json", action="store_true", help="Emit JSON output")
 
-    handoff_parser = subparsers.add_parser("prepare-handoff", help="Prepare agent-specific request payloads")
+    handoff_parser = subparsers.add_parser(
+        "prepare-handoff", help="Prepare agent-specific request payloads"
+    )
     _add_review_input_arguments(handoff_parser)
     handoff_parser.add_argument(
         "--agent",
@@ -55,10 +76,24 @@ def _build_modern_parser() -> argparse.ArgumentParser:
         help="Execution mode for prepared handoff tasks",
     )
 
-    doctor_parser = subparsers.add_parser("doctor", help="Validate local setup and optional runtime health")
-    doctor_parser.add_argument("--outputs-root", type=str, default="outputs", help="Outputs directory")
-    doctor_parser.add_argument("--backend-url", type=str, default="http://127.0.0.1:8000", help="Backend base URL")
-    doctor_parser.add_argument("--frontend-url", type=str, default="http://127.0.0.1:5173", help="Frontend base URL")
+    doctor_parser = subparsers.add_parser(
+        "doctor", help="Validate local setup and optional runtime health"
+    )
+    doctor_parser.add_argument(
+        "--outputs-root", type=str, default="outputs", help="Outputs directory"
+    )
+    doctor_parser.add_argument(
+        "--backend-url",
+        type=str,
+        default="http://127.0.0.1:8000",
+        help="Backend base URL",
+    )
+    doctor_parser.add_argument(
+        "--frontend-url",
+        type=str,
+        default="http://127.0.0.1:5173",
+        help="Frontend base URL",
+    )
     doctor_parser.add_argument(
         "--skip-runtime",
         action="store_true",
@@ -84,7 +119,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return _build_modern_parser().parse_args(effective_argv)
 
 
-def _resolve_review_inputs(args: argparse.Namespace) -> tuple[str | None, str | None, str | None]:
+def _resolve_review_inputs(
+    args: argparse.Namespace,
+) -> tuple[str | None, str | None, str | None]:
     prd_text = str(getattr(args, "prd_text", "") or "").strip() or None
     prd_path = str(getattr(args, "prd_path", "") or "").strip() or None
     source = str(getattr(args, "source", "") or "").strip() or None
@@ -185,8 +222,14 @@ def _run_report_command(args: argparse.Namespace) -> int:
 def _run_doctor_command(args: argparse.Namespace) -> int:
     payload = run_doctor(
         outputs_root=str(getattr(args, "outputs_root", "outputs") or "outputs"),
-        backend_url=str(getattr(args, "backend_url", "http://127.0.0.1:8000") or "http://127.0.0.1:8000"),
-        frontend_url=str(getattr(args, "frontend_url", "http://127.0.0.1:5173") or "http://127.0.0.1:5173"),
+        backend_url=str(
+            getattr(args, "backend_url", "http://127.0.0.1:8000")
+            or "http://127.0.0.1:8000"
+        ),
+        frontend_url=str(
+            getattr(args, "frontend_url", "http://127.0.0.1:5173")
+            or "http://127.0.0.1:5173"
+        ),
         check_runtime=not bool(getattr(args, "skip_runtime", False)),
     )
     if args.json:

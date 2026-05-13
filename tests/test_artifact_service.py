@@ -40,14 +40,20 @@ def _build_source_version(content_path: Path) -> ArtifactVersion:
 
 
 @pytest.mark.asyncio
-async def test_review_artifact_version_async_creates_review_result_and_link(tmp_path, monkeypatch) -> None:
+async def test_review_artifact_version_async_creates_review_result_and_link(
+    tmp_path, monkeypatch
+) -> None:
     db_path = tmp_path / "workspace.sqlite3"
     source_path = tmp_path / "source.md"
-    source_path.write_text("# Login PRD\n\nThe system shall support SSO.", encoding="utf-8")
+    source_path.write_text(
+        "# Login PRD\n\nThe system shall support SSO.", encoding="utf-8"
+    )
     report_json_path = tmp_path / "outputs" / "run-123" / "report.json"
     report_md_path = tmp_path / "outputs" / "run-123" / "report.md"
     report_json_path.parent.mkdir(parents=True, exist_ok=True)
-    report_json_path.write_text('{"status":"completed","review_results":[]}', encoding="utf-8")
+    report_json_path.write_text(
+        '{"status":"completed","review_results":[]}', encoding="utf-8"
+    )
     report_md_path.write_text("# Review Report", encoding="utf-8")
 
     artifact_repository = ArtifactRepository(db_path)
@@ -114,17 +120,25 @@ async def test_review_artifact_version_async_creates_review_result_and_link(tmp_
     assert result.review_result_version_id
     assert result.review_result_artifact_key == "prd_doc.review_result"
 
-    loaded_review_result = await artifact_repository.get_version(result.review_result_version_id)
+    loaded_review_result = await artifact_repository.get_version(
+        result.review_result_version_id
+    )
     assert loaded_review_result.ok is True
     assert loaded_review_result.value is not None
     assert loaded_review_result.value.content_path == str(report_json_path)
-    assert loaded_review_result.value.metadata["source_artifact_version_id"] == "artifact-v1"
+    assert (
+        loaded_review_result.value.metadata["source_artifact_version_id"]
+        == "artifact-v1"
+    )
 
     workspace_result = await workspace_repository.get_workspace("ws-1")
     assert workspace_result.ok is True
     assert workspace_result.value is not None
     assert workspace_result.value.current_run_id == "run-123"
-    assert workspace_result.value.current_version_ids["prd_doc.review_result"] == result.review_result_version_id
+    assert (
+        workspace_result.value.current_version_ids["prd_doc.review_result"]
+        == result.review_result_version_id
+    )
 
     with sqlite3.connect(db_path) as connection:
         row = connection.execute(
@@ -140,7 +154,9 @@ async def test_review_artifact_version_async_creates_review_result_and_link(tmp_
 
 
 @pytest.mark.asyncio
-async def test_review_artifact_version_async_raises_for_missing_content_path(tmp_path, monkeypatch) -> None:
+async def test_review_artifact_version_async_raises_for_missing_content_path(
+    tmp_path, monkeypatch
+) -> None:
     db_path = tmp_path / "workspace.sqlite3"
     artifact_repository = ArtifactRepository(db_path)
     await artifact_repository.initialize()
@@ -158,7 +174,9 @@ async def test_review_artifact_version_async_raises_for_missing_content_path(tmp
     )
 
     async def unexpected_review(*args, **kwargs):
-        raise AssertionError("review_prd_text_async should not be called when artifact content is missing")
+        raise AssertionError(
+            "review_prd_text_async should not be called when artifact content is missing"
+        )
 
     monkeypatch.setattr(
         "prd_pal.service.artifact_service.review_prd_text_async",

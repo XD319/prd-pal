@@ -30,18 +30,31 @@ from .executor import SkillSpec
 
 
 def _planning_payload_json(payload: DeliveryPlanningSkillInput) -> tuple[str, str, str]:
-    requirements_json = json.dumps(payload.structured_requirements, ensure_ascii=False, indent=2)
+    requirements_json = json.dumps(
+        payload.structured_requirements, ensure_ascii=False, indent=2
+    )
     tasks_json = json.dumps(payload.tasks, ensure_ascii=False, indent=2)
     risks_json = json.dumps(payload.risks, ensure_ascii=False, indent=2)
     return requirements_json, tasks_json, risks_json
 
 
-def _prompt_generation_payload_json(payload: PromptGenerationSkillInput) -> tuple[str, str, str, str]:
-    implementation_plan_json = json.dumps(payload.implementation_plan, ensure_ascii=False, indent=2)
+def _prompt_generation_payload_json(
+    payload: PromptGenerationSkillInput,
+) -> tuple[str, str, str, str]:
+    implementation_plan_json = json.dumps(
+        payload.implementation_plan, ensure_ascii=False, indent=2
+    )
     test_plan_json = json.dumps(payload.test_plan, ensure_ascii=False, indent=2)
     constraints_json = json.dumps(payload.constraints, ensure_ascii=False, indent=2)
-    acceptance_criteria_json = json.dumps(payload.acceptance_criteria, ensure_ascii=False, indent=2)
-    return implementation_plan_json, test_plan_json, constraints_json, acceptance_criteria_json
+    acceptance_criteria_json = json.dumps(
+        payload.acceptance_criteria, ensure_ascii=False, indent=2
+    )
+    return (
+        implementation_plan_json,
+        test_plan_json,
+        constraints_json,
+        acceptance_criteria_json,
+    )
 
 
 async def _implementation_plan(payload: DeliveryPlanningSkillInput) -> dict[str, Any]:
@@ -73,7 +86,12 @@ async def _generate_test_plan(payload: DeliveryPlanningSkillInput) -> dict[str, 
 
 
 async def _generate_codex_prompt(payload: PromptGenerationSkillInput) -> dict[str, Any]:
-    implementation_plan_json, test_plan_json, constraints_json, acceptance_criteria_json = _prompt_generation_payload_json(payload)
+    (
+        implementation_plan_json,
+        test_plan_json,
+        constraints_json,
+        acceptance_criteria_json,
+    ) = _prompt_generation_payload_json(payload)
     prompt = (
         f"{CODEX_PROMPT_SYSTEM_PROMPT}\n\n"
         f"{CODEX_PROMPT_USER_PROMPT.format(implementation_plan_json=implementation_plan_json, test_plan_json=test_plan_json, constraints_json=constraints_json, acceptance_criteria_json=acceptance_criteria_json)}"
@@ -86,8 +104,15 @@ async def _generate_codex_prompt(payload: PromptGenerationSkillInput) -> dict[st
     return validate_coding_agent_prompt_output(parsed).model_dump(mode="python")
 
 
-async def _generate_claude_code_prompt(payload: PromptGenerationSkillInput) -> dict[str, Any]:
-    implementation_plan_json, test_plan_json, constraints_json, acceptance_criteria_json = _prompt_generation_payload_json(payload)
+async def _generate_claude_code_prompt(
+    payload: PromptGenerationSkillInput,
+) -> dict[str, Any]:
+    (
+        implementation_plan_json,
+        test_plan_json,
+        constraints_json,
+        acceptance_criteria_json,
+    ) = _prompt_generation_payload_json(payload)
     prompt = (
         f"{CLAUDE_CODE_PROMPT_SYSTEM_PROMPT}\n\n"
         f"{CLAUDE_CODE_PROMPT_USER_PROMPT.format(implementation_plan_json=implementation_plan_json, test_plan_json=test_plan_json, constraints_json=constraints_json, acceptance_criteria_json=acceptance_criteria_json)}"

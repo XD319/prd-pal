@@ -30,7 +30,9 @@ def _template_path(node_name: str) -> Path:
 
 def build_system_prompt(payload: dict[str, Any]) -> str:
     role_definition = str(payload.get("role_definition", "")).strip()
-    output_schema = json.dumps(payload.get("output_schema", {}), ensure_ascii=False, indent=2)
+    output_schema = json.dumps(
+        payload.get("output_schema", {}), ensure_ascii=False, indent=2
+    )
     few_shots = list(payload.get("few_shots", []) or [])
 
     parts = [
@@ -46,7 +48,9 @@ def build_system_prompt(payload: dict[str, Any]) -> str:
 
     for index, item in enumerate(few_shots, start=1):
         example_input = str(item.get("input", "")).strip()
-        example_output = json.dumps(item.get("output", {}), ensure_ascii=False, indent=2)
+        example_output = json.dumps(
+            item.get("output", {}), ensure_ascii=False, indent=2
+        )
         parts.extend(
             [
                 f"Few-shot example {index} input:",
@@ -67,7 +71,9 @@ def load_prompt_template(node_name: str) -> PromptTemplateRecord:
         raise FileNotFoundError(f"prompt template not found for node: {node_name}")
 
     payload = json.loads(path.read_text(encoding="utf-8"))
-    system_prompt = str(payload.get("system_prompt", "")).strip() or build_system_prompt(payload)
+    system_prompt = str(
+        payload.get("system_prompt", "")
+    ).strip() or build_system_prompt(payload)
     return PromptTemplateRecord(
         node_name=str(payload.get("node_name", node_name)),
         role_definition=str(payload.get("role_definition", "")).strip(),

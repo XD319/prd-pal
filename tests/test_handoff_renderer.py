@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from prd_pal.handoff import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
+from prd_pal.handoff import (
+    render_claude_code_prompt,
+    render_codex_prompt,
+    render_openclaw_prompt,
+)
 from prd_pal.packs import ExecutionPackBuilder
 from prd_pal.service.review_service import build_handoff_prompts
 
@@ -10,7 +14,10 @@ SAMPLE_REQUIREMENTS = [
     {
         "id": "REQ-101",
         "description": "Add recruiter SSO login support",
-        "acceptance_criteria": ["SSO callback succeeds", "Existing login remains available"],
+        "acceptance_criteria": [
+            "SSO callback succeeds",
+            "Existing login remains available",
+        ],
     }
 ]
 
@@ -34,7 +41,11 @@ SAMPLE_RISKS = [
 ]
 
 IMPLEMENTATION_PLAN = {
-    "implementation_steps": ["Inspect auth flow", "Add SSO callback handler", "Preserve legacy login flow"],
+    "implementation_steps": [
+        "Inspect auth flow",
+        "Add SSO callback handler",
+        "Preserve legacy login flow",
+    ],
     "target_modules": ["prd_pal/server/app.py", "frontend/src/auth.ts"],
     "constraints": ["Do not break existing password login"],
 }
@@ -47,14 +58,22 @@ TEST_PLAN = {
 
 CODEX_PROMPT = {
     "agent_prompt": "Implement the smallest safe SSO change set and run focused checks.",
-    "recommended_execution_order": ["Review auth modules", "Implement backend changes", "Verify SSO login"],
+    "recommended_execution_order": [
+        "Review auth modules",
+        "Implement backend changes",
+        "Verify SSO login",
+    ],
     "non_goals": ["Do not redesign user profile flows"],
     "validation_checklist": ["SSO flow mapped to tests"],
 }
 
 CLAUDE_PROMPT = {
     "agent_prompt": "Validate edge cases and regression coverage before handoff is complete.",
-    "recommended_execution_order": ["Inspect changed files", "Add edge-case coverage", "Run auth regression checks"],
+    "recommended_execution_order": [
+        "Inspect changed files",
+        "Add edge-case coverage",
+        "Run auth regression checks",
+    ],
     "non_goals": ["Do not expand beyond auth validation"],
     "validation_checklist": ["Regression checks stay green"],
 }
@@ -65,7 +84,9 @@ def _build_execution_pack(*, implementation_plan=None, risks=None):
         requirements=SAMPLE_REQUIREMENTS,
         tasks=SAMPLE_TASKS,
         risks=SAMPLE_RISKS if risks is None else risks,
-        implementation_plan_output=IMPLEMENTATION_PLAN if implementation_plan is None else implementation_plan,
+        implementation_plan_output=IMPLEMENTATION_PLAN
+        if implementation_plan is None
+        else implementation_plan,
         test_plan_output=TEST_PLAN,
         codex_prompt_output=CODEX_PROMPT,
         claude_code_prompt_output=CLAUDE_PROMPT,
@@ -90,7 +111,9 @@ def test_render_codex_prompt_contains_required_sections() -> None:
 
 
 def test_render_claude_code_prompt_contains_validation_handoff_instructions() -> None:
-    prompt = render_claude_code_prompt(_build_execution_pack().model_dump(mode="python"))
+    prompt = render_claude_code_prompt(
+        _build_execution_pack().model_dump(mode="python")
+    )
 
     assert prompt.startswith("# Claude Code Handoff Prompt")
     assert "repository analysis instruction" in prompt
@@ -138,7 +161,11 @@ def test_renderers_tolerate_missing_target_modules_and_risk_summary() -> None:
 def test_build_handoff_prompts_writes_expected_markdown_files(tmp_path: Path) -> None:
     execution_pack_path = tmp_path / "execution_pack.json"
     execution_pack_path.write_text(
-        json.dumps(_build_execution_pack().model_dump(mode="python"), ensure_ascii=False, indent=2),
+        json.dumps(
+            _build_execution_pack().model_dump(mode="python"),
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
 
@@ -158,6 +185,15 @@ def test_build_handoff_prompts_writes_expected_markdown_files(tmp_path: Path) ->
 
     renderer_trace = trace["handoff_renderer"]
     assert renderer_trace["template_version"] == "handoff_markdown_v1"
-    assert renderer_trace["templates"]["codex_prompt"]["template_id"] == "adapter.codex.handoff_markdown"
-    assert renderer_trace["templates"]["claude_code_prompt"]["template_id"] == "adapter.claude_code.handoff_markdown"
-    assert renderer_trace["templates"]["openclaw_prompt"]["template_id"] == "adapter.openclaw.handoff_markdown"
+    assert (
+        renderer_trace["templates"]["codex_prompt"]["template_id"]
+        == "adapter.codex.handoff_markdown"
+    )
+    assert (
+        renderer_trace["templates"]["claude_code_prompt"]["template_id"]
+        == "adapter.claude_code.handoff_markdown"
+    )
+    assert (
+        renderer_trace["templates"]["openclaw_prompt"]["template_id"]
+        == "adapter.openclaw.handoff_markdown"
+    )

@@ -1,4 +1,4 @@
-﻿"""Delivery planning node that enriches the base plan with execution skills."""
+"""Delivery planning node that enriches the base plan with execution skills."""
 
 from __future__ import annotations
 
@@ -81,7 +81,9 @@ def _collect_prompt_constraints(
     return constraints
 
 
-async def _execute_skill(executor, skill_name: str, payload: dict[str, Any], trace: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+async def _execute_skill(
+    executor, skill_name: str, payload: dict[str, Any], trace: dict[str, Any]
+) -> tuple[dict[str, Any] | None, str | None]:
     try:
         output = await executor.execute(
             get_skill_spec(skill_name),

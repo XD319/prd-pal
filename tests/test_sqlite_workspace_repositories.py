@@ -34,7 +34,9 @@ async def test_trace_repository_initializes_wal_mode(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_artifact_repository_round_trips_version_with_trace_links(tmp_path) -> None:
+async def test_artifact_repository_round_trips_version_with_trace_links(
+    tmp_path,
+) -> None:
     db_path = tmp_path / "workspace.sqlite3"
     repository = ArtifactRepository(db_path)
     await repository.initialize()
@@ -157,7 +159,9 @@ async def test_workspace_repository_round_trips_aggregate_state(tmp_path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_workspace_repository_returns_controlled_not_found_error(tmp_path) -> None:
+async def test_workspace_repository_returns_controlled_not_found_error(
+    tmp_path,
+) -> None:
     db_path = tmp_path / "workspace.sqlite3"
     repository = WorkspaceRepository(db_path)
     await repository.initialize()

@@ -11,7 +11,11 @@ def extract_mapping(value: Any) -> dict[str, Any] | None:
     return dict(value) if isinstance(value, dict) else None
 
 
-def extract_message(payload: dict[str, Any], *, keys: Iterable[str] = ("msg", "message", "error", "error_message")) -> str:
+def extract_message(
+    payload: dict[str, Any],
+    *,
+    keys: Iterable[str] = ("msg", "message", "error", "error_message"),
+) -> str:
     """Return the first non-empty text message from a response payload."""
 
     for key in keys:

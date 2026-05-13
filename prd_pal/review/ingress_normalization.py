@@ -5,7 +5,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 AllowedSource = Literal["feishu", "web", "cli", "mcp", "hook", "unknown"]
-RequirementType = Literal["product_requirement", "bug_report", "task_request", "unknown"]
+RequirementType = Literal[
+    "product_requirement", "bug_report", "task_request", "unknown"
+]
 ContentKind = Literal["inline_text", "file_path", "connector_source"]
 
 _ALLOWED_SOURCES = {"feishu", "web", "cli", "mcp", "hook"}
@@ -62,11 +64,19 @@ def normalize_ingress_request(
 ) -> CanonicalReviewRequest:
     notes: list[str] = []
     context = dict(audit_context) if isinstance(audit_context, dict) else {}
-    client_metadata = context.get("client_metadata") if isinstance(context.get("client_metadata"), dict) else {}
+    client_metadata = (
+        context.get("client_metadata")
+        if isinstance(context.get("client_metadata"), dict)
+        else {}
+    )
 
     source = _resolve_source(context=context, notes=notes)
-    team_id = _pick_first_str(client_metadata, context, keys=("team_id", "team", "workspace_id"))
-    project_id = _pick_first_str(client_metadata, context, keys=("project_id", "project", "artifact_key"))
+    team_id = _pick_first_str(
+        client_metadata, context, keys=("team_id", "team", "workspace_id")
+    )
+    project_id = _pick_first_str(
+        client_metadata, context, keys=("project_id", "project", "artifact_key")
+    )
     submitter_id = _pick_first_str(
         client_metadata,
         context,
@@ -79,7 +89,9 @@ def normalize_ingress_request(
     if submitter_id is None:
         notes.append("submitter_id is missing; left as null.")
 
-    review_profile_hint = _pick_first_str(client_metadata, context, keys=("review_profile_hint", "review_profile"))
+    review_profile_hint = _pick_first_str(
+        client_metadata, context, keys=("review_profile_hint", "review_profile")
+    )
     requirement_type = _resolve_requirement_type(
         context=context,
         client_metadata=client_metadata,
@@ -129,29 +141,41 @@ def _resolve_requirement_type(
     prd_path: str | None,
     notes: list[str],
 ) -> RequirementType:
-    explicit = _pick_first_str(client_metadata, context, keys=("requirement_type", "req_type", "type"))
+    explicit = _pick_first_str(
+        client_metadata, context, keys=("requirement_type", "req_type", "type")
+    )
     if explicit:
         mapped = _REQUIREMENT_TYPE_MAP.get(explicit.strip().lower())
         if mapped is not None:
             return mapped
-        notes.append(f"Explicit requirement_type '{explicit}' is not recognized; normalized to 'unknown'.")
+        notes.append(
+            f"Explicit requirement_type '{explicit}' is not recognized; normalized to 'unknown'."
+        )
         return "unknown"
 
     if isinstance(prd_text, str) and prd_text.strip():
-        notes.append("requirement_type inferred as product_requirement from prd_text presence.")
+        notes.append(
+            "requirement_type inferred as product_requirement from prd_text presence."
+        )
         return "product_requirement"
     if isinstance(prd_path, str) and prd_path.strip():
-        notes.append("requirement_type inferred as product_requirement from prd_path presence.")
+        notes.append(
+            "requirement_type inferred as product_requirement from prd_path presence."
+        )
         return "product_requirement"
     if isinstance(source_ref, str) and source_ref.strip().lower().startswith("jira://"):
-        notes.append("requirement_type inferred as task_request from jira source prefix.")
+        notes.append(
+            "requirement_type inferred as task_request from jira source prefix."
+        )
         return "task_request"
 
     notes.append("requirement_type is ambiguous; normalized to 'unknown'.")
     return "unknown"
 
 
-def _resolve_attachments(client_metadata: dict[str, Any], notes: list[str]) -> list[CanonicalReviewAttachment]:
+def _resolve_attachments(
+    client_metadata: dict[str, Any], notes: list[str]
+) -> list[CanonicalReviewAttachment]:
     raw_attachments = client_metadata.get("attachments")
     if raw_attachments is None:
         notes.append("attachments are not provided; normalized to empty list.")
@@ -177,11 +201,17 @@ def _resolve_attachments(client_metadata: dict[str, Any], notes: list[str]) -> l
     return normalized
 
 
-def _resolve_content(*, requirement_doc: str, source_ref: str | None, prd_path: str | None) -> CanonicalReviewContent:
+def _resolve_content(
+    *, requirement_doc: str, source_ref: str | None, prd_path: str | None
+) -> CanonicalReviewContent:
     if isinstance(source_ref, str) and source_ref.strip():
-        return CanonicalReviewContent(kind="connector_source", text=requirement_doc, source_ref=source_ref.strip())
+        return CanonicalReviewContent(
+            kind="connector_source", text=requirement_doc, source_ref=source_ref.strip()
+        )
     if isinstance(prd_path, str) and prd_path.strip():
-        return CanonicalReviewContent(kind="file_path", text=requirement_doc, source_ref=prd_path.strip())
+        return CanonicalReviewContent(
+            kind="file_path", text=requirement_doc, source_ref=prd_path.strip()
+        )
     return CanonicalReviewContent(kind="inline_text", text=requirement_doc)
 
 

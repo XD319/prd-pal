@@ -7,7 +7,9 @@ from typing import Any
 from .base import EvidenceItem
 
 
-def build_memory_evidence(memory_context: tuple[dict[str, Any], ...]) -> tuple[EvidenceItem, ...]:
+def build_memory_evidence(
+    memory_context: tuple[dict[str, Any], ...],
+) -> tuple[EvidenceItem, ...]:
     evidence: list[EvidenceItem] = []
     for item in memory_context:
         if not isinstance(item, dict):
@@ -18,7 +20,9 @@ def build_memory_evidence(memory_context: tuple[dict[str, Any], ...]) -> tuple[E
                 title=str(item.get("title", "") or "retrieved memory").strip(),
                 snippet=str(item.get("summary", "") or "").strip(),
                 ref=str(item.get("memory_id", "") or "").strip(),
-                score=float(item.get("score")) if item.get("score") is not None else None,
+                score=float(item.get("score"))
+                if item.get("score") is not None
+                else None,
                 metadata={
                     "memory_type": str(item.get("memory_type", "") or "").strip(),
                     "usage_note": str(item.get("usage_note", "") or "").strip(),
@@ -29,7 +33,9 @@ def build_memory_evidence(memory_context: tuple[dict[str, Any], ...]) -> tuple[E
     return tuple(evidence)
 
 
-def build_memory_notes(memory_context: tuple[dict[str, Any], ...], *, memory_mode: str) -> tuple[str, ...]:
+def build_memory_notes(
+    memory_context: tuple[dict[str, Any], ...], *, memory_mode: str
+) -> tuple[str, ...]:
     if not memory_context:
         return ()
     notes = [
@@ -41,5 +47,7 @@ def build_memory_notes(memory_context: tuple[dict[str, Any], ...], *, memory_mod
         memory_id = str(item.get("memory_id", "") or "").strip()
         title = str(item.get("title", "") or "").strip()
         usage_note = str(item.get("usage_note", "") or "").strip()
-        notes.append(f"Memory {memory_id or title}: {usage_note or 'Use only as a bounded hint.'}")
+        notes.append(
+            f"Memory {memory_id or title}: {usage_note or 'Use only as a bounded hint.'}"
+        )
     return tuple(notes)

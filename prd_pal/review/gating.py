@@ -105,7 +105,10 @@ def decide_review_mode(
     role_count = len(normalized.roles)
     completeness_signals = tuple(normalized.completeness_signals)
     completeness_score = len(completeness_signals)
-    risk_keyword_hits = max(_count_keyword_hits(text, resolved_config.risk_keywords), len(normalized.risk_hints))
+    risk_keyword_hits = max(
+        _count_keyword_hits(text, resolved_config.risk_keywords),
+        len(normalized.risk_hints),
+    )
     cross_system_hits = max(
         _count_keyword_hits(text, resolved_config.cross_system_keywords),
         len(normalized.dependency_hints),
@@ -120,24 +123,36 @@ def decide_review_mode(
 
     if completeness_score >= resolved_config.strong_completeness_signals:
         complexity_score += 1
-        reasons.append(f"completeness_signals={completeness_score} indicates the PRD is structurally detailed")
+        reasons.append(
+            f"completeness_signals={completeness_score} indicates the PRD is structurally detailed"
+        )
     elif completeness_score < resolved_config.minimum_completeness_signals:
-        reasons.append(f"completeness_signals={completeness_score} indicates the PRD is structurally thin")
+        reasons.append(
+            f"completeness_signals={completeness_score} indicates the PRD is structurally thin"
+        )
 
     if risk_keyword_hits >= resolved_config.risk_keyword_threshold:
         complexity_score += 1
-        reasons.append(f"risk_keyword_hits={risk_keyword_hits} indicates elevated delivery or compliance risk")
+        reasons.append(
+            f"risk_keyword_hits={risk_keyword_hits} indicates elevated delivery or compliance risk"
+        )
 
     if cross_system_hits >= resolved_config.cross_system_threshold:
         complexity_score += 1
-        reasons.append(f"cross_system_hits={cross_system_hits} indicates external or multi-system coordination")
+        reasons.append(
+            f"cross_system_hits={cross_system_hits} indicates external or multi-system coordination"
+        )
 
     if module_count >= 3:
         complexity_score += 1
-        reasons.append(f"module_count={module_count} indicates multiple implementation surfaces")
+        reasons.append(
+            f"module_count={module_count} indicates multiple implementation surfaces"
+        )
 
     if role_count >= 3:
-        reasons.append(f"role_count={role_count} indicates multiple stakeholder handoffs")
+        reasons.append(
+            f"role_count={role_count} indicates multiple stakeholder handoffs"
+        )
 
     selected_mode: SelectedMode
     skipped = False
@@ -149,20 +164,34 @@ def decide_review_mode(
         selected_mode = "full"
         reasons.append("mode=full explicitly requested")
     else:
-        if length_chars < resolved_config.skip_chars_threshold and completeness_score <= resolved_config.skip_completeness_signals_threshold:
+        if (
+            length_chars < resolved_config.skip_chars_threshold
+            and completeness_score
+            <= resolved_config.skip_completeness_signals_threshold
+        ):
             selected_mode = "skip"
             skipped = True
             reasons.append("input is too sparse to support a meaningful review")
         elif complexity_score >= resolved_config.full_score_threshold:
             selected_mode = "full"
-        elif risk_keyword_hits >= resolved_config.risk_keyword_threshold or cross_system_hits >= resolved_config.cross_system_threshold:
+        elif (
+            risk_keyword_hits >= resolved_config.risk_keyword_threshold
+            or cross_system_hits >= resolved_config.cross_system_threshold
+        ):
             selected_mode = "full"
-        elif length_chars <= resolved_config.quick_max_chars and completeness_score >= resolved_config.minimum_completeness_signals:
+        elif (
+            length_chars <= resolved_config.quick_max_chars
+            and completeness_score >= resolved_config.minimum_completeness_signals
+        ):
             selected_mode = "quick"
-            reasons.append("requirement is compact and sufficiently structured for quick triage")
+            reasons.append(
+                "requirement is compact and sufficiently structured for quick triage"
+            )
         else:
             selected_mode = "quick"
-            reasons.append("defaulting to quick triage because full-review triggers were not met")
+            reasons.append(
+                "defaulting to quick triage because full-review triggers were not met"
+            )
 
     if not reasons:
         reasons.append("no gating signals found")
@@ -189,7 +218,9 @@ def _count_keyword_hits(text: str, keywords: tuple[str, ...]) -> int:
     for keyword in keywords:
         if not keyword:
             continue
-        pattern = r"\b" + re.escape(keyword.casefold()).replace(r"\ ", r"[\s-]+") + r"\b"
+        pattern = (
+            r"\b" + re.escape(keyword.casefold()).replace(r"\ ", r"[\s-]+") + r"\b"
+        )
         if re.search(pattern, lowered):
             hits += 1
     return hits

@@ -11,11 +11,9 @@ from pydantic import ValidationError
 from unittest.mock import AsyncMock, patch
 
 from prd_pal.schemas.parser_schema import (
-    ParserOutput,
     validate_parser_output,
 )
 from prd_pal.schemas.planner_schema import (
-    PlannerOutput,
     validate_planner_output,
 )
 from prd_pal.schemas.planning_skill_schema import (
@@ -27,11 +25,9 @@ from prd_pal.schemas.planning_skill_schema import (
     validate_test_plan_generate_output,
 )
 from prd_pal.schemas.risk_schema import (
-    RiskOutput,
     validate_risk_output,
 )
 from prd_pal.schemas.reviewer_schema import (
-    ReviewerOutput,
     validate_reviewer_output,
 )
 from prd_pal.state import create_initial_state
@@ -63,7 +59,10 @@ class TestParserValidation:
         out = validate_parser_output(data)
         assert len(out.parsed_items) == 2
         assert out.parsed_items[0].id == "REQ-001"
-        assert out.parsed_items[1].acceptance_criteria == ["Shows revenue", "Shows churn"]
+        assert out.parsed_items[1].acceptance_criteria == [
+            "Shows revenue",
+            "Shows churn",
+        ]
 
     def test_none_acceptance_criteria_coerced(self):
         data = {"parsed_items": [{"id": "REQ-001", "acceptance_criteria": None}]}
@@ -226,7 +225,12 @@ class TestReviewerValidation:
     def test_string_bools_coerced(self):
         data = {
             "review_results": [
-                {"id": "REQ-001", "is_clear": "yes", "is_testable": "0", "is_ambiguous": "TRUE"}
+                {
+                    "id": "REQ-001",
+                    "is_clear": "yes",
+                    "is_testable": "0",
+                    "is_ambiguous": "TRUE",
+                }
             ]
         }
         out = validate_reviewer_output(data)
@@ -269,11 +273,14 @@ class TestParserAgentMocked:
                 }
             ]
         }
-        with patch(
-            "prd_pal.agents.parser_agent.llm_structured_call",
-            new_callable=AsyncMock,
-            return_value=mock_llm_output,
-        ), patch("prd_pal.agents.parser_agent.Config"):
+        with (
+            patch(
+                "prd_pal.agents.parser_agent.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=mock_llm_output,
+            ),
+            patch("prd_pal.agents.parser_agent.Config"),
+        ):
             from prd_pal.agents import parser_agent
 
             state = create_initial_state("# Sample PRD\nUser login via OAuth.")
@@ -286,11 +293,14 @@ class TestParserAgentMocked:
     @pytest.mark.asyncio
     async def test_parser_schema_failure_returns_empty(self):
         bad_output = {"parsed_items": [{"description": "missing id"}]}
-        with patch(
-            "prd_pal.agents.parser_agent.llm_structured_call",
-            new_callable=AsyncMock,
-            return_value=bad_output,
-        ), patch("prd_pal.agents.parser_agent.Config"):
+        with (
+            patch(
+                "prd_pal.agents.parser_agent.llm_structured_call",
+                new_callable=AsyncMock,
+                return_value=bad_output,
+            ),
+            patch("prd_pal.agents.parser_agent.Config"),
+        ):
             from prd_pal.agents import parser_agent
 
             state = create_initial_state("# PRD")
@@ -306,7 +316,9 @@ class TestDeliveryPlanningSkillValidation:
     def test_valid_implementation_plan_output(self):
         out = validate_implementation_plan_output(
             {
-                "implementation_steps": ["Map requirement coverage to backend and frontend changes"],
+                "implementation_steps": [
+                    "Map requirement coverage to backend and frontend changes"
+                ],
                 "target_modules": ["api.auth", "web.login"],
                 "constraints": ["Preserve existing login flow compatibility"],
             }
@@ -341,9 +353,16 @@ class TestDeliveryPlanningSkillValidation:
         out = validate_coding_agent_prompt_output(
             {
                 "agent_prompt": "Inspect auth modules, implement login changes, then run targeted tests.",
-                "recommended_execution_order": ["Inspect auth flow", "Implement backend changes", "Validate login regressions"],
+                "recommended_execution_order": [
+                    "Inspect auth flow",
+                    "Implement backend changes",
+                    "Validate login regressions",
+                ],
                 "non_goals": ["Do not redesign unrelated account settings flows"],
-                "validation_checklist": ["Acceptance criteria mapped to tests", "Pytest passes for auth scope"],
+                "validation_checklist": [
+                    "Acceptance criteria mapped to tests",
+                    "Pytest passes for auth scope",
+                ],
             }
         )
         assert isinstance(out, CodingAgentPromptOutput)
@@ -355,9 +374,3 @@ class TestDeliveryPlanningSkillValidation:
         assert out.recommended_execution_order == []
         assert out.non_goals == []
         assert out.validation_checklist == []
-
-
-
-
-
-

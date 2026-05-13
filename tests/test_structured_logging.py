@@ -6,7 +6,12 @@ from io import StringIO
 from fastapi.testclient import TestClient
 
 from prd_pal.server import app as app_module
-from prd_pal.utils.logging import RunLogContext, StructuredFormatter, get_logger, setup_logging
+from prd_pal.utils.logging import (
+    RunLogContext,
+    StructuredFormatter,
+    get_logger,
+    setup_logging,
+)
 
 
 def test_structured_formatter_includes_context_and_extra_fields() -> None:
@@ -18,7 +23,11 @@ def test_structured_formatter_includes_context_and_extra_fields() -> None:
     logging.getLogger().addHandler(handler)
 
     with RunLogContext("run_abc123"):
-        logger.info("hello %s", "world", extra={"node": "parser", "duration_ms": 2300, "custom_flag": True})
+        logger.info(
+            "hello %s",
+            "world",
+            extra={"node": "parser", "duration_ms": 2300, "custom_flag": True},
+        )
 
     formatted = stream.getvalue().strip()
     logging.getLogger().removeHandler(handler)
@@ -30,7 +39,9 @@ def test_structured_formatter_includes_context_and_extra_fields() -> None:
     assert '"custom_flag": true' in formatted
 
 
-def test_request_logging_middleware_adds_trace_id_and_logs_request(tmp_path, monkeypatch, caplog) -> None:
+def test_request_logging_middleware_adds_trace_id_and_logs_request(
+    tmp_path, monkeypatch, caplog
+) -> None:
     monkeypatch.setenv("MARRDP_API_AUTH_DISABLED", "true")
     monkeypatch.setenv("MARRDP_API_RATE_LIMIT_DISABLED", "true")
     monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
@@ -43,7 +54,9 @@ def test_request_logging_middleware_adds_trace_id_and_logs_request(tmp_path, mon
 
     assert response.status_code == 200
     assert response.headers["X-Trace-ID"]
-    request_logs = [record for record in caplog.records if record.name == "prd_pal.server.http"]
+    request_logs = [
+        record for record in caplog.records if record.name == "prd_pal.server.http"
+    ]
     assert request_logs
     assert request_logs[-1].trace_id == response.headers["X-Trace-ID"]
     assert request_logs[-1].path == "/api/runs"

@@ -7,7 +7,9 @@ from prd_pal.service import review_service
 
 
 @pytest.mark.asyncio
-async def test_review_prd_text_async_dispatches_feishu_submitted_and_clarification_notifications(tmp_path, monkeypatch):
+async def test_review_prd_text_async_dispatches_feishu_submitted_and_clarification_notifications(
+    tmp_path, monkeypatch
+):
     captured: list[dict[str, object]] = []
 
     async def fake_run_review(requirement_doc: str, **kwargs):
@@ -37,8 +39,12 @@ async def test_review_prd_text_async_dispatches_feishu_submitted_and_clarificati
         return None
 
     monkeypatch.setattr(review_service, "run_review", fake_run_review)
-    monkeypatch.setattr(review_service, "build_delivery_handoff_outputs", lambda *args, **kwargs: {})
-    monkeypatch.setattr(review_service, "dispatch_notification", fake_dispatch_notification)
+    monkeypatch.setattr(
+        review_service, "build_delivery_handoff_outputs", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        review_service, "dispatch_notification", fake_dispatch_notification
+    )
 
     await review_service.review_prd_text_async(
         prd_text="# Feishu review",
@@ -62,7 +68,9 @@ async def test_review_prd_text_async_dispatches_feishu_submitted_and_clarificati
 
 
 @pytest.mark.asyncio
-async def test_review_prd_text_async_dispatches_feishu_failed_notification_when_run_crashes(tmp_path, monkeypatch):
+async def test_review_prd_text_async_dispatches_feishu_failed_notification_when_run_crashes(
+    tmp_path, monkeypatch
+):
     captured: list[dict[str, object]] = []
 
     async def fake_run_review(requirement_doc: str, **kwargs):
@@ -73,7 +81,9 @@ async def test_review_prd_text_async_dispatches_feishu_failed_notification_when_
         return None
 
     monkeypatch.setattr(review_service, "run_review", fake_run_review)
-    monkeypatch.setattr(review_service, "dispatch_notification", fake_dispatch_notification)
+    monkeypatch.setattr(
+        review_service, "dispatch_notification", fake_dispatch_notification
+    )
 
     with pytest.raises(RuntimeError, match="upstream review failure"):
         await review_service.review_prd_text_async(

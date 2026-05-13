@@ -89,18 +89,57 @@ def _contains_any(text: str, needles: tuple[str, ...]) -> bool:
 
 def _classify_role(*parts: str) -> TaskBundleRole:
     combined = " ".join(str(part or "") for part in parts).lower()
-    if _contains_any(combined, ("security", "auth", "permission", "compliance", "audit", "vulnerability", "encryption")):
+    if _contains_any(
+        combined,
+        (
+            "security",
+            "auth",
+            "permission",
+            "compliance",
+            "audit",
+            "vulnerability",
+            "encryption",
+        ),
+    ):
         return TaskBundleRole.security
     if _contains_any(combined, ("qa", "test", "regression", "edge case", "validation")):
         return TaskBundleRole.qa
-    if _contains_any(combined, ("frontend", "front-end", "fe", "ui", "ux", "page", "screen", "client", "browser", "react", "vue")):
+    if _contains_any(
+        combined,
+        (
+            "frontend",
+            "front-end",
+            "fe",
+            "ui",
+            "ux",
+            "page",
+            "screen",
+            "client",
+            "browser",
+            "react",
+            "vue",
+        ),
+    ):
         return TaskBundleRole.frontend
     return TaskBundleRole.backend
 
 
 def _infer_priority(*parts: str) -> TaskBundlePriority:
     combined = " ".join(str(part or "") for part in parts).lower()
-    if _contains_any(combined, ("high", "critical", "blocker", "security", "risk", "auth", "permission", "timeout", "ambiguous")):
+    if _contains_any(
+        combined,
+        (
+            "high",
+            "critical",
+            "blocker",
+            "security",
+            "risk",
+            "auth",
+            "permission",
+            "timeout",
+            "ambiguous",
+        ),
+    ):
         return TaskBundlePriority.high
     if _contains_any(combined, ("low", "minor", "nice to have")):
         return TaskBundlePriority.low
@@ -204,11 +243,23 @@ class TaskBundleBuilder:
                 str(task.get("title", "") or ""),
                 str(task.get("description", "") or ""),
             )
-            title = str(task.get("title", "") or task.get("id", "") or "Plan task").strip()
+            title = str(
+                task.get("title", "") or task.get("id", "") or "Plan task"
+            ).strip()
             description = str(task.get("description", "") or title).strip()
-            priority = _infer_priority(title, description, str(task.get("owner", "") or ""))
-            prd_refs = [str(item).strip() for item in list(task.get("requirement_ids", []) or []) if str(item).strip()]
-            context = [f"Plan owner: {str(task.get('owner', '') or '').strip()}"] if str(task.get("owner", "") or "").strip() else []
+            priority = _infer_priority(
+                title, description, str(task.get("owner", "") or "")
+            )
+            prd_refs = [
+                str(item).strip()
+                for item in list(task.get("requirement_ids", []) or [])
+                if str(item).strip()
+            ]
+            context = (
+                [f"Plan owner: {str(task.get('owner', '') or '').strip()}"]
+                if str(task.get("owner", "") or "").strip()
+                else []
+            )
             task_id = append_task(
                 role=role,
                 title=title,
@@ -216,20 +267,48 @@ class TaskBundleBuilder:
                 priority=priority,
                 prd_refs=prd_refs or ["Implementation Plan"],
                 context=context,
-                depends_on=[str(item).strip() for item in list(task.get("depends_on", []) or []) if str(item).strip()],
+                depends_on=[
+                    str(item).strip()
+                    for item in list(task.get("depends_on", []) or [])
+                    if str(item).strip()
+                ],
                 source_type=TaskBundleSourceType.plan,
             )
             role_plan_ids[role].append(task_id)
             if role in {TaskBundleRole.backend, TaskBundleRole.frontend}:
                 backend_frontend_ids.append(task_id)
 
-        target_modules = [str(item).strip() for item in list(data["implementation_plan"].get("target_modules", []) or []) if str(item).strip()]
-        impl_steps = [str(item).strip() for item in list(data["implementation_plan"].get("implementation_steps", []) or []) if str(item).strip()]
-        impl_constraints = [str(item).strip() for item in list(data["implementation_plan"].get("constraints", []) or []) if str(item).strip()]
+        target_modules = [
+            str(item).strip()
+            for item in list(
+                data["implementation_plan"].get("target_modules", []) or []
+            )
+            if str(item).strip()
+        ]
+        impl_steps = [
+            str(item).strip()
+            for item in list(
+                data["implementation_plan"].get("implementation_steps", []) or []
+            )
+            if str(item).strip()
+        ]
+        impl_constraints = [
+            str(item).strip()
+            for item in list(data["implementation_plan"].get("constraints", []) or [])
+            if str(item).strip()
+        ]
 
         if target_modules:
-            frontend_modules = [item for item in target_modules if _classify_role(item) == TaskBundleRole.frontend]
-            backend_modules = [item for item in target_modules if _classify_role(item) == TaskBundleRole.backend]
+            frontend_modules = [
+                item
+                for item in target_modules
+                if _classify_role(item) == TaskBundleRole.frontend
+            ]
+            backend_modules = [
+                item
+                for item in target_modules
+                if _classify_role(item) == TaskBundleRole.backend
+            ]
             if backend_modules and not role_plan_ids[TaskBundleRole.backend]:
                 task_id = append_task(
                     role=TaskBundleRole.backend,
@@ -257,9 +336,21 @@ class TaskBundleBuilder:
                 role_plan_ids[TaskBundleRole.frontend].append(task_id)
                 backend_frontend_ids.append(task_id)
 
-        test_scope = [str(item).strip() for item in list(data["test_plan"].get("test_scope", []) or []) if str(item).strip()]
-        edge_cases = [str(item).strip() for item in list(data["test_plan"].get("edge_cases", []) or []) if str(item).strip()]
-        regression_focus = [str(item).strip() for item in list(data["test_plan"].get("regression_focus", []) or []) if str(item).strip()]
+        test_scope = [
+            str(item).strip()
+            for item in list(data["test_plan"].get("test_scope", []) or [])
+            if str(item).strip()
+        ]
+        edge_cases = [
+            str(item).strip()
+            for item in list(data["test_plan"].get("edge_cases", []) or [])
+            if str(item).strip()
+        ]
+        regression_focus = [
+            str(item).strip()
+            for item in list(data["test_plan"].get("regression_focus", []) or [])
+            if str(item).strip()
+        ]
         if test_scope or edge_cases or regression_focus:
             role_plan_ids[TaskBundleRole.qa].append(
                 append_task(
@@ -275,16 +366,25 @@ class TaskBundleBuilder:
             )
 
         for finding in findings_list[:8]:
-            detail = str(finding.get("detail", "") or finding.get("suggestion", "") or "").strip()
-            title = str(finding.get("title", "") or finding.get("requirement_id", "") or "Review finding").strip()
+            detail = str(
+                finding.get("detail", "") or finding.get("suggestion", "") or ""
+            ).strip()
+            title = str(
+                finding.get("title", "")
+                or finding.get("requirement_id", "")
+                or "Review finding"
+            ).strip()
             if not detail and not title:
                 continue
-            role = _classify_role(title, detail, str(finding.get("description", "") or ""))
+            role = _classify_role(
+                title, detail, str(finding.get("description", "") or "")
+            )
             role_plan_ids[role].append(
                 append_task(
                     role=role,
                     title=f"Address finding: {title}",
-                    description=detail or "Convert this finding into an explicit implementation update.",
+                    description=detail
+                    or "Convert this finding into an explicit implementation update.",
                     priority=_infer_priority(title, detail),
                     prd_refs=_unique_strings(
                         [
@@ -305,20 +405,36 @@ class TaskBundleBuilder:
             )
 
         for question in question_list[:8]:
-            question_text = str(question.get("question", "") or question.get("detail", "") or "").strip()
+            question_text = str(
+                question.get("question", "") or question.get("detail", "") or ""
+            ).strip()
             if not question_text:
                 continue
-            role = _classify_role(question_text, " ".join(str(item) for item in list(question.get("issues", []) or [])))
+            role = _classify_role(
+                question_text,
+                " ".join(str(item) for item in list(question.get("issues", []) or [])),
+            )
             role_plan_ids[role].append(
                 append_task(
                     role=role,
                     title=f"Resolve open question: {question_text[:80]}",
                     description=question_text,
-                    priority=_infer_priority(question_text, " ".join(str(item) for item in list(question.get("issues", []) or []))),
+                    priority=_infer_priority(
+                        question_text,
+                        " ".join(
+                            str(item) for item in list(question.get("issues", []) or [])
+                        ),
+                    ),
                     prd_refs=["Open Questions", "Scope"],
                     context=_unique_strings(
-                        [str(item).strip() for item in list(question.get("issues", []) or []) if str(item).strip()]
-                        + [f"Reviewers: {', '.join(str(item).strip() for item in list(question.get('reviewers', []) or []) if str(item).strip())}"]
+                        [
+                            str(item).strip()
+                            for item in list(question.get("issues", []) or [])
+                            if str(item).strip()
+                        ]
+                        + [
+                            f"Reviewers: {', '.join(str(item).strip() for item in list(question.get('reviewers', []) or []) if str(item).strip())}"
+                        ]
                     ),
                     depends_on=role_plan_ids[role][:1],
                     source_type=TaskBundleSourceType.open_question,
@@ -326,22 +442,35 @@ class TaskBundleBuilder:
             )
 
         for risk in risk_item_list[:8]:
-            detail = str(risk.get("detail", "") or risk.get("description", "") or "").strip()
-            title = str(risk.get("title", "") or risk.get("id", "") or "Risk item").strip()
+            detail = str(
+                risk.get("detail", "") or risk.get("description", "") or ""
+            ).strip()
+            title = str(
+                risk.get("title", "") or risk.get("id", "") or "Risk item"
+            ).strip()
             role = _classify_role(title, detail, str(risk.get("category", "") or ""))
-            depends_on = backend_frontend_ids if role == TaskBundleRole.qa else role_plan_ids[TaskBundleRole.backend][:1]
+            depends_on = (
+                backend_frontend_ids
+                if role == TaskBundleRole.qa
+                else role_plan_ids[TaskBundleRole.backend][:1]
+            )
             role_plan_ids[role].append(
                 append_task(
                     role=role,
                     title=f"Mitigate risk: {title}",
-                    description=detail or "Reduce the risk signaled by the review output.",
-                    priority=_infer_priority(title, detail, str(risk.get("severity", "") or "")),
+                    description=detail
+                    or "Reduce the risk signaled by the review output.",
+                    priority=_infer_priority(
+                        title, detail, str(risk.get("severity", "") or "")
+                    ),
                     prd_refs=["Risks", "Dependencies"],
                     context=_unique_strings(
                         [
                             str(risk.get("mitigation", "") or "").strip(),
                             str(risk.get("category", "") or "").strip(),
-                            str(risk.get("severity", "") or risk.get("impact", "") or "").strip(),
+                            str(
+                                risk.get("severity", "") or risk.get("impact", "") or ""
+                            ).strip(),
                         ]
                     ),
                     depends_on=depends_on,
@@ -456,17 +585,30 @@ class ImplementationPackBuilder(_BasePackBuilder):
                 "task_id": data["task_id"],
                 "title": data["title"],
                 "summary": data["summary"],
-                "context": "\n\n".join(section for section in context_sections if section),
-                "target_modules": data["implementation_plan"].get("target_modules", []) or [],
-                "implementation_steps": data["implementation_plan"].get("implementation_steps", []) or [],
+                "context": "\n\n".join(
+                    section for section in context_sections if section
+                ),
+                "target_modules": data["implementation_plan"].get("target_modules", [])
+                or [],
+                "implementation_steps": data["implementation_plan"].get(
+                    "implementation_steps", []
+                )
+                or [],
                 "constraints": data["implementation_plan"].get("constraints", []) or [],
                 "acceptance_criteria": data["acceptance_criteria"],
-                "recommended_skills": ["implementation.plan", "codex.prompt.generate", "claude_code.prompt.generate"],
+                "recommended_skills": [
+                    "implementation.plan",
+                    "codex.prompt.generate",
+                    "claude_code.prompt.generate",
+                ],
                 "agent_handoff": AgentHandoff.model_validate(
                     {
                         "primary_agent": "codex",
                         "supporting_agents": ["claude_code"],
-                        "goals": data["codex_prompt"].get("recommended_execution_order", []) or [],
+                        "goals": data["codex_prompt"].get(
+                            "recommended_execution_order", []
+                        )
+                        or [],
                         "expected_output": data["codex_prompt"].get("agent_prompt", ""),
                         "notes": [note for note in handoff_notes if note],
                     }
@@ -522,8 +664,13 @@ class TestPackBuilder(_BasePackBuilder):
                     {
                         "primary_agent": "claude_code",
                         "supporting_agents": ["codex"],
-                        "goals": data["claude_code_prompt"].get("recommended_execution_order", []) or [],
-                        "expected_output": data["claude_code_prompt"].get("agent_prompt", ""),
+                        "goals": data["claude_code_prompt"].get(
+                            "recommended_execution_order", []
+                        )
+                        or [],
+                        "expected_output": data["claude_code_prompt"].get(
+                            "agent_prompt", ""
+                        ),
                         "notes": [
                             note
                             for note in [
@@ -548,7 +695,9 @@ class ExecutionPackBuilder(_BasePackBuilder):
         implementation_builder: ImplementationPackBuilder | None = None,
         test_builder: TestPackBuilder | None = None,
     ) -> None:
-        self.implementation_builder = implementation_builder or ImplementationPackBuilder()
+        self.implementation_builder = (
+            implementation_builder or ImplementationPackBuilder()
+        )
         self.test_builder = test_builder or TestPackBuilder()
 
     def build(

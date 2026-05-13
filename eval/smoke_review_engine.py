@@ -24,14 +24,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from prd_pal.main import main as cli_main
-import prd_pal.main as cli_module
-from prd_pal.server import app as app_module
+from prd_pal.main import main as cli_main  # noqa: E402
+import prd_pal.main as cli_module  # noqa: E402
+from prd_pal.server import app as app_module  # noqa: E402
 
 
 async def _run_cli_smoke(workspace: Path) -> dict[str, object]:
     input_path = workspace / "smoke_prd.md"
-    input_path.write_text("# Smoke PRD\n\n- Requirement: generate a review report.\n", encoding="utf-8")
+    input_path.write_text(
+        "# Smoke PRD\n\n- Requirement: generate a review report.\n", encoding="utf-8"
+    )
 
     run_dir = workspace / "cli-run"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -41,8 +43,12 @@ async def _run_cli_smoke(workspace: Path) -> dict[str, object]:
         run_trace_path=str(run_dir / "run_trace.json"),
     )
     Path(summary.report_md_path).write_text("# Smoke Report", encoding="utf-8")
-    Path(summary.report_json_path).write_text(json.dumps({"status": "completed"}, ensure_ascii=False), encoding="utf-8")
-    Path(summary.run_trace_path).write_text(json.dumps({"reporter": {"status": "ok"}}, ensure_ascii=False), encoding="utf-8")
+    Path(summary.report_json_path).write_text(
+        json.dumps({"status": "completed"}, ensure_ascii=False), encoding="utf-8"
+    )
+    Path(summary.run_trace_path).write_text(
+        json.dumps({"reporter": {"status": "ok"}}, ensure_ascii=False), encoding="utf-8"
+    )
 
     original_review = cli_module.review_prd_text_async
     original_argv = list(sys.argv)
@@ -58,7 +64,9 @@ async def _run_cli_smoke(workspace: Path) -> dict[str, object]:
 
     output = buffer.getvalue()
     return {
-        "passed": all(token in output for token in ("Report :", "State  :", "Trace  :")),
+        "passed": all(
+            token in output for token in ("Report :", "State  :", "Trace  :")
+        ),
         "output": output.strip(),
         "artifacts": {
             "report_md": summary.report_md_path,
@@ -83,8 +91,13 @@ def _run_fastapi_smoke(workspace: Path) -> dict[str, object]:
             "metrics": {"coverage_ratio": 1.0},
         }
         (report_dir / "report.md").write_text("# Smoke Report", encoding="utf-8")
-        (report_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        (report_dir / "run_trace.json").write_text(json.dumps(report_payload["trace"], ensure_ascii=False, indent=2), encoding="utf-8")
+        (report_dir / "report.json").write_text(
+            json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (report_dir / "run_trace.json").write_text(
+            json.dumps(report_payload["trace"], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         job.status = "completed"
         job.report_paths = {
             "report_md": str(report_dir / "report.md"),
@@ -107,7 +120,9 @@ def _run_fastapi_smoke(workspace: Path) -> dict[str, object]:
         app_module._run_job = fake_run_job
 
         client = TestClient(app_module.app)
-        create_response = client.post("/api/review", json={"prd_text": "# Smoke review"})
+        create_response = client.post(
+            "/api/review", json={"prd_text": "# Smoke review"}
+        )
         time.sleep(0.05)
         status_response = client.get(f"/api/review/{run_id}")
         result_response = client.get(f"/api/review/{run_id}/result")
@@ -157,7 +172,9 @@ def main() -> None:
         },
         "passed": bool(cli_summary["passed"] and api_summary["passed"]),
     }
-    out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["passed"] else 1)
 

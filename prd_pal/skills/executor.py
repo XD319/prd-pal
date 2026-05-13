@@ -11,7 +11,11 @@ from typing import Any, Awaitable, Callable
 
 from pydantic import BaseModel, ValidationError
 
-from .cache_backend import InMemorySkillCacheBackend, SQLiteSkillCacheBackend, SkillCacheBackend
+from .cache_backend import (
+    InMemorySkillCacheBackend,
+    SQLiteSkillCacheBackend,
+    SkillCacheBackend,
+)
 from ..templates import get_template
 from ..utils.trace import trace_start
 
@@ -43,7 +47,11 @@ class SkillSpec:
 
     @property
     def ttl_sec(self) -> int:
-        return self.cache_ttl_sec if self.cache_ttl_sec is not None else _DEFAULT_CACHE_TTL_SEC
+        return (
+            self.cache_ttl_sec
+            if self.cache_ttl_sec is not None
+            else _DEFAULT_CACHE_TTL_SEC
+        )
 
 
 class SkillExecutor:
@@ -75,7 +83,11 @@ class SkillExecutor:
         ttl_sec = max(0, spec.ttl_sec)
         cache_enabled = self._cache_enabled()
         cache_backend = self._resolve_cache_backend()
-        span = trace_start(spec.name, model="none", input_chars=len(_canonical_input_json(validated_input)))
+        span = trace_start(
+            spec.name,
+            model="none",
+            input_chars=len(_canonical_input_json(validated_input)),
+        )
         if spec.template_id:
             span.set_template(get_template(spec.template_id))
 
@@ -170,9 +182,13 @@ class SkillExecutor:
         if isinstance(override, SkillCacheBackend):
             return override
 
-        backend_name = str(override or os.getenv(_CACHE_BACKEND_ENV, "memory")).strip().lower()
+        backend_name = (
+            str(override or os.getenv(_CACHE_BACKEND_ENV, "memory")).strip().lower()
+        )
         if backend_name in {"sqlite", "sqlite3"}:
-            backend_path = self._cache_backend_path or os.getenv(_CACHE_SQLITE_PATH_ENV, ".skills_cache.sqlite3")
+            backend_path = self._cache_backend_path or os.getenv(
+                _CACHE_SQLITE_PATH_ENV, ".skills_cache.sqlite3"
+            )
             return self._sqlite_backend(backend_path)
         return self._memory_backend
 
@@ -199,7 +215,9 @@ def _canonical_input_json(payload: BaseModel) -> str:
 
 
 def _build_cache_key_hash(spec: SkillSpec, payload: BaseModel) -> str:
-    material = "||".join((spec.name, _canonical_input_json(payload), spec.config_version))
+    material = "||".join(
+        (spec.name, _canonical_input_json(payload), spec.config_version)
+    )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -210,7 +228,9 @@ def _validate_output(spec: SkillSpec, raw_output: Any) -> BaseModel:
         raise SkillExecutionError(str(exc)) from exc
 
 
-def _write_trace(trace: TraceSink | None, name: str, trace_data: dict[str, Any]) -> None:
+def _write_trace(
+    trace: TraceSink | None, name: str, trace_data: dict[str, Any]
+) -> None:
     if trace is None:
         return
     if callable(trace):

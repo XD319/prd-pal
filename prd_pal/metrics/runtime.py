@@ -89,18 +89,28 @@ def build_runtime_trace_summary(trace: dict[str, Any] | None) -> dict[str, Any]:
 
         backend_name = str(span.get("cache_backend", "") or "").strip()
         if backend_name:
-            cache_backend_usage[backend_name] = cache_backend_usage.get(backend_name, 0) + 1
+            cache_backend_usage[backend_name] = (
+                cache_backend_usage.get(backend_name, 0) + 1
+            )
 
     slowest_spans.sort(key=lambda item: item["duration_ms"], reverse=True)
     cache_total = cache_hit_count + cache_miss_count
-    slowest = slowest_spans[0] if slowest_spans else {"name": "", "duration_ms": 0, "status": "unknown"}
+    slowest = (
+        slowest_spans[0]
+        if slowest_spans
+        else {"name": "", "duration_ms": 0, "status": "unknown"}
+    )
     return {
-        "total_spans": len([span for span in safe_trace.values() if isinstance(span, dict)]),
+        "total_spans": len(
+            [span for span in safe_trace.values() if isinstance(span, dict)]
+        ),
         "completed_primary_spans": completed_primary_spans,
         "failed_spans": failed_spans,
         "cache_backend_usage": cache_backend_usage,
         "cache_total_count": cache_total,
-        "cache_hit_rate": round(cache_hit_count / cache_total, 4) if cache_total else 0.0,
+        "cache_hit_rate": round(cache_hit_count / cache_total, 4)
+        if cache_total
+        else 0.0,
         "slowest_span_name": str(slowest.get("name", "") or ""),
         "slowest_span_duration_ms": int(slowest.get("duration_ms", 0) or 0),
         "slowest_spans_top_3": slowest_spans[:3],

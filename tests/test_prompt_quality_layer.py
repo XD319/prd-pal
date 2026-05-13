@@ -3,7 +3,10 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from prd_pal.prompt_quality.context_trimmer import trim_context_for_node
-from prd_pal.prompt_quality.output_validator import SchemaValidationError, validate_output
+from prd_pal.prompt_quality.output_validator import (
+    SchemaValidationError,
+    validate_output,
+)
 from prd_pal.prompt_registry import load_prompt_template, list_prompt_nodes
 
 
@@ -41,7 +44,9 @@ def test_trim_context_for_node_short_text_passthrough() -> None:
 
 
 def test_trim_context_for_node_long_text_summarizes() -> None:
-    text = "\n".join(f"- Requirement {i}: user must complete step {i}." for i in range(400))
+    text = "\n".join(
+        f"- Requirement {i}: user must complete step {i}." for i in range(400)
+    )
     result = trim_context_for_node("parser", text, max_chars=1200, chunk_chars=300)
     assert result.was_trimmed is True
     assert result.trimmed_chars <= 1200

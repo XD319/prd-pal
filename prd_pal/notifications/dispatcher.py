@@ -32,7 +32,9 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _resolve_notification_type(notification_type: NotificationType | str) -> NotificationType:
+def _resolve_notification_type(
+    notification_type: NotificationType | str,
+) -> NotificationType:
     try:
         return NotificationType(str(notification_type or "").strip())
     except ValueError as exc:
@@ -133,7 +135,9 @@ def build_notification_record(
         event_type=event.event_type,
         channel=str(channel or "").strip(),
         payload=dict(payload) if isinstance(payload, dict) else {},
-        dispatch_status=DispatchStatus(str(dispatch_status or DispatchStatus.dispatched)),
+        dispatch_status=DispatchStatus(
+            str(dispatch_status or DispatchStatus.dispatched)
+        ),
         created_at=event.created_at,
         dispatched_at=str(dispatched_at or "").strip(),
         error_message=str(error_message or "").strip(),
@@ -143,7 +147,9 @@ def build_notification_record(
         title=event.title,
         summary=event.summary,
         metadata=event.metadata,
-        delivery_metadata=dict(delivery_metadata) if isinstance(delivery_metadata, dict) else {},
+        delivery_metadata=dict(delivery_metadata)
+        if isinstance(delivery_metadata, dict)
+        else {},
         dry_run=event.dry_run,
     )
 
@@ -158,7 +164,9 @@ def append_notification_record(
     if isinstance(record, NotificationDispatchRecord):
         payload = record.model_dump(mode="python")
     elif isinstance(record, dict):
-        payload = NotificationDispatchRecord.model_validate(record).model_dump(mode="python")
+        payload = NotificationDispatchRecord.model_validate(record).model_dump(
+            mode="python"
+        )
     else:
         raise TypeError("record must be a NotificationDispatchRecord or dict")
 
@@ -268,7 +276,8 @@ def dispatch_notification(
             record = NotificationDispatchRecord(
                 notification_id=event.notification_id,
                 event_type=event.event_type,
-                channel=str(notifier.channel or "").strip() or notifier.__class__.__name__,
+                channel=str(notifier.channel or "").strip()
+                or notifier.__class__.__name__,
                 payload=payload if isinstance(payload, dict) else {},
                 dispatch_status=DispatchStatus.failed,
                 created_at=event.created_at,
@@ -285,12 +294,18 @@ def dispatch_notification(
             )
 
         append_notification_record(run_dir, record)
-        _append_dispatch_audit_event(run_dir, record=record, audit_context=audit_context)
+        _append_dispatch_audit_event(
+            run_dir, record=record, audit_context=audit_context
+        )
         dispatches.append(record)
 
-    if dispatches and all(record.dispatch_status == DispatchStatus.failed for record in dispatches):
+    if dispatches and all(
+        record.dispatch_status == DispatchStatus.failed for record in dispatches
+    ):
         status = "failed"
-    elif dispatches and any(record.dispatch_status == DispatchStatus.failed for record in dispatches):
+    elif dispatches and any(
+        record.dispatch_status == DispatchStatus.failed for record in dispatches
+    ):
         status = "partial_success"
     else:
         status = DispatchStatus.dispatched.value

@@ -54,8 +54,12 @@ def security_settings() -> ApiSecuritySettings:
         api_key=str(os.getenv(_API_KEY_ENV, "") or "").strip(),
         bearer_token=str(os.getenv(_API_BEARER_TOKEN_ENV, "") or "").strip(),
         rate_limit_disabled=_env_disabled(_API_RATE_LIMIT_DISABLED_ENV, default=True),
-        rate_limit_max_requests=_env_int(_API_RATE_LIMIT_MAX_REQUESTS_ENV, default=5, minimum=1),
-        rate_limit_window_sec=_env_int(_API_RATE_LIMIT_WINDOW_SEC_ENV, default=60, minimum=1),
+        rate_limit_max_requests=_env_int(
+            _API_RATE_LIMIT_MAX_REQUESTS_ENV, default=5, minimum=1
+        ),
+        rate_limit_window_sec=_env_int(
+            _API_RATE_LIMIT_WINDOW_SEC_ENV, default=60, minimum=1
+        ),
     )
 
 
@@ -70,7 +74,9 @@ def controlled_error_response(
     detail = {"code": code, "message": message}
     if extra:
         detail.update(extra)
-    return JSONResponse(status_code=status_code, content={"detail": detail}, headers=headers)
+    return JSONResponse(
+        status_code=status_code, content={"detail": detail}, headers=headers
+    )
 
 
 def extract_bearer_token(request: Request) -> str:
@@ -83,7 +89,9 @@ def extract_bearer_token(request: Request) -> str:
     return token.strip()
 
 
-def authenticate_request(request: Request, settings: ApiSecuritySettings) -> JSONResponse | None:
+def authenticate_request(
+    request: Request, settings: ApiSecuritySettings
+) -> JSONResponse | None:
     if settings.auth_disabled:
         return None
     if not settings.api_key and not settings.bearer_token:
@@ -162,7 +170,9 @@ def should_skip_request_logging(path: str) -> bool:
     )
 
 
-def enforce_submission_rate_limit(request: Request, settings: ApiSecuritySettings) -> JSONResponse | None:
+def enforce_submission_rate_limit(
+    request: Request, settings: ApiSecuritySettings
+) -> JSONResponse | None:
     if request.method.upper() != "POST" or request.url.path != "/api/review":
         return None
     if settings.rate_limit_disabled:
@@ -175,7 +185,9 @@ def enforce_submission_rate_limit(request: Request, settings: ApiSecuritySetting
         while requests and now - requests[0] >= settings.rate_limit_window_sec:
             requests.popleft()
         if len(requests) >= settings.rate_limit_max_requests:
-            retry_after = max(1, int(settings.rate_limit_window_sec - (now - requests[0])) + 1)
+            retry_after = max(
+                1, int(settings.rate_limit_window_sec - (now - requests[0])) + 1
+            )
             return controlled_error_response(
                 429,
                 code="rate_limit_exceeded",

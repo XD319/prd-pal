@@ -29,7 +29,9 @@ def _require_repository_value(result: RepositoryResult[Any], action: str) -> Any
     if result.ok and result.value is not None:
         return result.value
     if result.error is not None:
-        raise MemoryServiceError(f"{action} failed: {result.error.message} ({result.error.code})")
+        raise MemoryServiceError(
+            f"{action} failed: {result.error.message} ({result.error.code})"
+        )
     raise MemoryServiceError(f"{action} failed unexpectedly")
 
 
@@ -44,7 +46,11 @@ class MemoryService:
         return cls(MemoryRepository(db_path or DEFAULT_MEMORY_DB_PATH))
 
     async def initialize(self) -> bool:
-        return bool(_require_repository_value(await self.repository.initialize(), "memory_repository.initialize"))
+        return bool(
+            _require_repository_value(
+                await self.repository.initialize(), "memory_repository.initialize"
+            )
+        )
 
     async def save_memory(
         self,
@@ -93,9 +99,13 @@ class MemoryService:
         team_id: str | None = None,
         project_id: str | None = None,
     ) -> list[MemoryRecord]:
-        scope_level = level if isinstance(level, MemoryScopeLevel) else MemoryScopeLevel(level)
+        scope_level = (
+            level if isinstance(level, MemoryScopeLevel) else MemoryScopeLevel(level)
+        )
         return _require_repository_value(
-            await self.repository.list_by_scope(level=scope_level, team_id=team_id, project_id=project_id),
+            await self.repository.list_by_scope(
+                level=scope_level, team_id=team_id, project_id=project_id
+            ),
             "memory_repository.list_by_scope",
         )
 
@@ -125,4 +135,3 @@ class MemoryService:
             await self.repository.query_memories(query),
             "memory_repository.query_memories",
         )
-

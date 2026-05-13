@@ -16,7 +16,11 @@ from prd_pal.execution import (
 )
 
 
-def _task(*, mode: ExecutionMode = ExecutionMode.agent_assisted, status: ExecutionTaskStatus = ExecutionTaskStatus.pending) -> ExecutionTask:
+def _task(
+    *,
+    mode: ExecutionMode = ExecutionMode.agent_assisted,
+    status: ExecutionTaskStatus = ExecutionTaskStatus.pending,
+) -> ExecutionTask:
     return ExecutionTask(
         task_id="bundle-1:implementation_pack",
         bundle_id="bundle-1",
@@ -34,17 +38,35 @@ def test_task_lifecycle_supports_happy_path() -> None:
     task = start_task(task, actor="codex-worker-1")
     task = request_review(task, actor="codex-worker-1", detail="checkpoint ready")
     task = start_task(task, actor="reviewer")
-    task = complete_task(task, actor="codex-worker-1", result_summary="implemented and validated")
+    task = complete_task(
+        task, actor="codex-worker-1", result_summary="implemented and validated"
+    )
 
     assert task.status == "completed"
     assert task.assigned_to == "codex-worker-1"
     assert task.result_summary == "implemented and validated"
-    assert [event.event_type for event in task.execution_log] == ["assigned", "started", "checkpoint", "started", "completed"]
+    assert [event.event_type for event in task.execution_log] == [
+        "assigned",
+        "started",
+        "checkpoint",
+        "started",
+        "completed",
+    ]
 
 
 def test_task_lifecycle_supports_failure_and_cancel_paths() -> None:
-    failed = fail_task(start_task(assign_task(_task(), executor="codex", actor="router"), actor="codex"), actor="codex", reason="lint failed")
-    cancelled = cancel_task(assign_task(_task(), executor="codex", actor="router"), actor="lead", reason="scope changed")
+    failed = fail_task(
+        start_task(
+            assign_task(_task(), executor="codex", actor="router"), actor="codex"
+        ),
+        actor="codex",
+        reason="lint failed",
+    )
+    cancelled = cancel_task(
+        assign_task(_task(), executor="codex", actor="router"),
+        actor="lead",
+        reason="scope changed",
+    )
 
     assert failed.status == "failed"
     assert failed.result_summary == "lint failed"
@@ -57,7 +79,12 @@ def test_task_lifecycle_rejects_invalid_transition() -> None:
 
 
 def test_request_review_requires_agent_assisted_mode() -> None:
-    task = start_task(assign_task(_task(mode=ExecutionMode.agent_auto), executor="codex", actor="router"), actor="codex")
+    task = start_task(
+        assign_task(
+            _task(mode=ExecutionMode.agent_auto), executor="codex", actor="router"
+        ),
+        actor="codex",
+    )
 
     with pytest.raises(InvalidExecutionTaskTransitionError):
         request_review(task, actor="codex", detail="manual gate")

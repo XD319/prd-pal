@@ -38,7 +38,9 @@ def _render_prd_review_report(review_result: dict[str, Any]) -> str:
     if final_report:
         lines.append(final_report)
     else:
-        lines.append("_No final report was generated. Use `report.md` as the fallback source._")
+        lines.append(
+            "_No final report was generated. Use `report.md` as the fallback source._"
+        )
     return "\n".join(lines).strip() + "\n"
 
 
@@ -48,11 +50,21 @@ def _render_open_questions(review_result: dict[str, Any]) -> str:
     for item in review_results:
         if not isinstance(item, dict):
             continue
-        issues = [str(issue) for issue in _as_list(item.get("issues")) if str(issue).strip()]
+        issues = [
+            str(issue) for issue in _as_list(item.get("issues")) if str(issue).strip()
+        ]
         if item.get("is_ambiguous") or issues:
-            question = str(item.get("description") or item.get("summary") or item.get("id") or "Unknown item")
+            question = str(
+                item.get("description")
+                or item.get("summary")
+                or item.get("id")
+                or "Unknown item"
+            )
             open_items.append(f"`{item.get('id', 'unknown')}` {question}")
-            open_items.extend([f"  - {issue}" for issue in issues] or ["  - Clarify requirement intent and acceptance criteria."])
+            open_items.extend(
+                [f"  - {issue}" for issue in issues]
+                or ["  - Clarify requirement intent and acceptance criteria."]
+            )
 
     lines = [
         "# Open Questions",
@@ -69,8 +81,16 @@ def _render_open_questions(review_result: dict[str, Any]) -> str:
 def _render_scope_boundary(review_result: dict[str, Any]) -> str:
     parsed_items = _as_list(review_result.get("parsed_items"))
     tasks = _as_list(review_result.get("tasks"))
-    in_scope = [f"`{item.get('id', 'unknown')}` {item.get('description', '')}".strip() for item in parsed_items if isinstance(item, dict)]
-    task_titles = [f"`{task.get('id', 'unknown')}` {task.get('title', '')}".strip() for task in tasks if isinstance(task, dict)]
+    in_scope = [
+        f"`{item.get('id', 'unknown')}` {item.get('description', '')}".strip()
+        for item in parsed_items
+        if isinstance(item, dict)
+    ]
+    task_titles = [
+        f"`{task.get('id', 'unknown')}` {task.get('title', '')}".strip()
+        for task in tasks
+        if isinstance(task, dict)
+    ]
 
     lines = [
         "# Scope Boundary",
@@ -102,20 +122,36 @@ def _render_tech_design_draft(review_result: dict[str, Any]) -> str:
         "",
         "## Target Modules",
         "",
-        *_md_bullets([str(item) for item in _as_list(implementation_plan.get("target_modules"))], "No target modules were generated."),
+        *_md_bullets(
+            [str(item) for item in _as_list(implementation_plan.get("target_modules"))],
+            "No target modules were generated.",
+        ),
         "",
         "## Proposed Implementation Steps",
         "",
-        *_md_bullets([str(item) for item in _as_list(implementation_plan.get("implementation_steps"))], "No implementation steps were generated."),
+        *_md_bullets(
+            [
+                str(item)
+                for item in _as_list(implementation_plan.get("implementation_steps"))
+            ],
+            "No implementation steps were generated.",
+        ),
         "",
         "## Constraints",
         "",
-        *_md_bullets([str(item) for item in _as_list(implementation_plan.get("constraints"))], "No explicit implementation constraints were generated."),
+        *_md_bullets(
+            [str(item) for item in _as_list(implementation_plan.get("constraints"))],
+            "No explicit implementation constraints were generated.",
+        ),
         "",
         "## Delivery Tasks",
         "",
         *_md_bullets(
-            [f"`{task.get('id', 'unknown')}` {task.get('title', '')}".strip() for task in tasks if isinstance(task, dict)],
+            [
+                f"`{task.get('id', 'unknown')}` {task.get('title', '')}".strip()
+                for task in tasks
+                if isinstance(task, dict)
+            ],
             "No delivery tasks were generated.",
         ),
     ]
@@ -129,7 +165,11 @@ def _render_test_checklist(review_result: dict[str, Any]) -> str:
         f"Resolve review issue for `{item.get('id', 'unknown')}`: {issue}"
         for item in review_results
         if isinstance(item, dict)
-        for issue in [str(candidate) for candidate in _as_list(item.get("issues")) if str(candidate).strip()]
+        for issue in [
+            str(candidate)
+            for candidate in _as_list(item.get("issues"))
+            if str(candidate).strip()
+        ]
     ]
     lines = [
         "# Test Checklist",
@@ -138,15 +178,24 @@ def _render_test_checklist(review_result: dict[str, Any]) -> str:
         "",
         "## Test Scope",
         "",
-        *_md_bullets([str(item) for item in _as_list(test_plan.get("test_scope"))], "No test scope was generated."),
+        *_md_bullets(
+            [str(item) for item in _as_list(test_plan.get("test_scope"))],
+            "No test scope was generated.",
+        ),
         "",
         "## Edge Cases",
         "",
-        *_md_bullets([str(item) for item in _as_list(test_plan.get("edge_cases"))], "No edge cases were generated."),
+        *_md_bullets(
+            [str(item) for item in _as_list(test_plan.get("edge_cases"))],
+            "No edge cases were generated.",
+        ),
         "",
         "## Regression Focus",
         "",
-        *_md_bullets([str(item) for item in _as_list(test_plan.get("regression_focus"))], "No regression focus was generated."),
+        *_md_bullets(
+            [str(item) for item in _as_list(test_plan.get("regression_focus"))],
+            "No regression focus was generated.",
+        ),
         "",
         "## Review-Driven Checks",
         "",
@@ -724,12 +773,27 @@ class TemplateVersionNotFoundError(TemplateRegistryError):
     """Raised when a requested template version cannot be resolved."""
 
 
-def _sorted_templates(templates: list[TemplateDefinition]) -> tuple[TemplateDefinition, ...]:
-    return tuple(sorted(templates, key=lambda template: (template.template_type, template.template_id, template.version)))
+def _sorted_templates(
+    templates: list[TemplateDefinition],
+) -> tuple[TemplateDefinition, ...]:
+    return tuple(
+        sorted(
+            templates,
+            key=lambda template: (
+                template.template_type,
+                template.template_id,
+                template.version,
+            ),
+        )
+    )
 
 
 def _template_status(template: TemplateDefinition) -> str:
-    return "active" if is_default_template(template.template_id, template.version) else "registered"
+    return (
+        "active"
+        if is_default_template(template.template_id, template.version)
+        else "registered"
+    )
 
 
 def _lookup_versions(template_id: str) -> dict[str, TemplateDefinition]:
@@ -746,12 +810,18 @@ def _lookup_template_ids_by_type(template_type: str) -> tuple[str, ...]:
     return tuple(sorted(ids))
 
 
-def register_template(template: TemplateDefinition, *, is_default: bool | None = None) -> TemplateDefinition:
+def register_template(
+    template: TemplateDefinition, *, is_default: bool | None = None
+) -> TemplateDefinition:
     versions = _REGISTERED_TEMPLATES.setdefault(template.template_id, {})
     if template.version in versions:
-        raise ValueError(f"template already registered: {template.template_id}@{template.version}")
+        raise ValueError(
+            f"template already registered: {template.template_id}@{template.version}"
+        )
     versions[template.version] = template
-    _TEMPLATE_IDS_BY_TYPE.setdefault(template.template_type, set()).add(template.template_id)
+    _TEMPLATE_IDS_BY_TYPE.setdefault(template.template_type, set()).add(
+        template.template_id
+    )
     if is_default is not False:
         _DEFAULT_TEMPLATE_VERSION[template.template_id] = template.version
     elif template.template_id not in _DEFAULT_TEMPLATE_VERSION:
@@ -764,7 +834,9 @@ def resolve_default_template_version(template_id: str) -> str:
     try:
         return _DEFAULT_TEMPLATE_VERSION[template_id]
     except KeyError as exc:
-        raise TemplateVersionNotFoundError(f"no default version registered for template_id: {template_id}") from exc
+        raise TemplateVersionNotFoundError(
+            f"no default version registered for template_id: {template_id}"
+        ) from exc
 
 
 def resolve_template_version(template_id: str, version: str | None = None) -> str:
@@ -774,7 +846,9 @@ def resolve_template_version(template_id: str, version: str | None = None) -> st
     normalized_version = str(version or "").strip()
     if normalized_version in versions:
         return normalized_version
-    raise TemplateVersionNotFoundError(f"unknown template version: {template_id}@{normalized_version}")
+    raise TemplateVersionNotFoundError(
+        f"unknown template version: {template_id}@{normalized_version}"
+    )
 
 
 def get_default_template(template_id: str) -> TemplateDefinition:
@@ -793,7 +867,9 @@ def get_template(template_id: str, version: str | None = None) -> TemplateDefini
 
 def is_default_template(template_id: str, version: str) -> bool:
     try:
-        return resolve_default_template_version(template_id) == str(version or "").strip()
+        return (
+            resolve_default_template_version(template_id) == str(version or "").strip()
+        )
     except TemplateRegistryError:
         return False
 
@@ -806,19 +882,33 @@ def list_templates(
     if template_type is not None:
         return get_templates_by_type(template_type, version=version)
 
-    templates = [template for versions in _REGISTERED_TEMPLATES.values() for template in versions.values()]
+    templates = [
+        template
+        for versions in _REGISTERED_TEMPLATES.values()
+        for template in versions.values()
+    ]
     if version is not None:
         normalized_version = str(version or "").strip()
-        templates = [template for template in templates if template.version == normalized_version]
+        templates = [
+            template for template in templates if template.version == normalized_version
+        ]
         if not templates:
-            raise TemplateVersionNotFoundError(f"unknown template version: {normalized_version}")
+            raise TemplateVersionNotFoundError(
+                f"unknown template version: {normalized_version}"
+            )
     return _sorted_templates(templates)
 
 
-def get_templates_by_type(template_type: str, *, version: str | None = None) -> tuple[TemplateDefinition, ...]:
+def get_templates_by_type(
+    template_type: str, *, version: str | None = None
+) -> tuple[TemplateDefinition, ...]:
     template_ids = _lookup_template_ids_by_type(str(template_type or "").strip())
     if version is None:
-        templates = [template for template_id in template_ids for template in _lookup_versions(template_id).values()]
+        templates = [
+            template
+            for template_id in template_ids
+            for template in _lookup_versions(template_id).values()
+        ]
         return _sorted_templates(templates)
 
     normalized_version = str(version or "").strip()
@@ -835,7 +925,9 @@ def get_templates_by_type(template_type: str, *, version: str | None = None) -> 
     return _sorted_templates(templates)
 
 
-def find_templates_by_version(version: str, *, template_type: str | None = None) -> tuple[TemplateDefinition, ...]:
+def find_templates_by_version(
+    version: str, *, template_type: str | None = None
+) -> tuple[TemplateDefinition, ...]:
     return list_templates(template_type=template_type, version=version)
 
 
@@ -852,18 +944,27 @@ def list_template_records(
     template_type: str | None = None,
     version: str | None = None,
 ) -> tuple[dict[str, Any], ...]:
-    return tuple(get_template_record(template.template_id, template.version) for template in list_templates(template_type=template_type, version=version))
+    return tuple(
+        get_template_record(template.template_id, template.version)
+        for template in list_templates(template_type=template_type, version=version)
+    )
 
 
-def get_review_prompt_template(template_id: str, version: str | None = None) -> ReviewPromptTemplate:
+def get_review_prompt_template(
+    template_id: str, version: str | None = None
+) -> ReviewPromptTemplate:
     return cast(ReviewPromptTemplate, get_template(template_id, version))
 
 
-def get_adapter_prompt_template(template_id: str, version: str | None = None) -> AdapterPromptTemplate:
+def get_adapter_prompt_template(
+    template_id: str, version: str | None = None
+) -> AdapterPromptTemplate:
     return cast(AdapterPromptTemplate, get_template(template_id, version))
 
 
-def get_delivery_artifact_template(template_id: str, version: str | None = None) -> DeliveryArtifactTemplate:
+def get_delivery_artifact_template(
+    template_id: str, version: str | None = None
+) -> DeliveryArtifactTemplate:
     return cast(DeliveryArtifactTemplate, get_template(template_id, version))
 
 

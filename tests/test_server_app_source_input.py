@@ -19,7 +19,16 @@ async def test_create_review_keeps_legacy_prd_path_compatible(tmp_path, monkeypa
     prd_file.write_text("# Legacy PRD", encoding="utf-8")
     captured: dict[str, object] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None, audit_context=None):
+    async def fake_run_job(
+        job,
+        *,
+        prd_text=None,
+        prd_path=None,
+        source=None,
+        mode=None,
+        llm_options=None,
+        audit_context=None,
+    ):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
@@ -33,7 +42,9 @@ async def test_create_review_keeps_legacy_prd_path_compatible(tmp_path, monkeypa
     monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
     app_module._jobs.clear()
 
-    result = await app_module.create_review(app_module.ReviewCreateRequest(prd_path=str(prd_file)))
+    result = await app_module.create_review(
+        app_module.ReviewCreateRequest(prd_path=str(prd_file))
+    )
     job = app_module._jobs[result["run_id"]]
     await job.task
 
@@ -48,12 +59,23 @@ async def test_create_review_keeps_legacy_prd_path_compatible(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, monkeypatch):
+async def test_create_review_prioritizes_source_over_legacy_fields(
+    tmp_path, monkeypatch
+):
     source_file = tmp_path / "source_prd.md"
     source_file.write_text("# Source PRD", encoding="utf-8")
     captured: dict[str, object] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None, audit_context=None):
+    async def fake_run_job(
+        job,
+        *,
+        prd_text=None,
+        prd_path=None,
+        source=None,
+        mode=None,
+        llm_options=None,
+        audit_context=None,
+    ):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
@@ -90,7 +112,16 @@ async def test_create_review_prioritizes_source_over_legacy_fields(tmp_path, mon
 async def test_create_review_forwards_runtime_llm_options(tmp_path, monkeypatch):
     captured: dict[str, object] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None, audit_context=None):
+    async def fake_run_job(
+        job,
+        *,
+        prd_text=None,
+        prd_path=None,
+        source=None,
+        mode=None,
+        llm_options=None,
+        audit_context=None,
+    ):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
@@ -128,7 +159,9 @@ async def test_create_review_forwards_runtime_llm_options(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_get_review_status_keeps_legacy_report_paths_for_completed_run(tmp_path, monkeypatch):
+async def test_get_review_status_keeps_legacy_report_paths_for_completed_run(
+    tmp_path, monkeypatch
+):
     run_id = "20260308T020303Z"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
@@ -154,7 +187,16 @@ async def test_get_review_status_keeps_legacy_report_paths_for_completed_run(tmp
 def test_feishu_submit_successfully_reuses_review_submission(tmp_path, monkeypatch):
     captured: dict[str, object] = {}
 
-    async def fake_run_job(job, *, prd_text=None, prd_path=None, source=None, mode=None, llm_options=None, audit_context=None):
+    async def fake_run_job(
+        job,
+        *,
+        prd_text=None,
+        prd_path=None,
+        source=None,
+        mode=None,
+        llm_options=None,
+        audit_context=None,
+    ):
         captured["prd_text"] = prd_text
         captured["prd_path"] = prd_path
         captured["source"] = source
@@ -203,7 +245,11 @@ def test_feishu_submit_successfully_reuses_review_submission(tmp_path, monkeypat
             "tenant_key": "tenant-test",
         },
     }
-    entry_context = json.loads((tmp_path / "20260308T020305Z" / "entry_context.json").read_text(encoding="utf-8"))
+    entry_context = json.loads(
+        (tmp_path / "20260308T020305Z" / "entry_context.json").read_text(
+            encoding="utf-8"
+        )
+    )
     assert entry_context == {
         "source_origin": "feishu",
         "entry_mode": "plugin",

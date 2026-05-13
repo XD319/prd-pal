@@ -11,8 +11,6 @@ All LLM calls are mocked — no API keys required.
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import AsyncMock, patch
 
 from prd_pal.workflow import (
     _route_decider_node,
@@ -57,14 +55,26 @@ class TestRouteDeciderNode:
     """_route_decider_node decides loop vs finish and records trace."""
 
     def test_high_ratio_round0_triggers_loop(self, sample_review_state: ReviewState):
-        state: ReviewState = {**sample_review_state, "high_risk_ratio": 0.6, "revision_round": 0, "trace": {}}
+        state: ReviewState = {
+            **sample_review_state,
+            "high_risk_ratio": 0.6,
+            "revision_round": 0,
+            "trace": {},
+        }
         update = _route_decider_node(state)
         assert update["routing_reason"].startswith("loop:")
         assert update["revision_round"] == 1
         assert update["trace"]["router"]["decision"] == "clarify"
 
-    def test_high_ratio_round1_triggers_second_loop(self, sample_review_state: ReviewState):
-        state: ReviewState = {**sample_review_state, "high_risk_ratio": 0.5, "revision_round": 1, "trace": {}}
+    def test_high_ratio_round1_triggers_second_loop(
+        self, sample_review_state: ReviewState
+    ):
+        state: ReviewState = {
+            **sample_review_state,
+            "high_risk_ratio": 0.5,
+            "revision_round": 1,
+            "trace": {},
+        }
         update = _route_decider_node(state)
         assert update["routing_reason"].startswith("loop:")
         assert update["revision_round"] == 2
@@ -135,8 +145,19 @@ def _mock_parser_output():
 
 def _mock_planner_output():
     return {
-        "tasks": [{"id": "T-1", "title": "Design", "owner": "BE", "requirement_ids": ["REQ-001"], "depends_on": [], "estimate_days": 3}],
-        "milestones": [{"id": "M-1", "title": "MVP", "includes": ["T-1"], "target_days": 5}],
+        "tasks": [
+            {
+                "id": "T-1",
+                "title": "Design",
+                "owner": "BE",
+                "requirement_ids": ["REQ-001"],
+                "depends_on": [],
+                "estimate_days": 3,
+            }
+        ],
+        "milestones": [
+            {"id": "M-1", "title": "MVP", "includes": ["T-1"], "target_days": 5}
+        ],
         "dependencies": [],
         "estimation": {"total_days": 10, "buffer_days": 2},
         "trace": {},
@@ -145,7 +166,15 @@ def _mock_planner_output():
 
 def _mock_risk_output():
     return {
-        "risks": [{"id": "R-1", "description": "Tight buffer", "impact": "high", "mitigation": "Add buffer", "buffer_days": 2}],
+        "risks": [
+            {
+                "id": "R-1",
+                "description": "Tight buffer",
+                "impact": "high",
+                "mitigation": "Add buffer",
+                "buffer_days": 2,
+            }
+        ],
         "trace": {},
     }
 
@@ -154,8 +183,22 @@ def _mock_reviewer_high_risk():
     """Reviewer output where all items are flagged → high_risk_ratio = 1.0."""
     return {
         "review_results": [
-            {"id": "REQ-001", "is_clear": False, "is_testable": False, "is_ambiguous": True, "issues": ["Vague"], "suggestions": "Fix"},
-            {"id": "REQ-002", "is_clear": False, "is_testable": False, "is_ambiguous": True, "issues": ["Vague"], "suggestions": "Fix"},
+            {
+                "id": "REQ-001",
+                "is_clear": False,
+                "is_testable": False,
+                "is_ambiguous": True,
+                "issues": ["Vague"],
+                "suggestions": "Fix",
+            },
+            {
+                "id": "REQ-002",
+                "is_clear": False,
+                "is_testable": False,
+                "is_ambiguous": True,
+                "issues": ["Vague"],
+                "suggestions": "Fix",
+            },
         ],
         "plan_review": {"coverage": "OK", "milestones": "OK", "estimation": "OK"},
         "trace": {},
@@ -166,8 +209,22 @@ def _mock_reviewer_low_risk():
     """Reviewer output where all items pass → high_risk_ratio = 0.0."""
     return {
         "review_results": [
-            {"id": "REQ-001", "is_clear": True, "is_testable": True, "is_ambiguous": False, "issues": [], "suggestions": ""},
-            {"id": "REQ-002", "is_clear": True, "is_testable": True, "is_ambiguous": False, "issues": [], "suggestions": ""},
+            {
+                "id": "REQ-001",
+                "is_clear": True,
+                "is_testable": True,
+                "is_ambiguous": False,
+                "issues": [],
+                "suggestions": "",
+            },
+            {
+                "id": "REQ-002",
+                "is_clear": True,
+                "is_testable": True,
+                "is_ambiguous": False,
+                "issues": [],
+                "suggestions": "",
+            },
         ],
         "plan_review": {"coverage": "OK", "milestones": "OK", "estimation": "OK"},
         "trace": {},

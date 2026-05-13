@@ -173,7 +173,9 @@ class SQLiteRepositoryBase:
         )
 
     @staticmethod
-    def _raise_validation_error(message: str, *, details: dict[str, Any] | None = None) -> None:
+    def _raise_validation_error(
+        message: str, *, details: dict[str, Any] | None = None
+    ) -> None:
         raise RepositoryOperationError(
             RepositoryErrorCode.validation_error,
             message,

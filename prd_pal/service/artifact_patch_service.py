@@ -67,7 +67,10 @@ def _resolve_output_root(options: dict[str, Any] | None) -> Path:
 
 
 def _resolve_failure_mode(options: dict[str, Any] | None) -> PatchFailureMode:
-    raw_value = str((options or {}).get("failure_mode") or PatchFailureMode.reject).strip() or "reject"
+    raw_value = (
+        str((options or {}).get("failure_mode") or PatchFailureMode.reject).strip()
+        or "reject"
+    )
     return PatchFailureMode(raw_value)
 
 
@@ -75,20 +78,27 @@ def _require_repository_value(result: RepositoryResult[Any], action: str) -> Any
     if result.ok and result.value is not None:
         return result.value
     if result.error is not None:
-        raise ArtifactPatchPersistenceError(f"{action} failed: {result.error.message} ({result.error.code})")
+        raise ArtifactPatchPersistenceError(
+            f"{action} failed: {result.error.message} ({result.error.code})"
+        )
     raise ArtifactPatchPersistenceError(f"{action} failed unexpectedly")
 
 
 def _load_structured_document(version: ArtifactVersion) -> StructuredArtifactDocument:
     content_path = Path(str(version.content_path or "").strip())
     if not content_path.exists() or not content_path.is_file():
-        raise FileNotFoundError(f"artifact content not found for version_id={version.version_id}: {content_path}")
+        raise FileNotFoundError(
+            f"artifact content not found for version_id={version.version_id}: {content_path}"
+        )
     payload = json.loads(content_path.read_text(encoding="utf-8"))
     return StructuredArtifactDocument.model_validate(payload)
 
 
 def _serialize_document(document: StructuredArtifactDocument) -> str:
-    return json.dumps(document.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n"
+    return (
+        json.dumps(document.model_dump(mode="json"), ensure_ascii=False, indent=2)
+        + "\n"
+    )
 
 
 def _build_diff_payload(
@@ -114,7 +124,9 @@ def _build_diff_payload(
 
 
 def _get_block_map(document: StructuredArtifactDocument) -> dict[str, dict[str, Any]]:
-    return {block.block_id: block.model_dump(mode="python") for block in document.blocks}
+    return {
+        block.block_id: block.model_dump(mode="python") for block in document.blocks
+    }
 
 
 def _get_field_value(block_payload: dict[str, Any], field: str) -> Any:
@@ -155,7 +167,9 @@ def _match_delete_snapshot(block_payload: dict[str, Any], old_value: Any) -> boo
             str(old_value.get("title", "")) == block_payload["title"]
             and str(old_value.get("content", "")) == block_payload["content"]
         )
-    return str(old_value) == json.dumps(block_payload, ensure_ascii=False, sort_keys=True)
+    return str(old_value) == json.dumps(
+        block_payload, ensure_ascii=False, sort_keys=True
+    )
 
 
 def _build_issue(
@@ -191,7 +205,9 @@ def _result_from_issues(
     failure_mode: PatchFailureMode,
     applied_ops: list[PatchApplyOpResult] | None = None,
 ) -> ArtifactPatchApplyResult:
-    message = "; ".join(issue.message for issue in issues) or "Patch application failed."
+    message = (
+        "; ".join(issue.message for issue in issues) or "Patch application failed."
+    )
     return ArtifactPatchApplyResult(
         patch_id=patch.patch_id,
         artifact_id=patch.artifact_id,
@@ -211,7 +227,9 @@ def _apply_patch_to_document(
     if not patch.ops:
         raise ValueError("patch.ops must not be empty")
 
-    working = StructuredArtifactDocument.model_validate(document.model_dump(mode="python"))
+    working = StructuredArtifactDocument.model_validate(
+        document.model_dump(mode="python")
+    )
     block_order = [block.block_id for block in working.blocks]
     block_map = _get_block_map(working)
     op_results: list[PatchApplyOpResult] = []
@@ -224,10 +242,15 @@ def _apply_patch_to_document(
                 f"target block_id not found: {op.target.block_id}",
                 op=op,
             )
-            raise LookupError(json.dumps(issue.model_dump(mode="json"), ensure_ascii=False))
+            raise LookupError(
+                json.dumps(issue.model_dump(mode="json"), ensure_ascii=False)
+            )
 
         try:
-            if op.action in {ArtifactPatchAction.set_field, ArtifactPatchAction.replace_text}:
+            if op.action in {
+                ArtifactPatchAction.set_field,
+                ArtifactPatchAction.replace_text,
+            }:
                 current_value = _get_field_value(target_payload, op.target.field)
                 if current_value != op.old_value:
                     issue = _build_issue(
@@ -236,7 +259,9 @@ def _apply_patch_to_document(
                         op=op,
                         details={"expected": op.old_value, "actual": current_value},
                     )
-                    raise ValueError(json.dumps(issue.model_dump(mode="json"), ensure_ascii=False))
+                    raise ValueError(
+                        json.dumps(issue.model_dump(mode="json"), ensure_ascii=False)
+                    )
                 _set_field_value(target_payload, op.target.field, op.new_value)
             elif op.action == ArtifactPatchAction.append_text:
                 _append_field_value(target_payload, op.target.field, str(op.new_value))
@@ -251,11 +276,19 @@ def _apply_patch_to_document(
                         f"new block_id already exists: {op.new_block.block_id}",
                         op=op,
                     )
-                    raise ValueError(json.dumps(issue.model_dump(mode="json"), ensure_ascii=False))
+                    raise ValueError(
+                        json.dumps(issue.model_dump(mode="json"), ensure_ascii=False)
+                    )
                 anchor_index = block_order.index(op.target.block_id)
-                insert_index = anchor_index + 1 if op.action == ArtifactPatchAction.insert_block_after else anchor_index
+                insert_index = (
+                    anchor_index + 1
+                    if op.action == ArtifactPatchAction.insert_block_after
+                    else anchor_index
+                )
                 block_order.insert(insert_index, op.new_block.block_id)
-                block_map[op.new_block.block_id] = op.new_block.model_dump(mode="python")
+                block_map[op.new_block.block_id] = op.new_block.model_dump(
+                    mode="python"
+                )
             elif op.action == ArtifactPatchAction.delete_block:
                 if not _match_delete_snapshot(target_payload, op.old_value):
                     issue = _build_issue(
@@ -263,8 +296,14 @@ def _apply_patch_to_document(
                         f"delete_block snapshot mismatch for {op.target.block_id}",
                         op=op,
                     )
-                    raise ValueError(json.dumps(issue.model_dump(mode="json"), ensure_ascii=False))
-                block_order = [block_id for block_id in block_order if block_id != op.target.block_id]
+                    raise ValueError(
+                        json.dumps(issue.model_dump(mode="json"), ensure_ascii=False)
+                    )
+                block_order = [
+                    block_id
+                    for block_id in block_order
+                    if block_id != op.target.block_id
+                ]
                 del block_map[op.target.block_id]
 
             op_results.append(
@@ -283,9 +322,13 @@ def _apply_patch_to_document(
                 f"unsupported field target: {exc.args[0]}",
                 op=op,
             )
-            raise ValueError(json.dumps(issue.model_dump(mode="json"), ensure_ascii=False)) from exc
+            raise ValueError(
+                json.dumps(issue.model_dump(mode="json"), ensure_ascii=False)
+            ) from exc
 
-    working.blocks = [ArtifactBlock.model_validate(block_map[block_id]) for block_id in block_order]
+    working.blocks = [
+        ArtifactBlock.model_validate(block_map[block_id]) for block_id in block_order
+    ]
     working.version = document.version + 1
     return working, op_results
 
@@ -360,15 +403,23 @@ async def apply_artifact_patch_async(
     patch_payload: ArtifactPatch | dict[str, Any],
     options: dict[str, Any] | None = None,
 ) -> ArtifactPatchApplyResult:
-    patch = patch_payload if isinstance(patch_payload, ArtifactPatch) else ArtifactPatch.model_validate(patch_payload)
+    patch = (
+        patch_payload
+        if isinstance(patch_payload, ArtifactPatch)
+        else ArtifactPatch.model_validate(patch_payload)
+    )
     workspace_db_path = _resolve_workspace_db_path(options)
     output_root = _resolve_output_root(options)
     failure_mode = _resolve_failure_mode(options)
     artifact_repository = ArtifactRepository(workspace_db_path)
     workspace_repository = WorkspaceRepository(workspace_db_path)
 
-    _require_repository_value(await artifact_repository.initialize(), "artifact_repository.initialize")
-    _require_repository_value(await workspace_repository.initialize(), "workspace_repository.initialize")
+    _require_repository_value(
+        await artifact_repository.initialize(), "artifact_repository.initialize"
+    )
+    _require_repository_value(
+        await workspace_repository.initialize(), "workspace_repository.initialize"
+    )
 
     source_version = _require_repository_value(
         await artifact_repository.get_version(str(artifact_version_id).strip()),
@@ -391,7 +442,9 @@ async def apply_artifact_patch_async(
             )
         )
     if not patch.ops:
-        issues.append(_build_issue(PatchFailureCode.empty_ops, "patch.ops must not be empty"))
+        issues.append(
+            _build_issue(PatchFailureCode.empty_ops, "patch.ops must not be empty")
+        )
     if issues:
         return _result_from_issues(patch, issues, failure_mode=failure_mode)
 
@@ -408,7 +461,12 @@ async def apply_artifact_patch_async(
             issue = _build_issue(PatchFailureCode.schema_invalid, str(exc))
         return _result_from_issues(patch, [issue], failure_mode=failure_mode)
 
-    target_dir = output_root / source_version.workspace_id / source_version.artifact_key / f"v{next_document.version}"
+    target_dir = (
+        output_root
+        / source_version.workspace_id
+        / source_version.artifact_key
+        / f"v{next_document.version}"
+    )
     target_dir.mkdir(parents=True, exist_ok=True)
     content_path = target_dir / "artifact.json"
     patch_path = target_dir / "patch.json"
@@ -419,7 +477,9 @@ async def apply_artifact_patch_async(
         encoding="utf-8",
     )
     diff_payload = _build_diff_payload(source_document, next_document, patch)
-    diff_path.write_text(json.dumps(diff_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    diff_path.write_text(
+        json.dumps(diff_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
     timestamp = _utc_now_iso()
     next_version = ArtifactVersion(
@@ -448,7 +508,10 @@ async def apply_artifact_patch_async(
                 target_id=source_version.version_id,
                 link_type="patched_from",
                 source_run_id=source_version.source_run_id,
-                metadata={"patch_id": patch.patch_id, "clarification_id": patch.clarification_id},
+                metadata={
+                    "patch_id": patch.patch_id,
+                    "clarification_id": patch.clarification_id,
+                },
             )
         ],
         metadata={
@@ -462,16 +525,24 @@ async def apply_artifact_patch_async(
     )
     next_version.trace_links[0].source_id = next_version.version_id
 
-    _require_repository_value(await artifact_repository.upsert_version(next_version), "artifact_repository.upsert_version")
+    _require_repository_value(
+        await artifact_repository.upsert_version(next_version),
+        "artifact_repository.upsert_version",
+    )
 
-    workspace_result = await workspace_repository.get_workspace(source_version.workspace_id)
+    workspace_result = await workspace_repository.get_workspace(
+        source_version.workspace_id
+    )
     existing_workspace = workspace_result.value if workspace_result.ok else None
     workspace_state = _build_workspace_state(
         source_version=source_version,
         next_version=next_version,
         existing_workspace=existing_workspace,
     )
-    _require_repository_value(await workspace_repository.upsert_workspace(workspace_state), "workspace_repository.upsert_workspace")
+    _require_repository_value(
+        await workspace_repository.upsert_workspace(workspace_state),
+        "workspace_repository.upsert_workspace",
+    )
 
     return ArtifactPatchApplyResult(
         patch_id=patch.patch_id,

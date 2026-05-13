@@ -10,7 +10,9 @@ from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 from typing import Any
 
-_RUN_ID_VAR: contextvars.ContextVar[str] = contextvars.ContextVar("requirement_review_run_id", default="")
+_RUN_ID_VAR: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "requirement_review_run_id", default=""
+)
 _LOGGER_NAMESPACE = "prd_pal"
 _DEFAULT_LOG_FORMAT = "human"
 _DEFAULT_LOG_LEVEL = "INFO"
@@ -28,22 +30,36 @@ _STANDARD_RECORD_ATTRS = set(logging.makeLogRecord({}).__dict__)
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _format_timestamp(created: float) -> str:
-    return datetime.fromtimestamp(created, tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.fromtimestamp(created, tz=timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _normalize_log_level(log_level: str | int | None) -> int:
     if isinstance(log_level, int):
         return log_level
-    raw_level = str(log_level or os.getenv("LOG_LEVEL", _DEFAULT_LOG_LEVEL)).strip().upper()
+    raw_level = (
+        str(log_level or os.getenv("LOG_LEVEL", _DEFAULT_LOG_LEVEL)).strip().upper()
+    )
     return getattr(logging, raw_level, logging.INFO)
 
 
 def _normalize_log_format(log_format: str | None) -> str:
-    raw_format = str(log_format or os.getenv("LOG_FORMAT", _DEFAULT_LOG_FORMAT)).strip().lower()
+    raw_format = (
+        str(log_format or os.getenv("LOG_FORMAT", _DEFAULT_LOG_FORMAT)).strip().lower()
+    )
     return "json" if raw_format == "json" else "human"
 
 
@@ -138,10 +154,16 @@ class HumanReadableFormatter(logging.Formatter):
 
 
 def build_formatter(log_format: str | None = None) -> logging.Formatter:
-    return StructuredFormatter() if _normalize_log_format(log_format) == "json" else HumanReadableFormatter()
+    return (
+        StructuredFormatter()
+        if _normalize_log_format(log_format) == "json"
+        else HumanReadableFormatter()
+    )
 
 
-def setup_logging(log_level: str | int | None = None, log_format: str | None = None) -> None:
+def setup_logging(
+    log_level: str | int | None = None, log_format: str | None = None
+) -> None:
     resolved_level = _normalize_log_level(log_level)
     formatter = build_formatter(log_format)
     context_filter = _ContextFilter()
@@ -170,7 +192,9 @@ def get_logger(name: str | None = None) -> logging.Logger:
     normalized = str(name or "").strip()
     if not normalized:
         return logging.getLogger(_LOGGER_NAMESPACE)
-    if normalized == _LOGGER_NAMESPACE or normalized.startswith(f"{_LOGGER_NAMESPACE}."):
+    if normalized == _LOGGER_NAMESPACE or normalized.startswith(
+        f"{_LOGGER_NAMESPACE}."
+    ):
         return logging.getLogger(normalized)
     return logging.getLogger(f"{_LOGGER_NAMESPACE}.{normalized}")
 

@@ -29,4 +29,3 @@ def test_ready_endpoint_checks_startup_and_outputs_root(tmp_path, monkeypatch) -
     assert payload["status"] == "ready"
     assert payload["checks"]["startup_completed"] is True
     assert payload["checks"]["outputs_root_writable"] is True
-

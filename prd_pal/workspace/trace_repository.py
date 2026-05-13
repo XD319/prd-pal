@@ -47,14 +47,20 @@ class TraceRepository(SQLiteRepositoryBase):
 
         return await self._run("trace_repository.replace_links_for_source", operation)
 
-    async def list_by_source(self, source_type: str, source_id: str) -> RepositoryResult[list[TraceLink]]:
+    async def list_by_source(
+        self, source_type: str, source_id: str
+    ) -> RepositoryResult[list[TraceLink]]:
         async def operation(connection: Any) -> list[TraceLink]:
             await self._ensure_schema(connection)
-            return await self._list_by_source_with_connection(connection, source_type, source_id)
+            return await self._list_by_source_with_connection(
+                connection, source_type, source_id
+            )
 
         return await self._run("trace_repository.list_by_source", operation)
 
-    async def list_by_target(self, target_type: str, target_id: str) -> RepositoryResult[list[TraceLink]]:
+    async def list_by_target(
+        self, target_type: str, target_id: str
+    ) -> RepositoryResult[list[TraceLink]]:
         async def operation(connection: Any) -> list[TraceLink]:
             await self._ensure_schema(connection)
             cursor = await connection.execute(
@@ -72,7 +78,9 @@ class TraceRepository(SQLiteRepositoryBase):
 
         return await self._run("trace_repository.list_by_target", operation)
 
-    async def list_by_run(self, source_run_id: str) -> RepositoryResult[list[TraceLink]]:
+    async def list_by_run(
+        self, source_run_id: str
+    ) -> RepositoryResult[list[TraceLink]]:
         async def operation(connection: Any) -> list[TraceLink]:
             await self._ensure_schema(connection)
             cursor = await connection.execute(
@@ -116,7 +124,9 @@ class TraceRepository(SQLiteRepositoryBase):
             """
         )
 
-    async def _upsert_link_with_connection(self, connection: Any, trace_link: TraceLink) -> None:
+    async def _upsert_link_with_connection(
+        self, connection: Any, trace_link: TraceLink
+    ) -> None:
         await connection.execute(
             """
             INSERT INTO trace_links (
@@ -162,7 +172,10 @@ class TraceRepository(SQLiteRepositoryBase):
         trace_links: list[TraceLink],
     ) -> None:
         for trace_link in trace_links:
-            if trace_link.source_type != source_type or trace_link.source_id != source_id:
+            if (
+                trace_link.source_type != source_type
+                or trace_link.source_id != source_id
+            ):
                 self._raise_validation_error(
                     "trace link source does not match replace_links_for_source target.",
                     details={

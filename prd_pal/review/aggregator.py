@@ -177,9 +177,15 @@ def aggregate_review_results(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     reviewers_used_list = _merge_unique([], [str(item) for item in reviewers_used])
-    reviewers_skipped_list = [dict(item) for item in reviewers_skipped if isinstance(item, dict)]
-    selected_memory_hits = [dict(item) for item in memory_hits or [] if isinstance(item, dict)]
-    referenced_review_ids = [str(item) for item in similar_reviews_referenced or [] if str(item).strip()]
+    reviewers_skipped_list = [
+        dict(item) for item in reviewers_skipped if isinstance(item, dict)
+    ]
+    selected_memory_hits = [
+        dict(item) for item in memory_hits or [] if isinstance(item, dict)
+    ]
+    referenced_review_ids = [
+        str(item) for item in similar_reviews_referenced or [] if str(item).strip()
+    ]
     meta = _build_review_meta(
         results,
         selected_mode=selected_mode,
@@ -224,7 +230,9 @@ def aggregate_review_results(
         reviewers_used=reviewers_used_list,
         reviewers_skipped=reviewers_skipped_list,
     )
-    gating_payload = _build_gating_payload(gating_decision, selected_mode, gating_reasons)
+    gating_payload = _build_gating_payload(
+        gating_decision, selected_mode, gating_reasons
+    )
     meta = {
         **meta,
         "manual_review_required": bool(manual_review_message),
@@ -234,7 +242,11 @@ def aggregate_review_results(
         "reviewers_used": reviewers_used_list,
         "reviewers_skipped": reviewers_skipped_list,
         "tool_calls": tool_calls,
-        "reviewer_notes": [item for item in reviewer_summaries if item.get("status_detail") or item.get("notes")],
+        "reviewer_notes": [
+            item
+            for item in reviewer_summaries
+            if item.get("status_detail") or item.get("notes")
+        ],
         "memory_hits": selected_memory_hits,
         "memory_hit_count": len(selected_memory_hits),
         "similar_reviews_referenced": referenced_review_ids,
@@ -278,9 +290,17 @@ def aggregate_review_results(
     report_json = json.dumps(report_payload, ensure_ascii=False, indent=2)
     review_result_path.write_text(report_json, encoding="utf-8")
     legacy_review_report_path.write_text(report_json, encoding="utf-8")
-    risk_items_path.write_text(json.dumps({"risk_items": risk_items}, ensure_ascii=False, indent=2), encoding="utf-8")
-    open_questions_path.write_text(json.dumps({"open_questions": open_questions}, ensure_ascii=False, indent=2), encoding="utf-8")
-    review_report_path.write_text(_render_review_report(report_payload), encoding="utf-8")
+    risk_items_path.write_text(
+        json.dumps({"risk_items": risk_items}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    open_questions_path.write_text(
+        json.dumps({"open_questions": open_questions}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    review_report_path.write_text(
+        _render_review_report(report_payload), encoding="utf-8"
+    )
     legacy_summary_path.write_text(_render_summary(report_payload), encoding="utf-8")
 
     artifacts = AggregatedReviewArtifacts(
@@ -364,7 +384,11 @@ def _build_gating_payload(
 ) -> dict[str, Any]:
     payload = dict(gating_decision) if isinstance(gating_decision, dict) else {}
     reasons = _merge_unique([], [str(item) for item in gating_reasons])
-    existing_reasons = [str(item) for item in payload.get("reasons", [])] if isinstance(payload.get("reasons"), list) else []
+    existing_reasons = (
+        [str(item) for item in payload.get("reasons", [])]
+        if isinstance(payload.get("reasons"), list)
+        else []
+    )
     payload["reasons"] = _merge_unique(existing_reasons, reasons)
     payload["selected_mode"] = str(payload.get("selected_mode") or selected_mode)
     payload["skipped"] = bool(payload.get("skipped", False))
@@ -379,7 +403,11 @@ def _build_summary_payload(
     reviewers_used: list[str],
     reviewers_skipped: list[dict[str, str]],
 ) -> dict[str, Any]:
-    severity_pool = [str(item.get("severity", "")).strip().lower() for item in [*findings, *risk_items] if isinstance(item, dict)]
+    severity_pool = [
+        str(item.get("severity", "")).strip().lower()
+        for item in [*findings, *risk_items]
+        if isinstance(item, dict)
+    ]
     if any(level == "high" for level in severity_pool):
         overall_risk = "high"
     elif any(level == "medium" for level in severity_pool):
@@ -403,7 +431,10 @@ def _build_summary_payload(
     out_of_scope = _merge_unique(
         [],
         [
-            *[str(item) for item in normalized_requirement.get("out_of_scope", []) or []],
+            *[
+                str(item)
+                for item in normalized_requirement.get("out_of_scope", []) or []
+            ],
             *[
                 f"{str(item.get('reviewer', '')).strip()} reviewer skipped: {str(item.get('reason', '')).strip()}"
                 for item in reviewers_skipped
@@ -425,20 +456,25 @@ def _aggregate_findings(results: tuple[ReviewerResult, ...]) -> list[dict[str, A
     for result in results:
         for finding in result.findings:
             key = _normalize_topic_key(finding.category, finding.title, finding.detail)
-            source_reviewer = _resolve_source_reviewer(result.reviewer, finding.reviewer)
+            source_reviewer = _resolve_source_reviewer(
+                result.reviewer, finding.reviewer
+            )
             default_suggested_action = _resolve_suggested_action(finding)
             default_assignee = _resolve_assignee(finding, source_reviewer)
             bucket = merged.setdefault(
                 key,
                 {
-                    "finding_id": _build_finding_id(finding.category, finding.title, finding.detail),
+                    "finding_id": _build_finding_id(
+                        finding.category, finding.title, finding.detail
+                    ),
                     "title": finding.title,
                     "detail": finding.detail,
                     "description": finding.detail,
                     "severity": normalize_severity(finding.severity),
                     "category": finding.category,
                     "source_reviewer": source_reviewer,
-                    "suggested_action": str(finding.suggested_action or "").strip() or default_suggested_action,
+                    "suggested_action": str(finding.suggested_action or "").strip()
+                    or default_suggested_action,
                     "assignee": str(finding.assignee or "").strip() or default_assignee,
                     "reviewers": [],
                     "requirement_refs": [],
@@ -449,19 +485,29 @@ def _aggregate_findings(results: tuple[ReviewerResult, ...]) -> list[dict[str, A
                     "user_clarification": "",
                 },
             )
-            bucket["severity"] = _max_severity(bucket["severity"], normalize_severity(finding.severity))
+            bucket["severity"] = _max_severity(
+                bucket["severity"], normalize_severity(finding.severity)
+            )
             bucket["reviewers"] = _merge_unique(bucket["reviewers"], [source_reviewer])
-            bucket["requirement_refs"] = _merge_unique(bucket["requirement_refs"], list(finding.requirement_refs))
-            incoming_action = str(finding.suggested_action or "").strip() or default_suggested_action
-            bucket["evidence"] = _merge_evidence(bucket.get("evidence", []), [item.to_dict() for item in finding.evidence])
+            bucket["requirement_refs"] = _merge_unique(
+                bucket["requirement_refs"], list(finding.requirement_refs)
+            )
+            incoming_action = (
+                str(finding.suggested_action or "").strip() or default_suggested_action
+            )
+            bucket["evidence"] = _merge_evidence(
+                bucket.get("evidence", []),
+                [item.to_dict() for item in finding.evidence],
+            )
             if len(incoming_action) > len(str(bucket.get("suggested_action", ""))):
                 bucket["suggested_action"] = incoming_action
             if not str(bucket.get("assignee", "")).strip():
-                bucket["assignee"] = str(finding.assignee or "").strip() or default_assignee
+                bucket["assignee"] = (
+                    str(finding.assignee or "").strip() or default_assignee
+                )
             if not str(bucket.get("source_reviewer", "")).strip():
                 bucket["source_reviewer"] = source_reviewer
     return list(merged.values())
-
 
 
 def _apply_clarification_metadata(
@@ -480,20 +526,27 @@ def _apply_clarification_metadata(
     for summary in reviewer_summaries:
         reviewer = str(summary.get("reviewer", "") or "").strip().lower()
         ambiguity_type = str(summary.get("ambiguity_type", "") or "").strip()
-        clarification_question = str(summary.get("clarification_question", "") or "").strip()
+        clarification_question = str(
+            summary.get("clarification_question", "") or ""
+        ).strip()
         if not reviewer or not ambiguity_type or not clarification_question:
             continue
         for finding in updated_findings:
             severity = str(finding.get("severity", "") or "").strip().lower()
-            source_reviewer = str(finding.get("source_reviewer", "") or "").strip().lower()
+            source_reviewer = (
+                str(finding.get("source_reviewer", "") or "").strip().lower()
+            )
             reviewers = {
                 str(item).strip().lower()
                 for item in finding.get("reviewers", [])
                 if str(item).strip()
             }
-            if severity == "high" and (reviewer == source_reviewer or reviewer in reviewers):
+            if severity == "high" and (
+                reviewer == source_reviewer or reviewer in reviewers
+            ):
                 finding["ambiguity_type"] = "unanswerable"
     return updated_findings
+
 
 def _aggregate_tool_calls(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
     tool_calls: list[dict[str, Any]] = []
@@ -521,14 +574,22 @@ def _aggregate_risks(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]
                     "reviewers": [],
                 },
             )
-            bucket["severity"] = _max_severity(bucket["severity"], normalize_severity(risk.severity))
-            if risk.mitigation and len(risk.mitigation) > len(str(bucket.get("mitigation", ""))):
+            bucket["severity"] = _max_severity(
+                bucket["severity"], normalize_severity(risk.severity)
+            )
+            if risk.mitigation and len(risk.mitigation) > len(
+                str(bucket.get("mitigation", ""))
+            ):
                 bucket["mitigation"] = risk.mitigation
-            bucket["reviewers"] = _merge_unique(bucket["reviewers"], [result.reviewer or risk.reviewer])
+            bucket["reviewers"] = _merge_unique(
+                bucket["reviewers"], [result.reviewer or risk.reviewer]
+            )
     return list(merged.values())
 
 
-def _aggregate_open_questions(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
+def _aggregate_open_questions(
+    results: tuple[ReviewerResult, ...],
+) -> list[dict[str, Any]]:
     reviewer_memory_refs = _reviewer_memory_refs(results)
     merged: dict[str, dict[str, Any]] = {}
     for result in results:
@@ -591,7 +652,9 @@ def _arbitrate_high_severity_conflicts(
             ).to_dict()
         if isinstance(resolution, dict):
             resolved["resolution"] = dict(resolution)
-            resolved["requires_manual_resolution"] = bool(resolution.get("needs_human", True))
+            resolved["requires_manual_resolution"] = bool(
+                resolution.get("needs_human", True)
+            )
         else:
             resolved["resolution"] = None
             resolved["requires_manual_resolution"] = True
@@ -600,7 +663,12 @@ def _arbitrate_high_severity_conflicts(
 
 
 def _build_reviewer_perspectives(results: tuple[ReviewerResult, ...]) -> dict[str, str]:
-    perspectives: dict[str, list[str]] = {"product": [], "engineering": [], "qa": [], "security": []}
+    perspectives: dict[str, list[str]] = {
+        "product": [],
+        "engineering": [],
+        "qa": [],
+        "security": [],
+    }
     for result in results:
         reviewer = str(result.reviewer or "").strip().lower()
         if reviewer not in perspectives:
@@ -610,12 +678,18 @@ def _build_reviewer_perspectives(results: tuple[ReviewerResult, ...]) -> dict[st
             str(result.reviewer_status_detail or "").strip(),
             *[str(note).strip() for note in result.notes if str(note).strip()],
         ]
-        perspectives[reviewer] = _merge_unique(perspectives[reviewer], [part for part in parts if part])
-    return {reviewer: " ".join(parts).strip() for reviewer, parts in perspectives.items()}
+        perspectives[reviewer] = _merge_unique(
+            perspectives[reviewer], [part for part in parts if part]
+        )
+    return {
+        reviewer: " ".join(parts).strip() for reviewer, parts in perspectives.items()
+    }
 
 
 def _infer_conflict_severity(conflict: dict[str, Any]) -> str:
-    raw_conflict_severity = str(conflict.get("conflict_severity", "") or "").strip().lower()
+    raw_conflict_severity = (
+        str(conflict.get("conflict_severity", "") or "").strip().lower()
+    )
     if raw_conflict_severity:
         return normalize_severity(raw_conflict_severity)
 
@@ -624,7 +698,9 @@ def _infer_conflict_severity(conflict: dict[str, Any]) -> str:
         raw_value = str(conflict.get(key, "") or "").strip()
         if not raw_value:
             continue
-        for part in [segment.strip() for segment in raw_value.split(",") if segment.strip()]:
+        for part in [
+            segment.strip() for segment in raw_value.split(",") if segment.strip()
+        ]:
             severities.append(normalize_severity(part))
 
     if conflict.get("type") in {
@@ -636,10 +712,14 @@ def _infer_conflict_severity(conflict: dict[str, Any]) -> str:
 
     if not severities:
         return "medium"
-    return max(severities, key=lambda value: {"low": 0, "medium": 1, "high": 2}.get(value, 1))
+    return max(
+        severities, key=lambda value: {"low": 0, "medium": 1, "high": 2}.get(value, 1)
+    )
 
 
-def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
+def _detect_severity_conflicts(
+    results: tuple[ReviewerResult, ...],
+) -> list[dict[str, Any]]:
     topic_map: dict[str, dict[str, Any]] = {}
     for result in results:
         for finding in result.findings:
@@ -654,7 +734,9 @@ def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
                 },
             )
             bucket["finding_severities"].add(normalize_severity(finding.severity))
-            bucket["reviewers"].add(_resolve_source_reviewer(result.reviewer, finding.reviewer))
+            bucket["reviewers"].add(
+                _resolve_source_reviewer(result.reviewer, finding.reviewer)
+            )
         for risk in result.risk_items:
             key = _normalize_topic_key(risk.title, risk.detail)
             bucket = topic_map.setdefault(
@@ -667,7 +749,9 @@ def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
                 },
             )
             bucket["risk_severities"].add(normalize_severity(risk.severity))
-            bucket["reviewers"].add(str(result.reviewer or risk.reviewer or "").strip() or "unknown")
+            bucket["reviewers"].add(
+                str(result.reviewer or risk.reviewer or "").strip() or "unknown"
+            )
 
     conflicts: list[dict[str, Any]] = []
     for value in topic_map.values():
@@ -690,7 +774,12 @@ def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
                     topic=topic,
                     finding_severity=finding_severity,
                     risk_severity=risk_severity,
-                    conflict_severity=_infer_conflict_severity({"finding_severity": finding_severity, "risk_severity": risk_severity}),
+                    conflict_severity=_infer_conflict_severity(
+                        {
+                            "finding_severity": finding_severity,
+                            "risk_severity": risk_severity,
+                        }
+                    ),
                 )
             )
             continue
@@ -711,7 +800,9 @@ def _detect_severity_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
     return conflicts
 
 
-def _detect_semantic_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict[str, Any]]:
+def _detect_semantic_conflicts(
+    results: tuple[ReviewerResult, ...],
+) -> list[dict[str, Any]]:
     signals = _collect_semantic_signals(results)
     conflicts: list[dict[str, Any]] = []
 
@@ -721,21 +812,35 @@ def _detect_semantic_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
         if not left_matches or not right_matches:
             continue
 
-        left_reviewers = _merge_unique([], [match["reviewer"] for match in left_matches])
-        right_reviewers = _merge_unique([], [match["reviewer"] for match in right_matches])
+        left_reviewers = _merge_unique(
+            [], [match["reviewer"] for match in left_matches]
+        )
+        right_reviewers = _merge_unique(
+            [], [match["reviewer"] for match in right_matches]
+        )
         if not left_reviewers or not right_reviewers:
             continue
         if set(left_reviewers) == set(right_reviewers):
             continue
 
         reviewers = _merge_unique(left_reviewers, right_reviewers)
-        left_subject, left_verb = _format_reviewer_subject(left_reviewers, singular_verb="indicates", plural_verb="indicate")
-        right_subject, right_verb = _format_reviewer_subject(right_reviewers, singular_verb="flags", plural_verb="flag")
+        left_subject, left_verb = _format_reviewer_subject(
+            left_reviewers, singular_verb="indicates", plural_verb="indicate"
+        )
+        right_subject, right_verb = _format_reviewer_subject(
+            right_reviewers, singular_verb="flags", plural_verb="flag"
+        )
         if rule["type"] == "acceptance_complete_vs_testability_gap":
-            right_subject, right_verb = _format_reviewer_subject(right_reviewers, singular_verb="identifies", plural_verb="identify")
+            right_subject, right_verb = _format_reviewer_subject(
+                right_reviewers, singular_verb="identifies", plural_verb="identify"
+            )
         elif rule["type"] == "release_ok_vs_approval_blocker":
-            left_subject, left_verb = _format_reviewer_subject(left_reviewers, singular_verb="marks", plural_verb="mark")
-            right_subject, right_verb = _format_reviewer_subject(right_reviewers, singular_verb="requires", plural_verb="require")
+            left_subject, left_verb = _format_reviewer_subject(
+                left_reviewers, singular_verb="marks", plural_verb="mark"
+            )
+            right_subject, right_verb = _format_reviewer_subject(
+                right_reviewers, singular_verb="requires", plural_verb="require"
+            )
         description = rule["description_template"].format(
             left_subject=left_subject,
             left_verb=left_verb,
@@ -755,13 +860,41 @@ def _detect_semantic_conflicts(results: tuple[ReviewerResult, ...]) -> list[dict
 
 
 def _render_review_report(report_payload: dict[str, Any]) -> str:
-    findings = report_payload.get("findings", []) if isinstance(report_payload.get("findings"), list) else []
-    risk_items = report_payload.get("risk_items", []) if isinstance(report_payload.get("risk_items"), list) else []
-    open_questions = report_payload.get("open_questions", []) if isinstance(report_payload.get("open_questions"), list) else []
-    conflicts = report_payload.get("conflicts", []) if isinstance(report_payload.get("conflicts"), list) else []
-    summaries = report_payload.get("reviewer_summaries", []) if isinstance(report_payload.get("reviewer_summaries"), list) else []
-    tool_calls = report_payload.get("tool_calls", []) if isinstance(report_payload.get("tool_calls"), list) else []
-    meta = report_payload.get("meta", {}) if isinstance(report_payload.get("meta"), dict) else {}
+    findings = (
+        report_payload.get("findings", [])
+        if isinstance(report_payload.get("findings"), list)
+        else []
+    )
+    risk_items = (
+        report_payload.get("risk_items", [])
+        if isinstance(report_payload.get("risk_items"), list)
+        else []
+    )
+    open_questions = (
+        report_payload.get("open_questions", [])
+        if isinstance(report_payload.get("open_questions"), list)
+        else []
+    )
+    conflicts = (
+        report_payload.get("conflicts", [])
+        if isinstance(report_payload.get("conflicts"), list)
+        else []
+    )
+    summaries = (
+        report_payload.get("reviewer_summaries", [])
+        if isinstance(report_payload.get("reviewer_summaries"), list)
+        else []
+    )
+    tool_calls = (
+        report_payload.get("tool_calls", [])
+        if isinstance(report_payload.get("tool_calls"), list)
+        else []
+    )
+    meta = (
+        report_payload.get("meta", {})
+        if isinstance(report_payload.get("meta"), dict)
+        else {}
+    )
 
     completed = ", ".join(meta.get("reviewers_completed", []) or []) or "none"
     failed = _format_failed_reviewers(meta.get("reviewers_failed", []))
@@ -782,43 +915,71 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
         f"- Tool Calls: {len(tool_calls)}",
     ]
     if manual_review_message:
-        lines.extend([
-            f"- Follow-up: {manual_review_message}",
-        ])
-    lines.extend([
-        "",
-        "## Findings",
-        "",
-    ])
+        lines.extend(
+            [
+                f"- Follow-up: {manual_review_message}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Findings",
+            "",
+        ]
+    )
     lines.extend(_finding_lines(findings))
-    lines.extend([
-        "",
-        "## Risks",
-        "",
-    ])
-    lines.extend(_bullet_lines([f"[{item['severity']}] {item['title']} -> {item.get('mitigation', '')}".strip() for item in risk_items], "No risk items."))
-    lines.extend([
-        "",
-        "## Open Questions",
-        "",
-    ])
-    lines.extend(_bullet_lines([item["question"] for item in open_questions], "No open questions."))
-    lines.extend([
-        "",
-        "## Reviewer Notes",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Risks",
+            "",
+        ]
+    )
     lines.extend(
         _bullet_lines(
-            [_format_reviewer_note(item) for item in summaries if _format_reviewer_note(item)],
+            [
+                f"[{item['severity']}] {item['title']} -> {item.get('mitigation', '')}".strip()
+                for item in risk_items
+            ],
+            "No risk items.",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Open Questions",
+            "",
+        ]
+    )
+    lines.extend(
+        _bullet_lines(
+            [item["question"] for item in open_questions], "No open questions."
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Reviewer Notes",
+            "",
+        ]
+    )
+    lines.extend(
+        _bullet_lines(
+            [
+                _format_reviewer_note(item)
+                for item in summaries
+                if _format_reviewer_note(item)
+            ],
             "No reviewer notes.",
         )
     )
-    lines.extend([
-        "",
-        "## Tool Trace",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Tool Trace",
+            "",
+        ]
+    )
     lines.extend(
         _bullet_lines(
             [_format_tool_call_line(item) for item in tool_calls],
@@ -830,13 +991,41 @@ def _render_review_report(report_payload: dict[str, Any]) -> str:
 
 
 def _render_summary(report_payload: dict[str, Any]) -> str:
-    findings = report_payload.get("findings", []) if isinstance(report_payload.get("findings"), list) else []
-    risk_items = report_payload.get("risk_items", []) if isinstance(report_payload.get("risk_items"), list) else []
-    open_questions = report_payload.get("open_questions", []) if isinstance(report_payload.get("open_questions"), list) else []
-    conflicts = report_payload.get("conflicts", []) if isinstance(report_payload.get("conflicts"), list) else []
-    summaries = report_payload.get("reviewer_summaries", []) if isinstance(report_payload.get("reviewer_summaries"), list) else []
-    tool_calls = report_payload.get("tool_calls", []) if isinstance(report_payload.get("tool_calls"), list) else []
-    meta = report_payload.get("meta", {}) if isinstance(report_payload.get("meta"), dict) else {}
+    findings = (
+        report_payload.get("findings", [])
+        if isinstance(report_payload.get("findings"), list)
+        else []
+    )
+    risk_items = (
+        report_payload.get("risk_items", [])
+        if isinstance(report_payload.get("risk_items"), list)
+        else []
+    )
+    open_questions = (
+        report_payload.get("open_questions", [])
+        if isinstance(report_payload.get("open_questions"), list)
+        else []
+    )
+    conflicts = (
+        report_payload.get("conflicts", [])
+        if isinstance(report_payload.get("conflicts"), list)
+        else []
+    )
+    summaries = (
+        report_payload.get("reviewer_summaries", [])
+        if isinstance(report_payload.get("reviewer_summaries"), list)
+        else []
+    )
+    tool_calls = (
+        report_payload.get("tool_calls", [])
+        if isinstance(report_payload.get("tool_calls"), list)
+        else []
+    )
+    meta = (
+        report_payload.get("meta", {})
+        if isinstance(report_payload.get("meta"), dict)
+        else {}
+    )
 
     manual_review_message = str(meta.get("manual_review_message", "") or "").strip()
     lines = [
@@ -852,43 +1041,73 @@ def _render_summary(report_payload: dict[str, Any]) -> str:
         f"- Tool Calls: {len(tool_calls)}",
     ]
     if manual_review_message:
-        lines.extend([
-            f"- Follow-up: {manual_review_message}",
-        ])
-    lines.extend([
-        "",
-        "## Findings",
-        "",
-    ])
-    lines.extend(_bullet_lines([f"[{item['severity']}] {item['title']}" for item in findings], "No findings."))
-    lines.extend([
-        "",
-        "## Risks",
-        "",
-    ])
-    lines.extend(_bullet_lines([f"[{item['severity']}] {item['title']}" for item in risk_items], "No risk items."))
-    lines.extend([
-        "",
-        "## Open Questions",
-        "",
-    ])
-    lines.extend(_bullet_lines([item["question"] for item in open_questions], "No open questions."))
-    lines.extend([
-        "",
-        "## Reviewer Notes",
-        "",
-    ])
+        lines.extend(
+            [
+                f"- Follow-up: {manual_review_message}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Findings",
+            "",
+        ]
+    )
     lines.extend(
         _bullet_lines(
-            [_format_reviewer_note(item) for item in summaries if _format_reviewer_note(item)],
+            [f"[{item['severity']}] {item['title']}" for item in findings],
+            "No findings.",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Risks",
+            "",
+        ]
+    )
+    lines.extend(
+        _bullet_lines(
+            [f"[{item['severity']}] {item['title']}" for item in risk_items],
+            "No risk items.",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Open Questions",
+            "",
+        ]
+    )
+    lines.extend(
+        _bullet_lines(
+            [item["question"] for item in open_questions], "No open questions."
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Reviewer Notes",
+            "",
+        ]
+    )
+    lines.extend(
+        _bullet_lines(
+            [
+                _format_reviewer_note(item)
+                for item in summaries
+                if _format_reviewer_note(item)
+            ],
             "No reviewer notes.",
         )
     )
-    lines.extend([
-        "",
-        "## Tool Trace",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Tool Trace",
+            "",
+        ]
+    )
     lines.extend(
         _bullet_lines(
             [_format_tool_call_line(item) for item in tool_calls],
@@ -916,9 +1135,13 @@ def _finding_lines(items: list[dict[str, Any]]) -> list[str]:
                 f"  - Assignee: {item.get('assignee', '') or source_reviewer}",
             ]
         )
-        evidence_items = item.get('evidence', []) if isinstance(item.get('evidence'), list) else []
+        evidence_items = (
+            item.get("evidence", []) if isinstance(item.get("evidence"), list) else []
+        )
         if evidence_items:
-            lines.append(f"  - Evidence: {', '.join(_format_evidence_label(evidence) for evidence in evidence_items)}")
+            lines.append(
+                f"  - Evidence: {', '.join(_format_evidence_label(evidence) for evidence in evidence_items)}"
+            )
     return lines
 
 
@@ -987,7 +1210,10 @@ def _resolve_suggested_action(finding: ReviewFinding) -> str:
         "testability": "Expand pass/fail criteria and edge-case coverage so QA can validate the requirement.",
         "security": "Add explicit security, compliance, and release-control expectations to the PRD.",
     }
-    return suggestions.get(category, "Clarify the finding and capture a concrete follow-up action in the PRD.")
+    return suggestions.get(
+        category,
+        "Clarify the finding and capture a concrete follow-up action in the PRD.",
+    )
 
 
 def _resolve_assignee(finding: ReviewFinding, source_reviewer: str) -> str:
@@ -1005,11 +1231,17 @@ def _resolve_assignee(finding: ReviewFinding, source_reviewer: str) -> str:
         "quality": "qa",
         "security": "security",
     }
-    return default_assignees.get(category, str(source_reviewer or "product").strip() or "product")
+    return default_assignees.get(
+        category, str(source_reviewer or "product").strip() or "product"
+    )
 
 
-def _collect_semantic_signals(results: tuple[ReviewerResult, ...]) -> dict[str, list[dict[str, str]]]:
-    signals: dict[str, list[dict[str, str]]] = {signal: [] for signal in _SEMANTIC_SIGNAL_PATTERNS}
+def _collect_semantic_signals(
+    results: tuple[ReviewerResult, ...],
+) -> dict[str, list[dict[str, str]]]:
+    signals: dict[str, list[dict[str, str]]] = {
+        signal: [] for signal in _SEMANTIC_SIGNAL_PATTERNS
+    }
     for result in results:
         reviewer = str(result.reviewer or "").strip().lower()
         for signal, patterns in _SEMANTIC_SIGNAL_PATTERNS.items():
@@ -1068,7 +1300,9 @@ def _build_conflict(
     conflict_severity: str = "medium",
 ) -> dict[str, Any]:
     normalized_reviewers = _merge_unique([], reviewers)
-    conflict_id = _build_conflict_id(conflict_type, topic, description, ",".join(normalized_reviewers))
+    conflict_id = _build_conflict_id(
+        conflict_type, topic, description, ",".join(normalized_reviewers)
+    )
     payload = {
         "conflict_id": conflict_id,
         "type": conflict_type,
@@ -1098,15 +1332,30 @@ def _conflict_section_lines(conflicts: list[dict[str, Any]]) -> list[str]:
     if not conflicts:
         return ["", "## Conflicts", "", "- No conflicts."]
 
-    resolved = [item for item in conflicts if not bool(item.get("requires_manual_resolution", True))]
-    unresolved = [item for item in conflicts if bool(item.get("requires_manual_resolution", True))]
+    resolved = [
+        item
+        for item in conflicts
+        if not bool(item.get("requires_manual_resolution", True))
+    ]
+    unresolved = [
+        item for item in conflicts if bool(item.get("requires_manual_resolution", True))
+    ]
     lines = ["", "## Conflicts", ""]
     lines.append(f"- Resolved conflicts: {len(resolved)}")
     lines.append(f"- Unresolved conflicts: {len(unresolved)}")
     lines.extend(["", "### Resolved Conflicts", ""])
-    lines.extend(_bullet_lines([_format_conflict_line(item) for item in resolved], "No resolved conflicts."))
+    lines.extend(
+        _bullet_lines(
+            [_format_conflict_line(item) for item in resolved], "No resolved conflicts."
+        )
+    )
     lines.extend(["", "### Unresolved Conflicts", ""])
-    lines.extend(_bullet_lines([_format_conflict_line(item) for item in unresolved], "No unresolved conflicts."))
+    lines.extend(
+        _bullet_lines(
+            [_format_conflict_line(item) for item in unresolved],
+            "No unresolved conflicts.",
+        )
+    )
     return lines
 
 
@@ -1114,11 +1363,15 @@ def _format_conflict_line(item: dict[str, Any]) -> str:
     description = str(item.get("description", "") or "").strip()
     reviewers = _format_reviewer_list(item.get("reviewers", []))
     conflict_severity = str(item.get("conflict_severity", "") or "").strip().lower()
-    resolution = item.get("resolution") if isinstance(item.get("resolution"), dict) else {}
+    resolution = (
+        item.get("resolution") if isinstance(item.get("resolution"), dict) else {}
+    )
     recommendation = str(resolution.get("recommendation", "") or "").strip()
     reasoning = str(resolution.get("reasoning", "") or "").strip()
     decided_by = str(resolution.get("decided_by", "") or "").strip()
-    status = "needs human" if item.get("requires_manual_resolution", True) else "resolved"
+    status = (
+        "needs human" if item.get("requires_manual_resolution", True) else "resolved"
+    )
 
     parts = [description or "Conflict requires manual resolution."]
     if reviewers:
@@ -1142,7 +1395,11 @@ def _format_reviewer_note(item: dict[str, Any]) -> str:
     status_detail = str(item.get("status_detail", "") or "").strip()
     clarification = str(item.get("clarification_question", "") or "").strip()
     ambiguity_type = str(item.get("ambiguity_type", "") or "").strip()
-    notes = [str(note).strip() for note in item.get("notes", []) if str(note).strip()] if isinstance(item.get("notes"), list) else []
+    notes = (
+        [str(note).strip() for note in item.get("notes", []) if str(note).strip()]
+        if isinstance(item.get("notes"), list)
+        else []
+    )
     parts = [f"{reviewer} [{status}]"]
     if summary:
         parts.append(summary)
@@ -1194,9 +1451,13 @@ _REVIEWER_DISPLAY_NAMES = {
 }
 
 
-def _format_reviewer_subject(items: list[str], *, singular_verb: str, plural_verb: str) -> tuple[str, str]:
+def _format_reviewer_subject(
+    items: list[str], *, singular_verb: str, plural_verb: str
+) -> tuple[str, str]:
     names = [
-        _REVIEWER_DISPLAY_NAMES.get(str(item).strip().lower(), str(item).strip().title())
+        _REVIEWER_DISPLAY_NAMES.get(
+            str(item).strip().lower(), str(item).strip().title()
+        )
         for item in items
         if str(item or "").strip()
     ]
@@ -1230,7 +1491,9 @@ def _merge_unique(existing: list[str], incoming: list[str]) -> list[str]:
     return merged
 
 
-def _merge_evidence(existing: list[dict[str, Any]], incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _merge_evidence(
+    existing: list[dict[str, Any]], incoming: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in [*existing, *incoming]:
@@ -1258,5 +1521,3 @@ def _sort_severities(values: set[str]) -> list[str]:
 def _max_severity(left: str, right: str) -> str:
     order = {"low": 0, "medium": 1, "high": 2}
     return left if order.get(left, 1) >= order.get(right, 1) else right
-
-

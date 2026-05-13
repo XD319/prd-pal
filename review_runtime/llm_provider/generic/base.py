@@ -114,7 +114,9 @@ class GenericLLMProvider:
             factory = _provider_factories()[provider]
         except KeyError as exc:
             supported = ", ".join(sorted(_SUPPORTED_PROVIDERS))
-            raise ValueError(f"Unsupported {provider}.\n\nSupported model providers are: {supported}") from exc
+            raise ValueError(
+                f"Unsupported {provider}.\n\nSupported model providers are: {supported}"
+            ) from exc
         llm = factory(dict(kwargs))
         return cls(llm, chat_log=chat_log, verbose=verbose)
 
@@ -193,7 +195,11 @@ def _extract_text(payload: Any) -> str:
                 if isinstance(text_value, str):
                     parts.append(text_value)
                     continue
-                nested_text = item.get("text", {}).get("value") if isinstance(item.get("text"), dict) else None
+                nested_text = (
+                    item.get("text", {}).get("value")
+                    if isinstance(item.get("text"), dict)
+                    else None
+                )
                 if isinstance(nested_text, str):
                     parts.append(nested_text)
                     continue
@@ -208,7 +214,9 @@ def _check_pkg(package_name: str) -> None:
     if importlib.util.find_spec(package_name):
         return
     pip_name = package_name.replace("_", "-")
-    raise ImportError(f"Unable to import {pip_name}. Please install with `pip install -U {pip_name}`")
+    raise ImportError(
+        f"Unable to import {pip_name}. Please install with `pip install -U {pip_name}`"
+    )
 
 
 def _build_openai(kwargs: dict[str, Any]) -> Any:

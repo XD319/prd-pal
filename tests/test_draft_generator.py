@@ -10,7 +10,11 @@ from prd_pal.draft_generator import (
 )
 
 
-def _base_run_output(tmp_path, *, requirement_doc: str = "# Recruiting PRD\n\nNeed shortlist review flow.") -> dict:
+def _base_run_output(
+    tmp_path,
+    *,
+    requirement_doc: str = "# Recruiting PRD\n\nNeed shortlist review flow.",
+) -> dict:
     run_dir = tmp_path / "20260412T010203Z"
     run_dir.mkdir(parents=True, exist_ok=True)
     report_payload = {
@@ -31,7 +35,9 @@ def _base_run_output(tmp_path, *, requirement_doc: str = "# Recruiting PRD\n\nNe
         "implementation_plan": {"target_modules": ["service.review_service"]},
         "trace": {},
     }
-    (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return {
         "run_id": "20260412T010203Z",
         "run_dir": str(run_dir),
@@ -63,7 +69,11 @@ def test_render_prd_v1_markdown_expands_open_questions(tmp_path):
         json.dumps(
             {
                 "open_questions": [
-                    {"question": f"Clarify scope boundary {index}", "reviewers": ["product"], "issues": ["scope unclear"]}
+                    {
+                        "question": f"Clarify scope boundary {index}",
+                        "reviewers": ["product"],
+                        "issues": ["scope unclear"],
+                    }
                     for index in range(1, 8)
                 ]
             },
@@ -78,7 +88,10 @@ def test_render_prd_v1_markdown_expands_open_questions(tmp_path):
 
     assert artifact.artifact_key == "prd_v1"
     assert "source_artifacts: report.json, open_questions.json" in markdown
-    assert "Clarify scope boundary 1 [owners: product] [context: scope unclear]" in markdown
+    assert (
+        "Clarify scope boundary 1 [owners: product] [context: scope unclear]"
+        in markdown
+    )
     assert "Clarify unresolved boundaries that affect scope definition" in markdown
 
 
@@ -120,5 +133,8 @@ def test_render_prd_v1_markdown_expands_risk_items(tmp_path):
 
     assert artifact.path.endswith("prd_v1.md")
     assert "[high] Risk 1: Potential failure path 1 Mitigation: Mitigate 1" in markdown
-    assert "Convert this into a measurable acceptance criterion: Add a measurable reviewer SLA." in markdown
+    assert (
+        "Convert this into a measurable acceptance criterion: Add a measurable reviewer SLA."
+        in markdown
+    )
     assert "Validate high-severity edge case: Potential failure path 1" in markdown

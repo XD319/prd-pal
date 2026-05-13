@@ -26,7 +26,9 @@ class ArtifactRepository(SQLiteRepositoryBase):
 
         return await self._run("artifact_repository.initialize", operation)
 
-    async def upsert_version(self, version: ArtifactVersion) -> RepositoryResult[ArtifactVersion]:
+    async def upsert_version(
+        self, version: ArtifactVersion
+    ) -> RepositoryResult[ArtifactVersion]:
         async def operation(connection: Any) -> ArtifactVersion:
             await self._ensure_schema(connection)
             await self.trace_repository._ensure_schema(connection)
@@ -63,13 +65,19 @@ class ArtifactRepository(SQLiteRepositoryBase):
 
         return await self._run("artifact_repository.get_version", operation)
 
-    async def list_versions_by_workspace(self, workspace_id: str) -> RepositoryResult[list[ArtifactVersion]]:
+    async def list_versions_by_workspace(
+        self, workspace_id: str
+    ) -> RepositoryResult[list[ArtifactVersion]]:
         async def operation(connection: Any) -> list[ArtifactVersion]:
             await self._ensure_schema(connection)
             await self.trace_repository._ensure_schema(connection)
-            return await self._list_versions_by_workspace_with_connection(connection, workspace_id)
+            return await self._list_versions_by_workspace_with_connection(
+                connection, workspace_id
+            )
 
-        return await self._run("artifact_repository.list_versions_by_workspace", operation)
+        return await self._run(
+            "artifact_repository.list_versions_by_workspace", operation
+        )
 
     async def list_versions_by_artifact(
         self,
@@ -79,9 +87,13 @@ class ArtifactRepository(SQLiteRepositoryBase):
         async def operation(connection: Any) -> list[ArtifactVersion]:
             await self._ensure_schema(connection)
             await self.trace_repository._ensure_schema(connection)
-            return await self._list_versions_by_artifact_with_connection(connection, workspace_id, artifact_key)
+            return await self._list_versions_by_artifact_with_connection(
+                connection, workspace_id, artifact_key
+            )
 
-        return await self._run("artifact_repository.list_versions_by_artifact", operation)
+        return await self._run(
+            "artifact_repository.list_versions_by_artifact", operation
+        )
 
     async def _ensure_schema(self, connection: Any) -> None:
         await connection.executescript(
@@ -114,7 +126,9 @@ class ArtifactRepository(SQLiteRepositoryBase):
             """
         )
 
-    async def _upsert_version_with_connection(self, connection: Any, version: ArtifactVersion) -> None:
+    async def _upsert_version_with_connection(
+        self, connection: Any, version: ArtifactVersion
+    ) -> None:
         await connection.execute(
             """
             INSERT INTO artifact_versions (
@@ -228,7 +242,9 @@ class ArtifactRepository(SQLiteRepositoryBase):
             status=str(row["status"]),
             version_number=int(row["version_number"]),
             title=str(row["title"]),
-            parent_version_id=str(row["parent_version_id"]) if row["parent_version_id"] is not None else None,
+            parent_version_id=str(row["parent_version_id"])
+            if row["parent_version_id"] is not None
+            else None,
             source_run_id=str(row["source_run_id"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),

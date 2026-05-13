@@ -43,7 +43,11 @@ SAMPLE_RISKS = [
 ]
 
 IMPLEMENTATION_PLAN = ImplementationPlanOutput(
-    implementation_steps=["Inspect auth entrypoints", "Implement OAuth callback", "Persist recruiter session"],
+    implementation_steps=[
+        "Inspect auth entrypoints",
+        "Implement OAuth callback",
+        "Persist recruiter session",
+    ],
     target_modules=["prd_pal/server/app.py", "frontend/src/login.ts"],
     constraints=["Preserve password login behavior"],
 )
@@ -56,14 +60,25 @@ TEST_PLAN = QaPlanningOutput(
 
 CODEX_PROMPT = CodingAgentPromptOutput(
     agent_prompt="Implement the auth changes, then run focused backend and frontend tests.",
-    recommended_execution_order=["Review auth flow", "Apply backend changes", "Validate recruiter login"],
+    recommended_execution_order=[
+        "Review auth flow",
+        "Apply backend changes",
+        "Validate recruiter login",
+    ],
     non_goals=["Do not redesign account settings"],
-    validation_checklist=["Acceptance criteria mapped to tests", "Pytest auth scope passes"],
+    validation_checklist=[
+        "Acceptance criteria mapped to tests",
+        "Pytest auth scope passes",
+    ],
 )
 
 CLAUDE_PROMPT = CodingAgentPromptOutput(
     agent_prompt="Verify the implementation with edge-case and regression coverage.",
-    recommended_execution_order=["Review changed files", "Add edge-case coverage", "Run regression suite"],
+    recommended_execution_order=[
+        "Review changed files",
+        "Add edge-case coverage",
+        "Run regression suite",
+    ],
     non_goals=["Do not broaden test scope beyond auth"],
     validation_checklist=["OAuth edge cases covered", "Regression suite stays green"],
 )
@@ -106,7 +121,10 @@ def test_test_pack_builder_merges_validation_checklists() -> None:
     assert "Password login" in pack.edge_cases
     assert "Acceptance criteria mapped to tests" in pack.acceptance_criteria
     assert "Regression suite stays green" in pack.acceptance_criteria
-    assert json.loads(pack.model_dump_json())["agent_handoff"]["primary_agent"] == "claude_code"
+    assert (
+        json.loads(pack.model_dump_json())["agent_handoff"]["primary_agent"]
+        == "claude_code"
+    )
 
 
 def test_execution_pack_builder_assembles_nested_packs_and_risks() -> None:

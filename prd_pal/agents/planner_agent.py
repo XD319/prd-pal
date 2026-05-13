@@ -32,7 +32,9 @@ async def run(state: ReviewState) -> ReviewState:
 
     if not parsed_items:
         span = trace_start(_AGENT, model="none", input_chars=0)
-        trace[_AGENT] = span.end(status="error", error_message="parsed_items is empty - nothing to plan")
+        trace[_AGENT] = span.end(
+            status="error", error_message="parsed_items is empty - nothing to plan"
+        )
         log.warning("规划完成, %s 个任务, %s 个里程碑", 0, 0, extra={"node": _AGENT})
         return _empty_result(trace)
 
@@ -61,7 +63,9 @@ async def run(state: ReviewState) -> ReviewState:
             output = validated.model_dump(mode="python", by_alias=True)
             trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
         except Exception as exc:
-            raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            raw_path = (
+                save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            )
             output = PlannerOutput().model_dump(mode="python", by_alias=True)
             trace[_AGENT] = span.end(
                 status="error",
@@ -72,7 +76,12 @@ async def run(state: ReviewState) -> ReviewState:
 
         tasks = output.get("tasks", [])
         milestones = output.get("milestones", [])
-        log.info("规划完成, %s 个任务, %s 个里程碑", len(tasks), len(milestones), extra={"node": _AGENT})
+        log.info(
+            "规划完成, %s 个任务, %s 个里程碑",
+            len(tasks),
+            len(milestones),
+            extra={"node": _AGENT},
+        )
         return {
             "plan": {
                 "tasks": tasks,
@@ -86,7 +95,9 @@ async def run(state: ReviewState) -> ReviewState:
     except StructuredCallError as exc:
         raw = exc.raw_output or raw
         span.set_attr("structured_mode", exc.structured_mode)
-        raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        raw_path = (
+            save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        )
         trace[_AGENT] = span.end(
             status="error",
             output_chars=len(raw),
@@ -97,7 +108,9 @@ async def run(state: ReviewState) -> ReviewState:
         return _empty_result(trace)
 
     except Exception as exc:
-        raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        raw_path = (
+            save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        )
         trace[_AGENT] = span.end(
             status="error",
             output_chars=len(raw),

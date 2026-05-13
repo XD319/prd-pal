@@ -23,7 +23,9 @@ def clear_skill_cache():
 
 
 @pytest.mark.asyncio
-async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monkeypatch, sample_prd_text: str):
+async def test_sample_prd_trace_includes_prompt_generation_skills(
+    tmp_path, monkeypatch, sample_prd_text: str
+):
     async def fake_parser_call(*, prompt, schema, metadata):
         return {
             "parsed_items": [
@@ -63,7 +65,14 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monk
                     "estimate_days": 2,
                 },
             ],
-            "milestones": [{"id": "M-1", "title": "Auth ready", "includes": ["T-1", "T-2"], "target_days": 5}],
+            "milestones": [
+                {
+                    "id": "M-1",
+                    "title": "Auth ready",
+                    "includes": ["T-1", "T-2"],
+                    "target_days": 5,
+                }
+            ],
             "dependencies": [{"from": "T-2", "to": "T-1", "type": "blocked_by"}],
             "estimation": {"total_days": 5, "buffer_days": 1},
         }
@@ -117,28 +126,59 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monk
                     "Update registration validation and confirmation email handling.",
                     "Implement admin-triggered deactivation in the auth service and admin surface.",
                 ],
-                "target_modules": ["backend.auth", "backend.notifications", "frontend.admin.users"],
-                "constraints": ["Preserve existing authentication behavior for unaffected flows."],
+                "target_modules": [
+                    "backend.auth",
+                    "backend.notifications",
+                    "frontend.admin.users",
+                ],
+                "constraints": [
+                    "Preserve existing authentication behavior for unaffected flows."
+                ],
             }
         if metadata["agent_name"] == "test.plan.generate":
             return {
-                "test_scope": ["Registration API", "Login flow", "Admin deactivation flow"],
-                "edge_cases": ["Weak password rejected", "Email delivery timeout", "Deactivated user login attempt"],
-                "regression_focus": ["Existing login behavior", "Audit logging of auth events"],
+                "test_scope": [
+                    "Registration API",
+                    "Login flow",
+                    "Admin deactivation flow",
+                ],
+                "edge_cases": [
+                    "Weak password rejected",
+                    "Email delivery timeout",
+                    "Deactivated user login attempt",
+                ],
+                "regression_focus": [
+                    "Existing login behavior",
+                    "Audit logging of auth events",
+                ],
             }
         if metadata["agent_name"] == "codex.prompt.generate":
             return {
                 "agent_prompt": "Inspect backend.auth, backend.notifications, and frontend.admin.users; implement only the auth changes required by the plan; preserve existing login behavior; validate registration, login, and deactivation flows.",
-                "recommended_execution_order": ["Inspect target modules", "Implement auth changes", "Run focused registration/login/deactivation validation"],
+                "recommended_execution_order": [
+                    "Inspect target modules",
+                    "Implement auth changes",
+                    "Run focused registration/login/deactivation validation",
+                ],
                 "non_goals": ["Do not redesign the full user management module"],
-                "validation_checklist": ["Acceptance criteria covered", "Auth regression scope validated"],
+                "validation_checklist": [
+                    "Acceptance criteria covered",
+                    "Auth regression scope validated",
+                ],
             }
         if metadata["agent_name"] == "claude_code.prompt.generate":
             return {
                 "agent_prompt": "Audit the current auth and admin account flows, patch the listed modules with minimal scope, and prove completion with targeted validation tied to the acceptance criteria.",
-                "recommended_execution_order": ["Inspect current flows", "Patch target modules", "Validate acceptance criteria and regressions"],
+                "recommended_execution_order": [
+                    "Inspect current flows",
+                    "Patch target modules",
+                    "Validate acceptance criteria and regressions",
+                ],
                 "non_goals": ["Do not expand into unrelated profile or analytics work"],
-                "validation_checklist": ["Immediate deactivation verified", "Confirmation email timing covered"],
+                "validation_checklist": [
+                    "Immediate deactivation verified",
+                    "Confirmation email timing covered",
+                ],
             }
         raise AssertionError(f"unexpected delivery skill: {metadata['agent_name']}")
 
@@ -149,22 +189,48 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(tmp_path, monk
         patch("prd_pal.agents.planner_agent.Config", _FakeConfig),
         patch("prd_pal.agents.reviewer_agent.Config", _FakeConfig),
         patch("prd_pal.subflows.risk_analysis.Config", _FakeConfig),
-        patch("prd_pal.agents.parser_agent.llm_structured_call", side_effect=fake_parser_call),
-        patch("prd_pal.agents.planner_agent.llm_structured_call", side_effect=fake_planner_call),
-        patch("prd_pal.subflows.risk_analysis.llm_structured_call", side_effect=fake_risk_call),
-        patch("prd_pal.agents.reviewer_agent.llm_structured_call", side_effect=fake_reviewer_call),
-        patch("prd_pal.skills.delivery_planning.llm_structured_call", side_effect=fake_delivery_skill_call),
+        patch(
+            "prd_pal.agents.parser_agent.llm_structured_call",
+            side_effect=fake_parser_call,
+        ),
+        patch(
+            "prd_pal.agents.planner_agent.llm_structured_call",
+            side_effect=fake_planner_call,
+        ),
+        patch(
+            "prd_pal.subflows.risk_analysis.llm_structured_call",
+            side_effect=fake_risk_call,
+        ),
+        patch(
+            "prd_pal.agents.reviewer_agent.llm_structured_call",
+            side_effect=fake_reviewer_call,
+        ),
+        patch(
+            "prd_pal.skills.delivery_planning.llm_structured_call",
+            side_effect=fake_delivery_skill_call,
+        ),
     ):
-        result = await run_review(requirement_doc=sample_prd_text, outputs_root=tmp_path)
+        result = await run_review(
+            requirement_doc=sample_prd_text, outputs_root=tmp_path
+        )
 
     trace_path = Path(result["report_paths"]["run_trace"])
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
 
     assert trace["codex.prompt.generate"]["status"] == "ok"
     assert trace["claude_code.prompt.generate"]["status"] == "ok"
-    assert trace["codex.prompt.generate"]["template_id"] == "review.delivery_planning.codex_prompt"
+    assert (
+        trace["codex.prompt.generate"]["template_id"]
+        == "review.delivery_planning.codex_prompt"
+    )
     assert trace["codex.prompt.generate"]["template_version"] == "v1"
-    assert trace["claude_code.prompt.generate"]["template_id"] == "review.delivery_planning.claude_code_prompt"
+    assert (
+        trace["claude_code.prompt.generate"]["template_id"]
+        == "review.delivery_planning.claude_code_prompt"
+    )
     assert trace["claude_code.prompt.generate"]["template_version"] == "v1"
     assert result["result"]["codex_prompt_handoff"]["agent_prompt"]
-    assert result["result"]["claude_code_prompt_handoff"]["validation_checklist"] == ["Immediate deactivation verified", "Confirmation email timing covered"]
+    assert result["result"]["claude_code_prompt_handoff"]["validation_checklist"] == [
+        "Immediate deactivation verified",
+        "Confirmation email timing covered",
+    ]

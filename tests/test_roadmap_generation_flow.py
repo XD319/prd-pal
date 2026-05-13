@@ -21,9 +21,13 @@ def _prepare_run(tmp_path, run_id: str, *, confirmed: bool) -> None:
         "risk_items": [{"title": "coordination", "severity": "medium"}],
         "artifacts": {},
     }
-    (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     if confirmed:
-        (run_dir / "confirmed_prd.md").write_text("# Confirmed PRD\n\nconfirmed", encoding="utf-8")
+        (run_dir / "confirmed_prd.md").write_text(
+            "# Confirmed PRD\n\nconfirmed", encoding="utf-8"
+        )
 
 
 def test_generate_roadmap_for_run_prefers_confirmed_revision(tmp_path):
@@ -33,7 +37,10 @@ def test_generate_roadmap_for_run_prefers_confirmed_revision(tmp_path):
     payload = generate_roadmap_for_run(run_id=run_id, outputs_root=tmp_path)
 
     assert payload["roadmap_generation"]["status"] == "generated"
-    assert payload["roadmap_generation"]["roadmap_source"]["selected_source"] == "confirmed_revision"
+    assert (
+        payload["roadmap_generation"]["roadmap_source"]["selected_source"]
+        == "confirmed_revision"
+    )
     assert payload["artifact_paths"]["roadmap_md"].endswith("roadmap.md")
     assert payload["artifact_paths"]["roadmap_json"].endswith("roadmap.json")
 

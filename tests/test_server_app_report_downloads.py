@@ -21,7 +21,9 @@ def test_get_report_html_returns_browser_openable_document(tmp_path, monkeypatch
         "source_metadata": {"title": "Campus Recruitment PRD"},
         "updated_at": "2026-03-26T08:30:00+00:00",
     }
-    (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (run_dir / "report.md").write_text(
         "# Requirement Review Report\n\n## Findings\n\n- Export path is missing ownership.\n",
         encoding="utf-8",
@@ -64,8 +66,12 @@ def test_get_report_csv_returns_excel_friendly_findings_table(tmp_path, monkeypa
             ]
         },
     }
-    (run_dir / "report.json").write_text(json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "report.md").write_text("# Requirement Review Report\n", encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps(report_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "report.md").write_text(
+        "# Requirement Review Report\n", encoding="utf-8"
+    )
 
     monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
     app_module._jobs.clear()
@@ -75,7 +81,9 @@ def test_get_report_csv_returns_excel_friendly_findings_table(tmp_path, monkeypa
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
-    assert 'attachment; filename="report.csv"' == response.headers["content-disposition"]
+    assert (
+        'attachment; filename="report.csv"' == response.headers["content-disposition"]
+    )
 
     decoded = response.content.decode("utf-8-sig")
     rows = list(csv.DictReader(io.StringIO(decoded)))

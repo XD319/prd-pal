@@ -1,6 +1,12 @@
 """Execution orchestration primitives for v6 handoff flow."""
 
-from .models import ExecutionEvent, ExecutionMode, ExecutionTask, ExecutionTaskStatus, TraceLink
+from .models import (
+    ExecutionEvent,
+    ExecutionMode,
+    ExecutionTask,
+    ExecutionTaskStatus,
+    TraceLink,
+)
 from .router import BundleNotApprovedError, ExecutorRouter
 from .task_lifecycle import (
     InvalidExecutionTaskTransitionError,

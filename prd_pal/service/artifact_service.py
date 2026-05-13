@@ -237,7 +237,9 @@ def _build_workspace_state(
             created_at=source_version.created_at or timestamp,
             updated_at=timestamp,
             versions=[source_version],
-            current_version_ids={source_version.artifact_key: source_version.version_id},
+            current_version_ids={
+                source_version.artifact_key: source_version.version_id
+            },
             metadata={"artifact_review_enabled": True},
         )
     else:
@@ -277,13 +279,17 @@ async def _build_review_result_version(
 ) -> ArtifactVersion:
     artifact_key = _build_review_result_artifact_key(source_version, options)
     existing_versions = _require_repository_value(
-        await artifact_repository.list_versions_by_artifact(source_version.workspace_id, artifact_key),
+        await artifact_repository.list_versions_by_artifact(
+            source_version.workspace_id, artifact_key
+        ),
         "artifact_repository.list_versions_by_artifact",
     )
     latest_version = existing_versions[-1] if existing_versions else None
     version_number = (latest_version.version_number + 1) if latest_version else 1
     timestamp = _utc_now_iso()
-    review_result_artifact_type = str(options.get("review_result_artifact_type") or "review_result").strip()
+    review_result_artifact_type = str(
+        options.get("review_result_artifact_type") or "review_result"
+    ).strip()
     return ArtifactVersion(
         version_id=f"avr-{uuid4().hex}",
         workspace_id=source_version.workspace_id,
@@ -292,7 +298,9 @@ async def _build_review_result_version(
         status=ArtifactVersionStatus.active,
         version_number=version_number,
         title=f"Review result for {source_version.title or source_version.artifact_key}",
-        parent_version_id=latest_version.version_id if latest_version is not None else None,
+        parent_version_id=latest_version.version_id
+        if latest_version is not None
+        else None,
         source_run_id=review_summary.run_id,
         created_at=timestamp,
         updated_at=timestamp,
@@ -365,8 +373,12 @@ async def review_artifact_version_async(
     artifact_repository = ArtifactRepository(workspace_db_path)
     workspace_repository = WorkspaceRepository(workspace_db_path)
 
-    _require_repository_value(await artifact_repository.initialize(), "artifact_repository.initialize")
-    _require_repository_value(await workspace_repository.initialize(), "workspace_repository.initialize")
+    _require_repository_value(
+        await artifact_repository.initialize(), "artifact_repository.initialize"
+    )
+    _require_repository_value(
+        await workspace_repository.initialize(), "workspace_repository.initialize"
+    )
     await _ensure_link_table(workspace_db_path)
 
     source_version = _require_repository_value(
@@ -397,7 +409,9 @@ async def review_artifact_version_async(
             "artifact_repository.upsert_version",
         )
 
-        existing_workspace = await _load_workspace_or_none(workspace_repository, source_version.workspace_id)
+        existing_workspace = await _load_workspace_or_none(
+            workspace_repository, source_version.workspace_id
+        )
         workspace_state = _build_workspace_state(
             source_version=source_version,
             review_result_version=review_result_version,

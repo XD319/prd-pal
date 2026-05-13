@@ -105,7 +105,9 @@ class PlanReviewState(TypedDict):
     estimation: str
 
 
-def merge_state_dicts(left: dict[str, Any] | None, right: dict[str, Any] | None) -> dict[str, Any]:
+def merge_state_dicts(
+    left: dict[str, Any] | None, right: dict[str, Any] | None
+) -> dict[str, Any]:
     """Merge dict fragments produced by parallel branches."""
 
     merged: dict[str, Any] = {}
@@ -205,10 +207,24 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         milestones=[],
         dependencies=[],
         estimation={},
-        implementation_plan={"implementation_steps": [], "target_modules": [], "constraints": []},
+        implementation_plan={
+            "implementation_steps": [],
+            "target_modules": [],
+            "constraints": [],
+        },
         test_plan={"test_scope": [], "edge_cases": [], "regression_focus": []},
-        codex_prompt_handoff={"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
-        claude_code_prompt_handoff={"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+        codex_prompt_handoff={
+            "agent_prompt": "",
+            "recommended_execution_order": [],
+            "non_goals": [],
+            "validation_checklist": [],
+        },
+        claude_code_prompt_handoff={
+            "agent_prompt": "",
+            "recommended_execution_order": [],
+            "non_goals": [],
+            "validation_checklist": [],
+        },
         risks=[],
         evidence={},
         plan_review={},
@@ -244,4 +260,3 @@ def create_initial_state(requirement_doc: str) -> ReviewState:
         memory_usage_notes=[],
         memory_usage={},
     )
-

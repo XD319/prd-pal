@@ -88,7 +88,9 @@ class MemoryRetrievalDiagnostics:
         return {
             "considered_count": int(self.considered_count),
             "selected": [item.to_dict() for item in self.selected],
-            "rejected_candidates": [item.to_dict() for item in self.rejected_candidates],
+            "rejected_candidates": [
+                item.to_dict() for item in self.rejected_candidates
+            ],
         }
 
 
@@ -144,7 +146,9 @@ async def retrieve_memories_with_diagnostics_async(
 ) -> MemoryRetrievalDiagnostics:
     normalized_mode = str(memory_mode or "off").strip().lower() or "off"
     if normalized_mode == "off":
-        return MemoryRetrievalDiagnostics(selected=(), rejected_candidates=(), considered_count=0)
+        return MemoryRetrievalDiagnostics(
+            selected=(), rejected_candidates=(), considered_count=0
+        )
 
     request = dict(canonical_review_request or {})
     candidates = await _load_candidates(memory_service, request)
@@ -163,8 +167,19 @@ async def retrieve_memories_with_diagnostics_async(
                 )
             )
             continue
-        score, reasons = _score_memory(memory, request=request, normalized_requirement=normalized_requirement, memory_mode=normalized_mode)
-        threshold = 0.7 if normalized_mode == "strict" else 0.66 if normalized_mode == "assist" else 0.6
+        score, reasons = _score_memory(
+            memory,
+            request=request,
+            normalized_requirement=normalized_requirement,
+            memory_mode=normalized_mode,
+        )
+        threshold = (
+            0.7
+            if normalized_mode == "strict"
+            else 0.66
+            if normalized_mode == "assist"
+            else 0.6
+        )
         if score < threshold:
             rejected.append(
                 RejectedMemoryCandidate(
@@ -217,22 +232,30 @@ async def retrieve_memories_with_diagnostics_async(
     )
 
 
-async def _load_candidates(memory_service: MemoryService, request: dict[str, Any]) -> list[MemoryRecord]:
+async def _load_candidates(
+    memory_service: MemoryService, request: dict[str, Any]
+) -> list[MemoryRecord]:
     seen: dict[str, MemoryRecord] = {}
     project_id = str(request.get("project_id", "") or "").strip()
     team_id = str(request.get("team_id", "") or "").strip()
     requirement_type = str(request.get("requirement_type", "") or "").strip()
 
     if project_id:
-        for item in await memory_service.list_memory_by_scope(level="project", project_id=project_id):
+        for item in await memory_service.list_memory_by_scope(
+            level="project", project_id=project_id
+        ):
             seen[item.memory_id] = item
     if team_id:
-        for item in await memory_service.list_memory_by_scope(level="team", team_id=team_id):
+        for item in await memory_service.list_memory_by_scope(
+            level="team", team_id=team_id
+        ):
             seen[item.memory_id] = item
     for item in await memory_service.list_memory_by_scope(level="global"):
         seen[item.memory_id] = item
     if requirement_type:
-        for item in await memory_service.find_memories(requirement_type=requirement_type):
+        for item in await memory_service.find_memories(
+            requirement_type=requirement_type
+        ):
             seen[item.memory_id] = item
     return list(seen.values())
 
@@ -275,14 +298,19 @@ def _score_memory(
     if memory_mode == "strict" and str(memory.memory_type) == "team_rule":
         score += 0.1
         reasons.append("strict_prefers_team_rule")
-    elif memory_mode == "hybrid" and str(memory.memory_type) in {"team_rule", "risk_pattern"}:
+    elif memory_mode == "hybrid" and str(memory.memory_type) in {
+        "team_rule",
+        "risk_pattern",
+    }:
         score += 0.08
         reasons.append("hybrid_prefers_reusable_memory")
 
     return score, reasons
 
 
-def _risk_surface_similarity(memory: MemoryRecord, normalized_requirement: dict[str, Any]) -> float:
+def _risk_surface_similarity(
+    memory: MemoryRecord, normalized_requirement: dict[str, Any]
+) -> float:
     memory_tokens = _tokens(
         memory.title,
         memory.summary,
@@ -316,4 +344,9 @@ def _usage_note(memory: MemoryRecord, reasons: list[str]) -> str:
 
 
 def _tokens(*parts: Any) -> set[str]:
-    return {match.group(0) for match in _WORD_RE.finditer(" ".join(str(part or "").lower() for part in parts))}
+    return {
+        match.group(0)
+        for match in _WORD_RE.finditer(
+            " ".join(str(part or "").lower() for part in parts)
+        )
+    }

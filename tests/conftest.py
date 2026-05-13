@@ -46,17 +46,26 @@ def sample_parsed_items() -> list[ParsedItemState]:
         {
             "id": "REQ-001",
             "description": "Recruiters can log in with OAuth and retain session state.",
-            "acceptance_criteria": ["OAuth callback succeeds", "Session persists after refresh"],
+            "acceptance_criteria": [
+                "OAuth callback succeeds",
+                "Session persists after refresh",
+            ],
         },
         {
             "id": "REQ-002",
             "description": "Recruiters can shortlist candidates by campus and graduation year.",
-            "acceptance_criteria": ["Filters apply together", "Shortlist can be exported"],
+            "acceptance_criteria": [
+                "Filters apply together",
+                "Shortlist can be exported",
+            ],
         },
         {
             "id": "REQ-003",
             "description": "The system records audit logs for sensitive workflow actions.",
-            "acceptance_criteria": ["Login events are logged", "Interview status updates are logged"],
+            "acceptance_criteria": [
+                "Login events are logged",
+                "Interview status updates are logged",
+            ],
         },
     ]
 
@@ -79,7 +88,11 @@ def mock_llm_response() -> Callable[..., Any]:
             if side_effect is not None:
                 if isinstance(side_effect, Exception):
                     raise side_effect
-                result = side_effect(*args, **kwargs) if callable(side_effect) else side_effect
+                result = (
+                    side_effect(*args, **kwargs)
+                    if callable(side_effect)
+                    else side_effect
+                )
                 if inspect.isawaitable(result):
                     return await result
                 return result
@@ -91,7 +104,9 @@ def mock_llm_response() -> Callable[..., Any]:
 
 
 @pytest.fixture
-def sample_review_state(sample_prd_text: str, sample_parsed_items: list[ParsedItemState]) -> ReviewState:
+def sample_review_state(
+    sample_prd_text: str, sample_parsed_items: list[ParsedItemState]
+) -> ReviewState:
     state = create_initial_state(sample_prd_text)
     state["parsed_items"] = deepcopy(sample_parsed_items)
     state["review_results"] = [
@@ -120,7 +135,9 @@ def sample_review_state(sample_prd_text: str, sample_parsed_items: list[ParsedIt
             "suggestions": "",
         },
     ]
-    state["final_report"] = "# Requirement Review Report\n\nCore recruiter workflow reviewed."
+    state["final_report"] = (
+        "# Requirement Review Report\n\nCore recruiter workflow reviewed."
+    )
     state["tasks"] = [
         {
             "id": "TASK-001",
@@ -139,11 +156,24 @@ def sample_review_state(sample_prd_text: str, sample_parsed_items: list[ParsedIt
             "estimate_days": 2.0,
         },
     ]
-    state["milestones"] = [{"id": "M-001", "title": "Recruiter MVP", "includes": ["TASK-001", "TASK-002"], "target_days": 5.0}]
-    state["dependencies"] = [{"from": "TASK-002", "to": "TASK-001", "type": "blocked_by"}]
+    state["milestones"] = [
+        {
+            "id": "M-001",
+            "title": "Recruiter MVP",
+            "includes": ["TASK-001", "TASK-002"],
+            "target_days": 5.0,
+        }
+    ]
+    state["dependencies"] = [
+        {"from": "TASK-002", "to": "TASK-001", "type": "blocked_by"}
+    ]
     state["estimation"] = {"total_days": 5.0, "buffer_days": 1.0}
     state["implementation_plan"] = {
-        "implementation_steps": ["Update auth flow", "Add shortlist filters", "Persist audit entries"],
+        "implementation_steps": [
+            "Update auth flow",
+            "Add shortlist filters",
+            "Persist audit entries",
+        ],
         "target_modules": ["backend.auth", "frontend.shortlist", "backend.audit"],
         "constraints": ["Preserve existing password login"],
     }
@@ -154,13 +184,20 @@ def sample_review_state(sample_prd_text: str, sample_parsed_items: list[ParsedIt
     }
     state["codex_prompt_handoff"] = {
         "agent_prompt": "Implement the recruiter workflow changes with minimal auth regression risk.",
-        "recommended_execution_order": ["Inspect auth flow", "Patch shortlist workflow", "Run focused tests"],
+        "recommended_execution_order": [
+            "Inspect auth flow",
+            "Patch shortlist workflow",
+            "Run focused tests",
+        ],
         "non_goals": ["Do not redesign analytics dashboards"],
         "validation_checklist": ["Acceptance criteria mapped to tests"],
     }
     state["claude_code_prompt_handoff"] = {
         "agent_prompt": "Validate the recruiter workflow changes and regression coverage.",
-        "recommended_execution_order": ["Inspect diff", "Run focused auth and shortlist tests"],
+        "recommended_execution_order": [
+            "Inspect diff",
+            "Run focused auth and shortlist tests",
+        ],
         "non_goals": ["Do not broaden into unrelated UI refactors"],
         "validation_checklist": ["Audit logs verified"],
     }
@@ -193,7 +230,9 @@ def sample_report_json(sample_review_state: ReviewState) -> dict[str, Any]:
         "implementation_plan": deepcopy(sample_review_state["implementation_plan"]),
         "test_plan": deepcopy(sample_review_state["test_plan"]),
         "codex_prompt_handoff": deepcopy(sample_review_state["codex_prompt_handoff"]),
-        "claude_code_prompt_handoff": deepcopy(sample_review_state["claude_code_prompt_handoff"]),
+        "claude_code_prompt_handoff": deepcopy(
+            sample_review_state["claude_code_prompt_handoff"]
+        ),
         "metrics": deepcopy(sample_review_state["metrics"]),
         "high_risk_ratio": sample_review_state["high_risk_ratio"],
         "revision_round": sample_review_state["revision_round"],
@@ -202,17 +241,29 @@ def sample_report_json(sample_review_state: ReviewState) -> dict[str, Any]:
 
 
 @pytest.fixture
-def write_report_files(sample_report_json: dict[str, Any]) -> Callable[..., dict[str, str]]:
-    def _write(run_dir: Path, *, report_payload: dict[str, Any] | None = None) -> dict[str, str]:
+def write_report_files(
+    sample_report_json: dict[str, Any],
+) -> Callable[..., dict[str, str]]:
+    def _write(
+        run_dir: Path, *, report_payload: dict[str, Any] | None = None
+    ) -> dict[str, str]:
         payload = deepcopy(report_payload or sample_report_json)
         report_paths = {
             "report_md": str(run_dir / "report.md"),
             "report_json": str(run_dir / "report.json"),
             "run_trace": str(run_dir / "run_trace.json"),
         }
-        (run_dir / "report.md").write_text(payload.get("final_report", "# Requirement Review Report\n"), encoding="utf-8")
-        (run_dir / "report.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        (run_dir / "run_trace.json").write_text(json.dumps(payload.get("trace", {}), ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "report.md").write_text(
+            payload.get("final_report", "# Requirement Review Report\n"),
+            encoding="utf-8",
+        )
+        (run_dir / "report.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (run_dir / "run_trace.json").write_text(
+            json.dumps(payload.get("trace", {}), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         return report_paths
 
     return _write
@@ -242,7 +293,10 @@ def write_delivery_workspace(
             "summary": "Support recruiter login and shortlist handling safely.",
             "context": "Repository auth and shortlist flow context.",
             "target_modules": ["backend.auth"],
-            "implementation_steps": ["Inspect auth flow", "Implement recruiter workflow change"],
+            "implementation_steps": [
+                "Inspect auth flow",
+                "Implement recruiter workflow change",
+            ],
             "constraints": ["Do not break existing auth flow"],
             "acceptance_criteria": ["Recruiter login succeeds"],
             "recommended_skills": ["pytest"],
@@ -273,7 +327,9 @@ def write_delivery_workspace(
             "pack_version": "1.0",
             "implementation_pack": implementation_pack,
             "test_pack": test_pack,
-            "risk_pack": [{"id": "RISK-001", "summary": "Auth regression", "level": "low"}],
+            "risk_pack": [
+                {"id": "RISK-001", "summary": "Auth regression", "level": "low"}
+            ],
             "handoff_strategy": "sequential",
         }
 
@@ -282,7 +338,9 @@ def write_delivery_workspace(
             ("test_pack.json", test_pack),
             ("execution_pack.json", execution_pack),
         ):
-            (run_dir / filename).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            (run_dir / filename).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
         report_paths = write_report_files(run_dir, report_payload=report_payload)
         bundle_id = f"bundle-{run_id}"
@@ -293,19 +351,46 @@ def write_delivery_workspace(
             "status": bundle_status,
             "source_run_id": run_id,
             "artifacts": {
-                "prd_review_report": {"artifact_type": "prd_review_report", "path": str(run_dir / "prd_review_report.md")},
-                "open_questions": {"artifact_type": "open_questions", "path": str(run_dir / "open_questions.md")},
-                "scope_boundary": {"artifact_type": "scope_boundary", "path": str(run_dir / "scope_boundary.md")},
-                "tech_design_draft": {"artifact_type": "tech_design_draft", "path": str(run_dir / "tech_design_draft.md")},
-                "test_checklist": {"artifact_type": "test_checklist", "path": str(run_dir / "test_checklist.md")},
-                "implementation_pack": {"artifact_type": "implementation_pack", "path": str(run_dir / "implementation_pack.json")},
-                "test_pack": {"artifact_type": "test_pack", "path": str(run_dir / "test_pack.json")},
-                "execution_pack": {"artifact_type": "execution_pack", "path": str(run_dir / "execution_pack.json")},
+                "prd_review_report": {
+                    "artifact_type": "prd_review_report",
+                    "path": str(run_dir / "prd_review_report.md"),
+                },
+                "open_questions": {
+                    "artifact_type": "open_questions",
+                    "path": str(run_dir / "open_questions.md"),
+                },
+                "scope_boundary": {
+                    "artifact_type": "scope_boundary",
+                    "path": str(run_dir / "scope_boundary.md"),
+                },
+                "tech_design_draft": {
+                    "artifact_type": "tech_design_draft",
+                    "path": str(run_dir / "tech_design_draft.md"),
+                },
+                "test_checklist": {
+                    "artifact_type": "test_checklist",
+                    "path": str(run_dir / "test_checklist.md"),
+                },
+                "implementation_pack": {
+                    "artifact_type": "implementation_pack",
+                    "path": str(run_dir / "implementation_pack.json"),
+                },
+                "test_pack": {
+                    "artifact_type": "test_pack",
+                    "path": str(run_dir / "test_pack.json"),
+                },
+                "execution_pack": {
+                    "artifact_type": "execution_pack",
+                    "path": str(run_dir / "execution_pack.json"),
+                },
             },
             "approval_history": [],
-            "metadata": metadata or {"source_report_paths": {"report_json": report_paths["report_json"]}},
+            "metadata": metadata
+            or {"source_report_paths": {"report_json": report_paths["report_json"]}},
         }
-        (run_dir / "delivery_bundle.json").write_text(json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "delivery_bundle.json").write_text(
+            json.dumps(bundle_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return bundle_id, run_dir
 
     return _write

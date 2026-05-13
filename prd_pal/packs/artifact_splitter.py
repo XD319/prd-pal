@@ -38,7 +38,9 @@ class ArtifactSplitter:
             for artifact_type, template in self.templates().items()
         }
 
-    def split(self, review_result: dict[str, Any], run_dir: Path) -> dict[str, ArtifactRef]:
+    def split(
+        self, review_result: dict[str, Any], run_dir: Path
+    ) -> dict[str, ArtifactRef]:
         run_dir.mkdir(parents=True, exist_ok=True)
         generated_at = _utc_now_iso()
         refs: dict[str, ArtifactRef] = {}

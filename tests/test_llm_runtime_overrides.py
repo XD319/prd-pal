@@ -7,7 +7,9 @@ from review_runtime.config.config import Config
 
 
 @pytest.mark.asyncio
-async def test_review_prd_text_async_applies_llm_runtime_overrides_without_leaking(tmp_path, monkeypatch, sample_prd_text: str):
+async def test_review_prd_text_async_applies_llm_runtime_overrides_without_leaking(
+    tmp_path, monkeypatch, sample_prd_text: str
+):
     observed: dict[str, object] = {}
 
     async def fake_run_review(requirement_doc: str, **kwargs):
@@ -33,7 +35,9 @@ async def test_review_prd_text_async_applies_llm_runtime_overrides_without_leaki
         }
 
     monkeypatch.setattr(review_service, "run_review", fake_run_review)
-    monkeypatch.setattr(review_service, "build_delivery_handoff_outputs", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        review_service, "build_delivery_handoff_outputs", lambda *args, **kwargs: {}
+    )
 
     summary = await review_service.review_prd_text_async(
         prd_text=sample_prd_text,

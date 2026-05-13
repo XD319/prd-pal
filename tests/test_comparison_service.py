@@ -5,13 +5,19 @@ import json
 from fastapi.testclient import TestClient
 
 from prd_pal.server import app as app_module
-from prd_pal.service.comparison_service import compare_runs, get_run_stats_summary, get_trend_data
+from prd_pal.service.comparison_service import (
+    compare_runs,
+    get_run_stats_summary,
+    get_trend_data,
+)
 
 
 def _write_report(tmp_path, run_id: str, payload: dict) -> None:
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "report.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def test_compare_runs_identifies_added_removed_and_changed_findings(tmp_path):
@@ -25,11 +31,26 @@ def test_compare_runs_identifies_added_removed_and_changed_findings(tmp_path):
             "parallel_review_meta": {"duration_ms": 1000},
             "parallel_review": {
                 "findings": [
-                    {"requirement_id": "REQ-001", "title": "Missing acceptance criteria", "severity": "high", "category": "clarity"},
-                    {"requirement_id": "REQ-002", "title": "Test plan incomplete", "severity": "medium", "category": "testability"},
+                    {
+                        "requirement_id": "REQ-001",
+                        "title": "Missing acceptance criteria",
+                        "severity": "high",
+                        "category": "clarity",
+                    },
+                    {
+                        "requirement_id": "REQ-002",
+                        "title": "Test plan incomplete",
+                        "severity": "medium",
+                        "category": "testability",
+                    },
                 ],
                 "risk_items": [
-                    {"id": "R-1", "title": "Rate limit gap", "description": "No rate limit defined", "severity": "high"},
+                    {
+                        "id": "R-1",
+                        "title": "Rate limit gap",
+                        "description": "No rate limit defined",
+                        "severity": "high",
+                    },
                 ],
                 "open_questions": [
                     {"question": "Who owns rollout approval?"},
@@ -48,12 +69,32 @@ def test_compare_runs_identifies_added_removed_and_changed_findings(tmp_path):
             "parallel_review_meta": {"duration_ms": 2000},
             "parallel_review": {
                 "findings": [
-                    {"requirement_id": "REQ-001", "title": "Missing measurable acceptance criteria", "severity": "high", "category": "clarity"},
-                    {"requirement_id": "REQ-003", "title": "Audit logging unspecified", "severity": "medium", "category": "compliance"},
+                    {
+                        "requirement_id": "REQ-001",
+                        "title": "Missing measurable acceptance criteria",
+                        "severity": "high",
+                        "category": "clarity",
+                    },
+                    {
+                        "requirement_id": "REQ-003",
+                        "title": "Audit logging unspecified",
+                        "severity": "medium",
+                        "category": "compliance",
+                    },
                 ],
                 "risk_items": [
-                    {"id": "R-1", "title": "Rate limit gap", "description": "No rate limit defined", "severity": "medium"},
-                    {"id": "R-2", "title": "Rollback gap", "description": "Rollback path not documented", "severity": "medium"},
+                    {
+                        "id": "R-1",
+                        "title": "Rate limit gap",
+                        "description": "No rate limit defined",
+                        "severity": "medium",
+                    },
+                    {
+                        "id": "R-2",
+                        "title": "Rollback gap",
+                        "description": "Rollback path not documented",
+                        "severity": "medium",
+                    },
                 ],
                 "open_questions": [
                     {"question": "Who owns rollout approval?"},
@@ -63,7 +104,9 @@ def test_compare_runs_identifies_added_removed_and_changed_findings(tmp_path):
         },
     )
 
-    result = compare_runs("20260309T010203Z", "20260310T010203Z", outputs_root=str(tmp_path))
+    result = compare_runs(
+        "20260309T010203Z", "20260310T010203Z", outputs_root=str(tmp_path)
+    )
 
     statuses = {item.requirement_id: item.status for item in result.findings}
     assert statuses["REQ-001"] == "changed"
@@ -143,9 +186,21 @@ def test_trend_and_stats_handle_empty_and_single_run_boundaries(tmp_path):
             "parallel_review_meta": {"duration_ms": 1500},
             "parallel_review": {
                 "findings": [
-                    {"requirement_id": "REQ-001", "severity": "high", "category": "clarity"},
-                    {"requirement_id": "REQ-002", "severity": "medium", "category": "clarity"},
-                    {"requirement_id": "REQ-003", "severity": "medium", "category": "testability"},
+                    {
+                        "requirement_id": "REQ-001",
+                        "severity": "high",
+                        "category": "clarity",
+                    },
+                    {
+                        "requirement_id": "REQ-002",
+                        "severity": "medium",
+                        "category": "clarity",
+                    },
+                    {
+                        "requirement_id": "REQ-003",
+                        "severity": "medium",
+                        "category": "testability",
+                    },
                 ],
             },
         },
@@ -171,8 +226,17 @@ def test_compare_trends_and_stats_api_endpoints(tmp_path, monkeypatch):
             "metrics": {"coverage_ratio": 0.75, "risk_score": 6.0},
             "parallel_review_meta": {"duration_ms": 1200},
             "parallel_review": {
-                "findings": [{"requirement_id": "REQ-001", "title": "Gap A", "severity": "high", "category": "clarity"}],
-                "risk_items": [{"id": "R-1", "title": "Risk A", "description": "Legacy risk"}],
+                "findings": [
+                    {
+                        "requirement_id": "REQ-001",
+                        "title": "Gap A",
+                        "severity": "high",
+                        "category": "clarity",
+                    }
+                ],
+                "risk_items": [
+                    {"id": "R-1", "title": "Risk A", "description": "Legacy risk"}
+                ],
                 "open_questions": [{"question": "Question A?"}],
             },
         },
@@ -185,10 +249,26 @@ def test_compare_trends_and_stats_api_endpoints(tmp_path, monkeypatch):
             "parallel_review_meta": {"duration_ms": 1800},
             "parallel_review": {
                 "findings": [
-                    {"requirement_id": "REQ-001", "title": "Gap A updated", "severity": "high", "category": "clarity"},
-                    {"requirement_id": "REQ-002", "title": "Gap B", "severity": "medium", "category": "testability"},
+                    {
+                        "requirement_id": "REQ-001",
+                        "title": "Gap A updated",
+                        "severity": "high",
+                        "category": "clarity",
+                    },
+                    {
+                        "requirement_id": "REQ-002",
+                        "title": "Gap B",
+                        "severity": "medium",
+                        "category": "testability",
+                    },
                 ],
-                "risk_items": [{"id": "R-1", "title": "Risk A", "description": "Legacy risk updated"}],
+                "risk_items": [
+                    {
+                        "id": "R-1",
+                        "title": "Risk A",
+                        "description": "Legacy risk updated",
+                    }
+                ],
                 "open_questions": [{"question": "Question B?"}],
             },
         },
@@ -198,7 +278,10 @@ def test_compare_trends_and_stats_api_endpoints(tmp_path, monkeypatch):
     app_module._jobs.clear()
     client = TestClient(app_module.app)
 
-    compare_response = client.get("/api/compare", params={"run_a": "20260309T010203Z", "run_b": "20260310T010203Z"})
+    compare_response = client.get(
+        "/api/compare",
+        params={"run_a": "20260309T010203Z", "run_b": "20260310T010203Z"},
+    )
     trends_response = client.get("/api/trends", params={"limit": 20})
     stats_response = client.get("/api/stats")
 
@@ -206,7 +289,10 @@ def test_compare_trends_and_stats_api_endpoints(tmp_path, monkeypatch):
     compare_payload = compare_response.json()
     assert compare_payload["run_a"] == "20260309T010203Z"
     assert compare_payload["run_b"] == "20260310T010203Z"
-    assert any(item["status"] == "added" and item["requirement_id"] == "REQ-002" for item in compare_payload["findings"])
+    assert any(
+        item["status"] == "added" and item["requirement_id"] == "REQ-002"
+        for item in compare_payload["findings"]
+    )
 
     assert trends_response.status_code == 200
     trends_payload = trends_response.json()

@@ -12,7 +12,14 @@ def _build_client() -> TestClient:
     return TestClient(app_module.app)
 
 
-def _write_run_payloads(tmp_path, run_id: str, *, clarification: dict, findings: list[dict], reviewer_summaries: list[dict]) -> None:
+def _write_run_payloads(
+    tmp_path,
+    run_id: str,
+    *,
+    clarification: dict,
+    findings: list[dict],
+    reviewer_summaries: list[dict],
+) -> None:
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
 
@@ -40,7 +47,9 @@ def _write_run_payloads(tmp_path, run_id: str, *, clarification: dict, findings:
             "selected_mode": "full",
             "review_mode": "full",
             "gating": {"selected_mode": "full", "reasons": [], "skipped": False},
-            "artifact_paths": {"review_result_json": str(run_dir / "review_result.json")},
+            "artifact_paths": {
+                "review_result_json": str(run_dir / "review_result.json")
+            },
         },
         "trace": {"reviewer": {"status": "ok"}},
     }
@@ -50,7 +59,9 @@ def _write_run_payloads(tmp_path, run_id: str, *, clarification: dict, findings:
         "review_result.json": parallel_review,
         "review_report.json": parallel_review,
     }.items():
-        (run_dir / name).write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / name).write_text(
+            json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     (run_dir / "report.md").write_text("# Review Report", encoding="utf-8")
     (run_dir / "run_trace.json").write_text("{}", encoding="utf-8")
     (run_dir / "review_report.md").write_text("# Review Report", encoding="utf-8")
@@ -129,9 +140,13 @@ def test_feishu_clarification_updates_and_returns_navigation(tmp_path, monkeypat
         "path": f"/run/{run_id}?trigger_source=feishu&open_id=ou_test_user&tenant_key=tenant-test&embed=feishu",
         "url": f"/run/{run_id}?trigger_source=feishu&open_id=ou_test_user&tenant_key=tenant-test&embed=feishu",
     }
-    assert payload["clarification"]["answers_applied"][0]["question_id"] == "clarify-123"
+    assert (
+        payload["clarification"]["answers_applied"][0]["question_id"] == "clarify-123"
+    )
     audit_events = read_audit_events(tmp_path / run_id)
-    clarification_event = next(event for event in audit_events if event["operation"] == "clarification_answer")
+    clarification_event = next(
+        event for event in audit_events if event["operation"] == "clarification_answer"
+    )
     assert clarification_event["actor"] == "ou_test_user"
     assert clarification_event["source"] == "feishu"
     assert clarification_event["details"]["question_ids"] == ["clarify-123"]
@@ -155,7 +170,9 @@ def test_feishu_clarification_returns_run_not_found(tmp_path, monkeypatch):
     assert response.json()["detail"]["code"] == "run_not_found"
 
 
-def test_feishu_clarification_returns_controlled_error_when_gate_not_enabled(tmp_path, monkeypatch):
+def test_feishu_clarification_returns_controlled_error_when_gate_not_enabled(
+    tmp_path, monkeypatch
+):
     run_id = "20260309T020208Z"
     _write_run_payloads(
         tmp_path,
@@ -254,7 +271,9 @@ def test_feishu_clarification_accepts_repeat_answer_idempotently(tmp_path, monke
     assert payload["clarification"]["answers_applied"][0]["answer"] == "Updated answer."
 
 
-def test_feishu_clarification_uses_request_context_when_payload_context_is_missing(tmp_path, monkeypatch):
+def test_feishu_clarification_uses_request_context_when_payload_context_is_missing(
+    tmp_path, monkeypatch
+):
     run_id = "20260309T020211Z"
     _write_run_payloads(
         tmp_path,
@@ -317,7 +336,7 @@ def test_feishu_clarification_uses_request_context_when_payload_context_is_missi
     client = _build_client()
 
     response = client.post(
-        f"/api/feishu/clarification?open_id=ou_request_user&tenant_key=tenant-request",
+        "/api/feishu/clarification?open_id=ou_request_user&tenant_key=tenant-request",
         json={
             "run_id": run_id,
             "question_id": "clarify-ctx",
@@ -332,7 +351,9 @@ def test_feishu_clarification_uses_request_context_when_payload_context_is_missi
     )
 
 
-def test_feishu_clarification_falls_back_to_entry_context_when_request_context_missing(tmp_path, monkeypatch):
+def test_feishu_clarification_falls_back_to_entry_context_when_request_context_missing(
+    tmp_path, monkeypatch
+):
     run_id = "20260309T020213Z"
     _write_run_payloads(
         tmp_path,
@@ -411,7 +432,9 @@ def test_feishu_clarification_falls_back_to_entry_context_when_request_context_m
     )
 
 
-def test_feishu_clarification_result_page_degrades_when_open_id_is_missing(tmp_path, monkeypatch):
+def test_feishu_clarification_result_page_degrades_when_open_id_is_missing(
+    tmp_path, monkeypatch
+):
     run_id = "20260309T020212Z"
     _write_run_payloads(
         tmp_path,
@@ -452,7 +475,9 @@ def test_feishu_clarification_result_page_degrades_when_open_id_is_missing(tmp_p
     }
 
 
-def test_feishu_clarification_result_page_uses_entry_identity_when_request_context_is_forged(tmp_path, monkeypatch):
+def test_feishu_clarification_result_page_uses_entry_identity_when_request_context_is_forged(
+    tmp_path, monkeypatch
+):
     run_id = "20260309T020214Z"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)

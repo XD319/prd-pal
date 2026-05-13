@@ -7,7 +7,10 @@ import pytest
 
 pytest.importorskip("aiosqlite")
 
-from prd_pal.service import apply_artifact_patch_async, build_clarification_to_patch_prompt
+from prd_pal.service import (
+    apply_artifact_patch_async,
+    build_clarification_to_patch_prompt,
+)
 from prd_pal.workspace import (
     ArtifactPatch,
     ArtifactRepository,
@@ -42,7 +45,9 @@ def _write_structured_artifact(path: Path) -> None:
             },
         ],
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _build_source_version(content_path: Path) -> ArtifactVersion:
@@ -75,7 +80,10 @@ def _build_patch() -> ArtifactPatch:
                 {
                     "op_id": "op-1",
                     "action": "replace_text",
-                    "target": {"block_id": "functional.payment_timeout", "field": "content"},
+                    "target": {
+                        "block_id": "functional.payment_timeout",
+                        "field": "content",
+                    },
                     "old_value": "支付超时时间为30分钟。",
                     "new_value": "支付超时时间为15分钟。",
                     "rationale": "澄清确认库存紧张，需要缩短锁单时间",
@@ -83,7 +91,10 @@ def _build_patch() -> ArtifactPatch:
                 {
                     "op_id": "op-2",
                     "action": "set_field",
-                    "target": {"block_id": "functional.payment_timeout", "field": "meta.priority"},
+                    "target": {
+                        "block_id": "functional.payment_timeout",
+                        "field": "meta.priority",
+                    },
                     "old_value": "P2",
                     "new_value": "P1",
                     "rationale": "该变更影响核心交易链路",
@@ -107,7 +118,9 @@ def _build_patch() -> ArtifactPatch:
 
 
 @pytest.mark.asyncio
-async def test_apply_artifact_patch_async_creates_next_version_and_diff(tmp_path) -> None:
+async def test_apply_artifact_patch_async_creates_next_version_and_diff(
+    tmp_path,
+) -> None:
     db_path = tmp_path / "workspace.sqlite3"
     content_path = tmp_path / "artifact.v1.json"
     _write_structured_artifact(content_path)
@@ -169,11 +182,15 @@ async def test_apply_artifact_patch_async_creates_next_version_and_diff(tmp_path
     workspace_result = await workspace_repository.get_workspace("ws-1")
     assert workspace_result.ok is True
     assert workspace_result.value is not None
-    assert workspace_result.value.current_version_ids["prd_doc"] == result.next_version_id
+    assert (
+        workspace_result.value.current_version_ids["prd_doc"] == result.next_version_id
+    )
 
 
 @pytest.mark.asyncio
-async def test_apply_artifact_patch_async_downgrades_to_review_on_old_value_mismatch(tmp_path) -> None:
+async def test_apply_artifact_patch_async_downgrades_to_review_on_old_value_mismatch(
+    tmp_path,
+) -> None:
     db_path = tmp_path / "workspace.sqlite3"
     content_path = tmp_path / "artifact.v1.json"
     _write_structured_artifact(content_path)
@@ -201,7 +218,9 @@ async def test_apply_artifact_patch_async_downgrades_to_review_on_old_value_mism
 
 
 @pytest.mark.asyncio
-async def test_apply_artifact_patch_async_rejects_base_version_mismatch(tmp_path) -> None:
+async def test_apply_artifact_patch_async_rejects_base_version_mismatch(
+    tmp_path,
+) -> None:
     db_path = tmp_path / "workspace.sqlite3"
     content_path = tmp_path / "artifact.v1.json"
     _write_structured_artifact(content_path)

@@ -18,10 +18,43 @@ _SUPPORTED_PROFILES = {
     "growth_analytics",
 }
 _PROFILE_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "admin_backoffice": ("admin", "backoffice", "back office", "ops console", "operator", "internal tool"),
-    "data_sensitive": ("pii", "privacy", "gdpr", "payment", "encryption", "sso", "oauth", "audit log"),
-    "approval_workflow": ("approval", "approver", "sign-off", "signoff", "workflow", "release gate", "change request"),
-    "growth_analytics": ("experiment", "a/b", "ab test", "funnel", "conversion", "retention", "cohort", "analytics"),
+    "admin_backoffice": (
+        "admin",
+        "backoffice",
+        "back office",
+        "ops console",
+        "operator",
+        "internal tool",
+    ),
+    "data_sensitive": (
+        "pii",
+        "privacy",
+        "gdpr",
+        "payment",
+        "encryption",
+        "sso",
+        "oauth",
+        "audit log",
+    ),
+    "approval_workflow": (
+        "approval",
+        "approver",
+        "sign-off",
+        "signoff",
+        "workflow",
+        "release gate",
+        "change request",
+    ),
+    "growth_analytics": (
+        "experiment",
+        "a/b",
+        "ab test",
+        "funnel",
+        "conversion",
+        "retention",
+        "cohort",
+        "analytics",
+    ),
 }
 _WORD_RE = re.compile(r"\s+")
 
@@ -42,11 +75,15 @@ class ReviewProfileRoutingResult:
         }
 
 
-def route_review_profile(request: CanonicalReviewRequest | Mapping[str, Any]) -> ReviewProfileRoutingResult:
+def route_review_profile(
+    request: CanonicalReviewRequest | Mapping[str, Any],
+) -> ReviewProfileRoutingResult:
     normalized = _normalize_request(request)
     text = _build_signal_text(normalized)
     hint = str(normalized.get("review_profile_hint", "") or "").strip().lower()
-    scores = {profile: 0 for profile in _SUPPORTED_PROFILES if profile != DEFAULT_PROFILE}
+    scores = {
+        profile: 0 for profile in _SUPPORTED_PROFILES if profile != DEFAULT_PROFILE
+    }
     reasons: dict[str, list[str]] = {profile: [] for profile in scores}
 
     for profile, keywords in _PROFILE_KEYWORDS.items():
@@ -71,7 +108,9 @@ def route_review_profile(request: CanonicalReviewRequest | Mapping[str, Any]) ->
             selected_profile=DEFAULT_PROFILE,
             confidence=0.35 if top_score else 0.2,
             reason=reason,
-            secondary_profiles=tuple(profile for profile, score in ranked if score > 0)[:2],
+            secondary_profiles=tuple(profile for profile, score in ranked if score > 0)[
+                :2
+            ],
         )
 
     confidence = min(0.95, 0.5 + (top_score * 0.1))
@@ -85,7 +124,9 @@ def route_review_profile(request: CanonicalReviewRequest | Mapping[str, Any]) ->
     )
 
 
-def load_profile_pack(profile: str, secondary_profiles: tuple[str, ...] | list[str] | None = None) -> dict[str, Any]:
+def load_profile_pack(
+    profile: str, secondary_profiles: tuple[str, ...] | list[str] | None = None
+) -> dict[str, Any]:
     requested = str(profile or "").strip().lower() or DEFAULT_PROFILE
     selected = requested if requested in _SUPPORTED_PROFILES else DEFAULT_PROFILE
     root = Path(__file__).with_name("profile_packs")
@@ -109,12 +150,22 @@ def load_profile_pack(profile: str, secondary_profiles: tuple[str, ...] | list[s
         source = _source_for_profile(profile_name, selected)
         checklist_path = profile_root / "checklist.md"
         rules_path = profile_root / "rules.md"
-        checklist_sources.append({"source": source, "profile": profile_name, "path": str(checklist_path)})
-        rules_sources.append({"source": source, "profile": profile_name, "path": str(rules_path)})
-        checklist_items.extend(
-            _extract_sourced_items(checklist_path, source=source, profile=profile_name, seen=checklist_seen)
+        checklist_sources.append(
+            {"source": source, "profile": profile_name, "path": str(checklist_path)}
         )
-        rules_items.extend(_extract_sourced_items(rules_path, source=source, profile=profile_name, seen=rules_seen))
+        rules_sources.append(
+            {"source": source, "profile": profile_name, "path": str(rules_path)}
+        )
+        checklist_items.extend(
+            _extract_sourced_items(
+                checklist_path, source=source, profile=profile_name, seen=checklist_seen
+            )
+        )
+        rules_items.extend(
+            _extract_sourced_items(
+                rules_path, source=source, profile=profile_name, seen=rules_seen
+            )
+        )
 
     checklist = _render_sourced_items(checklist_items)
     rules = _render_sourced_items(rules_items)
@@ -134,7 +185,9 @@ def load_profile_pack(profile: str, secondary_profiles: tuple[str, ...] | list[s
     }
 
 
-def _normalize_request(request: CanonicalReviewRequest | Mapping[str, Any]) -> dict[str, Any]:
+def _normalize_request(
+    request: CanonicalReviewRequest | Mapping[str, Any],
+) -> dict[str, Any]:
     if isinstance(request, CanonicalReviewRequest):
         return request.model_dump(mode="python")
     return dict(request)
@@ -177,14 +230,21 @@ def _read_optional_text(path: Path) -> str:
         return ""
 
 
-def _normalize_secondary_profiles(selected: str, secondary_profiles: tuple[str, ...] | list[str] | None) -> list[str]:
+def _normalize_secondary_profiles(
+    selected: str, secondary_profiles: tuple[str, ...] | list[str] | None
+) -> list[str]:
     if not secondary_profiles:
         return []
     accepted: list[str] = []
     seen: set[str] = set()
     for raw in secondary_profiles:
         profile = str(raw or "").strip().lower()
-        if not profile or profile in seen or profile == selected or profile == DEFAULT_PROFILE:
+        if (
+            not profile
+            or profile in seen
+            or profile == selected
+            or profile == DEFAULT_PROFILE
+        ):
             continue
         if profile not in _SUPPORTED_PROFILES:
             continue
@@ -201,7 +261,9 @@ def _source_for_profile(profile: str, selected: str) -> str:
     return "secondary_profile"
 
 
-def _extract_sourced_items(path: Path, *, source: str, profile: str, seen: set[str]) -> list[dict[str, str]]:
+def _extract_sourced_items(
+    path: Path, *, source: str, profile: str, seen: set[str]
+) -> list[dict[str, str]]:
     content = _read_optional_text(path)
     if not content:
         return []

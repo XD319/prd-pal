@@ -17,8 +17,12 @@ def test_build_artifact_diff_has_structured_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_rerun_plan_marks_cache_reuse_for_unaffected_node(monkeypatch) -> None:
-    async def fake_analyze_affected_nodes_async(*, artifact_diff, baseline_snapshot=None):  # type: ignore[no-untyped-def]
+async def test_build_rerun_plan_marks_cache_reuse_for_unaffected_node(
+    monkeypatch,
+) -> None:
+    async def fake_analyze_affected_nodes_async(
+        *, artifact_diff, baseline_snapshot=None
+    ):  # type: ignore[no-untyped-def]
         return {
             "affected_nodes": ["risk"],
             "reasons": {"risk": ["changed risk section"]},

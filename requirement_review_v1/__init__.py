@@ -1,4 +1,4 @@
-﻿"""Backward-compatible import alias for the migrated prd_pal package."""
+"""Backward-compatible import alias for the migrated prd_pal package."""
 
 from __future__ import annotations
 

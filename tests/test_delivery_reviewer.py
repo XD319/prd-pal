@@ -13,12 +13,17 @@ def test_delivery_reviewer_auto_resolves_high_severity_mismatch():
         security_summary="Security requires approval before release.",
     )
 
-    assert resolution.recommendation == "Treat 'Security review gate required' as high severity until reviewers align on one shared label."
+    assert (
+        resolution.recommendation
+        == "Treat 'Security review gate required' as high severity until reviewers align on one shared label."
+    )
     assert resolution.decided_by == "delivery_reviewer.rules"
     assert resolution.needs_human is False
     assert "higher severity of high" in resolution.reasoning
     assert "product: Product believes the flow is ready." in resolution.reasoning
-    assert "security: Security requires approval before release." in resolution.reasoning
+    assert (
+        "security: Security requires approval before release." in resolution.reasoning
+    )
 
 
 def test_delivery_reviewer_escalates_scope_dependency_conflict_to_human():
@@ -36,5 +41,7 @@ def test_delivery_reviewer_escalates_scope_dependency_conflict_to_human():
     )
     assert resolution.decided_by == "delivery_reviewer.rules"
     assert resolution.needs_human is True
-    assert "Product scope confidence conflicts with engineering dependency risk." in resolution.reasoning
-
+    assert (
+        "Product scope confidence conflicts with engineering dependency risk."
+        in resolution.reasoning
+    )

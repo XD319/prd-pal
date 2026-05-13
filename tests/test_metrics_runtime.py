@@ -59,8 +59,18 @@ def test_build_runtime_trace_summary_exposes_failed_spans_and_backend_usage():
         "parser": {"status": "ok", "duration_ms": 1000},
         "planner": {"status": "ok", "duration_ms": 3000},
         "risk": {"status": "failed", "duration_ms": 2500},
-        "risk_catalog.search": {"status": "ok", "duration_ms": 120, "cache_hit": True, "cache_backend": "sqlite"},
-        "implementation.plan": {"status": "ok", "duration_ms": 220, "cache_hit": False, "cache_backend": "sqlite"},
+        "risk_catalog.search": {
+            "status": "ok",
+            "duration_ms": 120,
+            "cache_hit": True,
+            "cache_backend": "sqlite",
+        },
+        "implementation.plan": {
+            "status": "ok",
+            "duration_ms": 220,
+            "cache_hit": False,
+            "cache_backend": "sqlite",
+        },
     }
 
     summary = build_runtime_trace_summary(trace)
@@ -73,4 +83,8 @@ def test_build_runtime_trace_summary_exposes_failed_spans_and_backend_usage():
     assert summary["cache_hit_rate"] == 0.5
     assert summary["slowest_span_name"] == "planner"
     assert summary["slowest_span_duration_ms"] == 3000
-    assert [item["name"] for item in summary["slowest_spans_top_3"]] == ["planner", "risk", "parser"]
+    assert [item["name"] for item in summary["slowest_spans_top_3"]] == [
+        "planner",
+        "risk",
+        "parser",
+    ]

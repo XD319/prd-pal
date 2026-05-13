@@ -38,9 +38,17 @@ def _ensure_confirmation_prefix(items: list[str]) -> list[str]:
 
 
 def _merge_pending_questions(validated_payload: dict[str, Any]) -> list[str]:
-    base_pending = [str(item).strip() for item in validated_payload.get("pending_questions", []) if str(item).strip()]
+    base_pending = [
+        str(item).strip()
+        for item in validated_payload.get("pending_questions", [])
+        if str(item).strip()
+    ]
     notes_pending = _ensure_confirmation_prefix(
-        [str(item).strip() for item in validated_payload.get("meeting_notes_pending_confirmations", []) if str(item).strip()]
+        [
+            str(item).strip()
+            for item in validated_payload.get("meeting_notes_pending_confirmations", [])
+            if str(item).strip()
+        ]
     )
     merged: list[str] = []
     for item in [*base_pending, *notes_pending]:
@@ -53,7 +61,9 @@ def _revision_artifact_paths(run_dir: Path) -> dict[str, str]:
     return {
         "revised_prd": str((run_dir / REVISED_PRD_FILENAME).resolve()),
         "revision_summary_md": str((run_dir / REVISION_SUMMARY_MD_FILENAME).resolve()),
-        "revision_summary_json": str((run_dir / REVISION_SUMMARY_JSON_FILENAME).resolve()),
+        "revision_summary_json": str(
+            (run_dir / REVISION_SUMMARY_JSON_FILENAME).resolve()
+        ),
     }
 
 
@@ -101,8 +111,12 @@ def _build_revision_input_payload(
             "resolved_answers": clarification.get("resolved_answers", []),
         },
         "revision_request": {
-            "selected_review_basis": str(revision_request_payload.get("selected_review_basis", "") or ""),
-            "extra_instructions": str(revision_request_payload.get("extra_instructions", "") or ""),
+            "selected_review_basis": str(
+                revision_request_payload.get("selected_review_basis", "") or ""
+            ),
+            "extra_instructions": str(
+                revision_request_payload.get("extra_instructions", "") or ""
+            ),
         },
         "meeting_notes": {
             "text": str(revision_request_payload.get("meeting_notes_text", "") or ""),
@@ -113,14 +127,40 @@ def _build_revision_input_payload(
 
 
 def _build_revision_summary_markdown(payload: dict[str, Any]) -> str:
-    sources_used = [str(item) for item in payload.get("sources_used", []) if str(item).strip()]
-    major_changes = [str(item) for item in payload.get("major_changes", []) if str(item).strip()]
-    unadopted = [str(item) for item in payload.get("unadopted_review_suggestions", []) if str(item).strip()]
-    pending = [str(item) for item in payload.get("pending_questions", []) if str(item).strip()]
-    user_direct = [str(item) for item in payload.get("user_direct_requirements_applied", []) if str(item).strip()]
-    notes_resolutions = [str(item) for item in payload.get("meeting_notes_resolutions", []) if str(item).strip()]
-    notes_changes = [str(item) for item in payload.get("meeting_notes_change_points", []) if str(item).strip()]
-    notes_pending = [str(item) for item in payload.get("meeting_notes_pending_confirmations", []) if str(item).strip()]
+    sources_used = [
+        str(item) for item in payload.get("sources_used", []) if str(item).strip()
+    ]
+    major_changes = [
+        str(item) for item in payload.get("major_changes", []) if str(item).strip()
+    ]
+    unadopted = [
+        str(item)
+        for item in payload.get("unadopted_review_suggestions", [])
+        if str(item).strip()
+    ]
+    pending = [
+        str(item) for item in payload.get("pending_questions", []) if str(item).strip()
+    ]
+    user_direct = [
+        str(item)
+        for item in payload.get("user_direct_requirements_applied", [])
+        if str(item).strip()
+    ]
+    notes_resolutions = [
+        str(item)
+        for item in payload.get("meeting_notes_resolutions", [])
+        if str(item).strip()
+    ]
+    notes_changes = [
+        str(item)
+        for item in payload.get("meeting_notes_change_points", [])
+        if str(item).strip()
+    ]
+    notes_pending = [
+        str(item)
+        for item in payload.get("meeting_notes_pending_confirmations", [])
+        if str(item).strip()
+    ]
     rationale = str(payload.get("rationale", "") or "").strip()
 
     def _bullets(items: list[str], empty_text: str) -> str:
@@ -162,7 +202,9 @@ def _update_report_artifacts(run_dir: Path, artifact_paths: dict[str, str]) -> N
         artifacts = {}
     artifacts.update(artifact_paths)
     payload["artifacts"] = artifacts
-    report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 async def generate_revision_for_run_async(
@@ -195,7 +237,9 @@ async def generate_revision_for_run_async(
     revision_started_at = _utc_now_iso()
     stage_payload["status"] = "running"
     stage_payload["updated_at"] = revision_started_at
-    (run_dir / "revision_stage.json").write_text(json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "revision_stage.json").write_text(
+        json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     try:
         prompt_record = load_prompt_template("revision")
@@ -218,16 +262,26 @@ async def generate_revision_for_run_async(
         validated = validate_revision_output(raw_output).model_dump(mode="python")
         validated["pending_questions"] = _merge_pending_questions(validated)
         validated["meeting_notes_pending_confirmations"] = _ensure_confirmation_prefix(
-            [str(item).strip() for item in validated.get("meeting_notes_pending_confirmations", []) if str(item).strip()]
+            [
+                str(item).strip()
+                for item in validated.get("meeting_notes_pending_confirmations", [])
+                if str(item).strip()
+            ]
         )
 
-        revised_prd_markdown = str(validated.get("revised_prd_markdown", "") or "").strip()
+        revised_prd_markdown = str(
+            validated.get("revised_prd_markdown", "") or ""
+        ).strip()
         if not revised_prd_markdown:
             raise ValueError("revision agent returned empty revised_prd_markdown")
 
-        Path(artifact_paths["revised_prd"]).write_text(revised_prd_markdown + "\n", encoding="utf-8")
+        Path(artifact_paths["revised_prd"]).write_text(
+            revised_prd_markdown + "\n", encoding="utf-8"
+        )
         summary_md = _build_revision_summary_markdown(validated)
-        Path(artifact_paths["revision_summary_md"]).write_text(summary_md, encoding="utf-8")
+        Path(artifact_paths["revision_summary_md"]).write_text(
+            summary_md, encoding="utf-8"
+        )
 
         summary_json = {
             "run_id": run_id,
@@ -236,21 +290,33 @@ async def generate_revision_for_run_async(
             "sources_used": validated.get("sources_used", []),
             "major_changes": validated.get("major_changes", []),
             "rationale": validated.get("rationale", ""),
-            "unadopted_review_suggestions": validated.get("unadopted_review_suggestions", []),
+            "unadopted_review_suggestions": validated.get(
+                "unadopted_review_suggestions", []
+            ),
             "pending_questions": validated.get("pending_questions", []),
-            "user_direct_requirements_applied": validated.get("user_direct_requirements_applied", []),
+            "user_direct_requirements_applied": validated.get(
+                "user_direct_requirements_applied", []
+            ),
             "meeting_notes_resolutions": validated.get("meeting_notes_resolutions", []),
-            "meeting_notes_change_points": validated.get("meeting_notes_change_points", []),
-            "meeting_notes_pending_confirmations": validated.get("meeting_notes_pending_confirmations", []),
+            "meeting_notes_change_points": validated.get(
+                "meeting_notes_change_points", []
+            ),
+            "meeting_notes_pending_confirmations": validated.get(
+                "meeting_notes_pending_confirmations", []
+            ),
             "artifacts": artifact_paths,
         }
-        summary_json_path.write_text(json.dumps(summary_json, ensure_ascii=False, indent=2), encoding="utf-8")
+        summary_json_path.write_text(
+            json.dumps(summary_json, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         stage_payload["status"] = "completed"
         stage_payload["decision_required"] = False
         stage_payload["updated_at"] = _utc_now_iso()
         stage_payload.pop("error_reason", None)
-        (run_dir / "revision_stage.json").write_text(json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "revision_stage.json").write_text(
+            json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         _update_report_artifacts(run_dir, artifact_paths)
         _append_audit_event_safe(
             run_dir,
@@ -274,7 +340,9 @@ async def generate_revision_for_run_async(
         stage_payload["status"] = "failed"
         stage_payload["updated_at"] = _utc_now_iso()
         stage_payload["error_reason"] = str(exc)
-        (run_dir / "revision_stage.json").write_text(json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "revision_stage.json").write_text(
+            json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         failure_summary = {
             "run_id": run_id,
             "status": "failed",
@@ -282,7 +350,9 @@ async def generate_revision_for_run_async(
             "error_reason": str(exc),
             "artifacts": artifact_paths,
         }
-        summary_json_path.write_text(json.dumps(failure_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        summary_json_path.write_text(
+            json.dumps(failure_summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         _append_audit_event_safe(
             run_dir,
             operation="revision_generation",

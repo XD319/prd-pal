@@ -30,6 +30,8 @@ class WeComNotifier(BaseNotifier):
             "dry_run": True,
             "msgtype": "markdown",
             "markdown": {
-                "content": "\n".join([f"**{event.title}**", event.summary or event.title, *detail_lines]),
+                "content": "\n".join(
+                    [f"**{event.title}**", event.summary or event.title, *detail_lines]
+                ),
             },
         }

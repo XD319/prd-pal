@@ -17,7 +17,10 @@ def test_local_prd_review_skill_hardens_storage_and_source_usage() -> None:
     assert "clarification.triggered" in skill
     assert "answer_review_clarification" in skill
     assert "POST /api/review/<run_id>/clarification" in skill
-    assert "Do not continue to `prepare-handoff` while clarification is still pending." in skill
+    assert (
+        "Do not continue to `prepare-handoff` while clarification is still pending."
+        in skill
+    )
     assert "$prd-review-agent" in ui_yaml
 
 

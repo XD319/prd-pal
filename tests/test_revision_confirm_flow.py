@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
-from prd_pal.service.review_service import confirm_revision_action, get_review_result_payload
+from prd_pal.service.review_service import (
+    confirm_revision_action,
+    get_review_result_payload,
+)
 
 
 def _prepare_run(tmp_path, run_id: str):
@@ -20,7 +23,9 @@ def _prepare_run(tmp_path, run_id: str):
         ),
         encoding="utf-8",
     )
-    (run_dir / "revised_prd.md").write_text("# Revised\n\nDraft body.\n", encoding="utf-8")
+    (run_dir / "revised_prd.md").write_text(
+        "# Revised\n\nDraft body.\n", encoding="utf-8"
+    )
     return run_dir
 
 
@@ -28,7 +33,9 @@ def test_confirm_revision_action_writes_confirmed_prd(tmp_path):
     run_id = "20260414T101010Z"
     run_dir = _prepare_run(tmp_path, run_id)
 
-    stage = confirm_revision_action(run_id=run_id, action="confirm_revision", outputs_root=tmp_path)
+    stage = confirm_revision_action(
+        run_id=run_id, action="confirm_revision", outputs_root=tmp_path
+    )
 
     assert stage["revision_confirmed"] is True
     assert stage["preferred_prd_source"] == "confirmed_revision"
@@ -43,7 +50,9 @@ def test_continue_without_revision_marks_unconfirmed_basis(tmp_path):
     run_id = "20260414T111111Z"
     _prepare_run(tmp_path, run_id)
 
-    stage = confirm_revision_action(run_id=run_id, action="continue_without_revision", outputs_root=tmp_path)
+    stage = confirm_revision_action(
+        run_id=run_id, action="continue_without_revision", outputs_root=tmp_path
+    )
 
     assert stage["revision_confirmed"] is False
     assert stage["preferred_prd_source"] == "unconfirmed_revision_draft"

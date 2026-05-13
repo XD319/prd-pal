@@ -18,13 +18,17 @@ def normalize_audit_context(audit_context: dict[str, Any] | None) -> dict[str, A
     return dict(audit_context) if isinstance(audit_context, dict) else {}
 
 
-def resolve_audit_client_metadata(audit_context: dict[str, Any] | None) -> dict[str, Any]:
+def resolve_audit_client_metadata(
+    audit_context: dict[str, Any] | None,
+) -> dict[str, Any]:
     context = normalize_audit_context(audit_context)
     client_metadata = context.get("client_metadata")
     return dict(client_metadata) if isinstance(client_metadata, dict) else {}
 
 
-def resolve_audit_actor(audit_context: dict[str, Any] | None, *, default: str = "system") -> str:
+def resolve_audit_actor(
+    audit_context: dict[str, Any] | None, *, default: str = "system"
+) -> str:
     context = normalize_audit_context(audit_context)
     actor = str(context.get("actor") or "").strip()
     if actor:
@@ -38,9 +42,13 @@ def resolve_audit_actor(audit_context: dict[str, Any] | None, *, default: str = 
     return str(default or "").strip()
 
 
-def resolve_audit_source(audit_context: dict[str, Any] | None, *, default: str = "service") -> str:
+def resolve_audit_source(
+    audit_context: dict[str, Any] | None, *, default: str = "service"
+) -> str:
     context = normalize_audit_context(audit_context)
-    source = str(context.get("source") or context.get("tool_name") or default or "").strip()
+    source = str(
+        context.get("source") or context.get("tool_name") or default or ""
+    ).strip()
     return source
 
 
@@ -76,8 +84,12 @@ def append_audit_event(
     if isinstance(client_metadata, dict):
         merged_client_metadata.update(client_metadata)
 
-    normalized_actor = str(actor or "").strip() or resolve_audit_actor(context, default="")
-    normalized_source = str(source or "").strip() or resolve_audit_source(context, default="")
+    normalized_actor = str(actor or "").strip() or resolve_audit_actor(
+        context, default=""
+    )
+    normalized_source = str(source or "").strip() or resolve_audit_source(
+        context, default=""
+    )
     timestamp = _utc_now_iso()
     event = {
         "event_id": f"{str(operation or 'operation').strip() or 'operation'}:{run_id or bundle_id or task_id or run_dir_path.name}:{timestamp}",
@@ -122,7 +134,9 @@ def _iter_run_dirs(outputs_root: str | Path) -> list[Path]:
     root = Path(outputs_root)
     if not root.exists():
         return []
-    return sorted([path for path in root.iterdir() if path.is_dir()], key=lambda path: path.name)
+    return sorted(
+        [path for path in root.iterdir() if path.is_dir()], key=lambda path: path.name
+    )
 
 
 def _matches_event_type(event: dict[str, Any], event_type: str) -> bool:
@@ -133,7 +147,10 @@ def _matches_event_type(event: dict[str, Any], event_type: str) -> bool:
     if operation == normalized_event_type:
         return True
     details = event.get("details")
-    if isinstance(details, dict) and str(details.get("event_type") or "").strip() == normalized_event_type:
+    if (
+        isinstance(details, dict)
+        and str(details.get("event_type") or "").strip() == normalized_event_type
+    ):
         return True
     return False
 
@@ -153,7 +170,9 @@ def query_audit_events(
     event_type_key = str(event_type or "").strip()
     status_key = str(status or "").strip()
 
-    run_dirs = [Path(outputs_root) / run_key] if run_key else _iter_run_dirs(outputs_root)
+    run_dirs = (
+        [Path(outputs_root) / run_key] if run_key else _iter_run_dirs(outputs_root)
+    )
     events: list[dict[str, Any]] = []
     for run_dir in run_dirs:
         if not run_dir.exists() or not run_dir.is_dir():
@@ -170,4 +189,10 @@ def query_audit_events(
             if event_type_key and not _matches_event_type(event, event_type_key):
                 continue
             events.append(event)
-    return sorted(events, key=lambda item: (str(item.get("timestamp") or ""), str(item.get("event_id") or "")))
+    return sorted(
+        events,
+        key=lambda item: (
+            str(item.get("timestamp") or ""),
+            str(item.get("event_id") or ""),
+        ),
+    )

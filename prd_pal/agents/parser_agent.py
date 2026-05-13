@@ -42,7 +42,10 @@ async def run(state: ReviewState) -> ReviewState:
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
     raw = ""
-    prompt_version = str(state.get("parser_prompt_version", _DEFAULT_PROMPT_VERSION) or _DEFAULT_PROMPT_VERSION)
+    prompt_version = str(
+        state.get("parser_prompt_version", _DEFAULT_PROMPT_VERSION)
+        or _DEFAULT_PROMPT_VERSION
+    )
     log.info("开始解析", extra={"node": _AGENT})
 
     span = trace_start(_AGENT, input_chars=len(requirement_doc))
@@ -56,7 +59,9 @@ async def run(state: ReviewState) -> ReviewState:
         try:
             record = load_prompt_template(_AGENT)
             system_prompt = record.system_prompt
-            user_prompt = record.user_prompt_template.replace("{input_text}", "{requirement_doc}")
+            user_prompt = record.user_prompt_template.replace(
+                "{input_text}", "{requirement_doc}"
+            )
         except Exception:
             system_prompt = PARSER_SYSTEM_PROMPT
             user_prompt = PARSER_USER_PROMPT
@@ -69,10 +74,7 @@ async def run(state: ReviewState) -> ReviewState:
         span.set_attr("trimmed_input_chars", trimmed_context.trimmed_chars)
         requirement_doc = trimmed_context.text
 
-    prompt = (
-        f"{system_prompt}\n\n"
-        f"{user_prompt.format(requirement_doc=requirement_doc)}"
-    )
+    prompt = f"{system_prompt}\n\n{user_prompt.format(requirement_doc=requirement_doc)}"
 
     try:
         cfg = Config()
@@ -94,7 +96,9 @@ async def run(state: ReviewState) -> ReviewState:
             output = validated.model_dump(mode="python")
             trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
         except Exception as exc:
-            raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            raw_path = (
+                save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+            )
             output = ParserOutput().model_dump(mode="python")
             trace[_AGENT] = span.end(
                 status="error",
@@ -110,7 +114,9 @@ async def run(state: ReviewState) -> ReviewState:
     except StructuredCallError as exc:
         raw = exc.raw_output or raw
         span.set_attr("structured_mode", exc.structured_mode)
-        raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        raw_path = (
+            save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        )
         trace[_AGENT] = span.end(
             status="error",
             output_chars=len(raw),
@@ -121,7 +127,9 @@ async def run(state: ReviewState) -> ReviewState:
         return {"parsed_items": [], "trace": trace}
 
     except Exception as exc:
-        raw_path = save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        raw_path = (
+            save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
+        )
         trace[_AGENT] = span.end(
             status="error",
             output_chars=len(raw),

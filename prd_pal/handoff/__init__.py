@@ -1,6 +1,10 @@
-﻿"""Prompt renderer foundation for semi-automatic coding-agent handoff."""
+"""Prompt renderer foundation for semi-automatic coding-agent handoff."""
 
-from .renderer import render_claude_code_prompt, render_codex_prompt, render_openclaw_prompt
+from .renderer import (
+    render_claude_code_prompt,
+    render_codex_prompt,
+    render_openclaw_prompt,
+)
 from .templates import (
     BASE_SECTION_ORDER,
     CLAUDE_CODE_PROMPT_TEMPLATE,

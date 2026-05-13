@@ -31,16 +31,50 @@ def test_run_comparison_writes_ab_metrics(tmp_path, monkeypatch):
 
     cases_path = tmp_path / "cases.jsonl"
     cases = [
-        {"case_id": "prd_case_08", "scenario_type": "minimal", "title": "Password Reset"},
-        {"case_id": "prd_case_11", "scenario_type": "high_risk", "title": "Autonomous Campus Hiring Copilot"},
+        {
+            "case_id": "prd_case_08",
+            "scenario_type": "minimal",
+            "title": "Password Reset",
+        },
+        {
+            "case_id": "prd_case_11",
+            "scenario_type": "high_risk",
+            "title": "Autonomous Campus Hiring Copilot",
+        },
     ]
-    cases_path.write_text("\n".join(json.dumps(item) for item in cases) + "\n", encoding="utf-8")
+    cases_path.write_text(
+        "\n".join(json.dumps(item) for item in cases) + "\n", encoding="utf-8"
+    )
 
     metrics_map = {
-        ("prd_case_08", "single_review"): {"findings": 1, "questions": 2, "risks": 1, "conflicts": 0, "duration": 120},
-        ("prd_case_08", "parallel_review"): {"findings": 3, "questions": 4, "risks": 2, "conflicts": 1, "duration": 240},
-        ("prd_case_11", "single_review"): {"findings": 2, "questions": 3, "risks": 2, "conflicts": 0, "duration": 180},
-        ("prd_case_11", "parallel_review"): {"findings": 5, "questions": 6, "risks": 4, "conflicts": 2, "duration": 360},
+        ("prd_case_08", "single_review"): {
+            "findings": 1,
+            "questions": 2,
+            "risks": 1,
+            "conflicts": 0,
+            "duration": 120,
+        },
+        ("prd_case_08", "parallel_review"): {
+            "findings": 3,
+            "questions": 4,
+            "risks": 2,
+            "conflicts": 1,
+            "duration": 240,
+        },
+        ("prd_case_11", "single_review"): {
+            "findings": 2,
+            "questions": 3,
+            "risks": 2,
+            "conflicts": 0,
+            "duration": 180,
+        },
+        ("prd_case_11", "parallel_review"): {
+            "findings": 5,
+            "questions": 6,
+            "risks": 4,
+            "conflicts": 2,
+            "duration": 360,
+        },
     }
 
     def fake_review_prd_text(*, prd_text, config_overrides):
@@ -53,7 +87,16 @@ def test_run_comparison_writes_ab_metrics(tmp_path, monkeypatch):
         trace_path = run_dir / "run_trace.json"
         duration = metrics_map[(case_id, mode)]["duration"]
         report_json_path.write_text(
-            json.dumps({"parallel-review_meta": {"selected_mode": mode, "review_mode": mode, "duration_ms": duration}}, indent=2),
+            json.dumps(
+                {
+                    "parallel-review_meta": {
+                        "selected_mode": mode,
+                        "review_mode": mode,
+                        "duration_ms": duration,
+                    }
+                },
+                indent=2,
+            ),
             encoding="utf-8",
         )
         trace_path.write_text("{}", encoding="utf-8")
@@ -85,7 +128,11 @@ def test_run_comparison_writes_ab_metrics(tmp_path, monkeypatch):
         }
 
     monkeypatch.setattr(module.review_service, "review_prd_text", fake_review_prd_text)
-    monkeypatch.setattr(module.review_service, "_build_review_requirement_payload", fake_build_review_requirement_payload)
+    monkeypatch.setattr(
+        module.review_service,
+        "_build_review_requirement_payload",
+        fake_build_review_requirement_payload,
+    )
 
     report_path = tmp_path / "comparison.json"
     payload = module.run_comparison(

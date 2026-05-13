@@ -63,7 +63,10 @@ class FileBackedNormalizerCache(BaseNormalizerCache):
         entries = self._load_entries()
         entries[cache_key] = _requirement_to_payload(requirement)
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(json.dumps({"entries": entries}, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.cache_path.write_text(
+            json.dumps({"entries": entries}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     def _load_entries(self) -> dict[str, Any]:
         if not self.cache_path.exists():
@@ -118,13 +121,19 @@ def _payload_to_requirement(payload: dict[str, Any]) -> NormalizedRequirement:
         source_text=str(payload.get("source_text", "") or ""),
         summary=str(payload.get("summary", "") or ""),
         scenarios=tuple(str(item) for item in payload.get("scenarios", []) or []),
-        acceptance_criteria=tuple(str(item) for item in payload.get("acceptance_criteria", []) or []),
-        dependency_hints=tuple(str(item) for item in payload.get("dependency_hints", []) or []),
+        acceptance_criteria=tuple(
+            str(item) for item in payload.get("acceptance_criteria", []) or []
+        ),
+        dependency_hints=tuple(
+            str(item) for item in payload.get("dependency_hints", []) or []
+        ),
         risk_hints=tuple(str(item) for item in payload.get("risk_hints", []) or []),
         modules=tuple(str(item) for item in payload.get("modules", []) or []),
         roles=tuple(str(item) for item in payload.get("roles", []) or []),
         headings=tuple(str(item) for item in payload.get("headings", []) or []),
         in_scope=tuple(str(item) for item in payload.get("in_scope", []) or []),
         out_of_scope=tuple(str(item) for item in payload.get("out_of_scope", []) or []),
-        completeness_signals=tuple(str(item) for item in payload.get("completeness_signals", []) or []),
+        completeness_signals=tuple(
+            str(item) for item in payload.get("completeness_signals", []) or []
+        ),
     )

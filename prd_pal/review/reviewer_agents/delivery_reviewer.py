@@ -1,4 +1,4 @@
-﻿"""Delivery conflict arbitration for high-severity review conflicts."""
+"""Delivery conflict arbitration for high-severity review conflicts."""
 
 from __future__ import annotations
 
@@ -44,7 +44,11 @@ def arbitrate_conflict(
     perspective_note = " ".join(active_perspectives).strip()
 
     if conflict_type == "severity_mismatch":
-        target_severity = "high" if "high" in {finding_severity, risk_severity} else (risk_severity or finding_severity or "medium")
+        target_severity = (
+            "high"
+            if "high" in {finding_severity, risk_severity}
+            else (risk_severity or finding_severity or "medium")
+        )
         reasoning = (
             f"Conflicting severity labels were detected for {topic}. "
             f"Delivery arbitration keeps the higher severity of {target_severity} so downstream planning does not understate release risk."
@@ -96,7 +100,9 @@ def arbitrate_conflict(
             needs_human=True,
         )
 
-    reasoning = "The conflict does not match a rule with enough confidence to auto-resolve it."
+    reasoning = (
+        "The conflict does not match a rule with enough confidence to auto-resolve it."
+    )
     if perspective_note:
         reasoning = f"{reasoning} Reviewer context: {perspective_note}"
     return DeliveryReviewerResolution(
@@ -104,5 +110,3 @@ def arbitrate_conflict(
         reasoning=reasoning,
         needs_human=True,
     )
-
-

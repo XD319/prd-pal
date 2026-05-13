@@ -99,7 +99,9 @@ def _matches_type(value: Any, expected: str) -> bool:
     if expected == "integer":
         return isinstance(value, int) and not isinstance(value, bool)
     if expected == "number":
-        return (isinstance(value, int) and not isinstance(value, bool)) or isinstance(value, float)
+        return (isinstance(value, int) and not isinstance(value, bool)) or isinstance(
+            value, float
+        )
     if expected == "boolean":
         return isinstance(value, bool)
     if expected == "null":
@@ -117,11 +119,15 @@ def _validate_json_schema(
     expected_type = schema.get("type")
     if isinstance(expected_type, list):
         if not any(_matches_type(value, item) for item in expected_type):
-            errors.append(f"{path}: expected one of {expected_type}, got {_json_type_name(value)}")
+            errors.append(
+                f"{path}: expected one of {expected_type}, got {_json_type_name(value)}"
+            )
             return errors
     elif isinstance(expected_type, str):
         if not _matches_type(value, expected_type):
-            errors.append(f"{path}: expected {expected_type}, got {_json_type_name(value)}")
+            errors.append(
+                f"{path}: expected {expected_type}, got {_json_type_name(value)}"
+            )
             return errors
 
     enum_values = schema.get("enum")
@@ -140,19 +146,27 @@ def _validate_json_schema(
         if isinstance(properties, dict):
             for key, child in value.items():
                 if key in properties and isinstance(properties[key], dict):
-                    errors.extend(_validate_json_schema(child, properties[key], path=f"{path}.{key}"))
+                    errors.extend(
+                        _validate_json_schema(
+                            child, properties[key], path=f"{path}.{key}"
+                        )
+                    )
                 elif additional_properties is False:
                     errors.append(f"{path}.{key}: additional property is not allowed")
 
     if isinstance(value, list):
         min_items = schema.get("minItems")
         if isinstance(min_items, int) and len(value) < min_items:
-            errors.append(f"{path}: expected at least {min_items} items, got {len(value)}")
+            errors.append(
+                f"{path}: expected at least {min_items} items, got {len(value)}"
+            )
 
         items_schema = schema.get("items")
         if isinstance(items_schema, dict):
             for index, item in enumerate(value):
-                errors.extend(_validate_json_schema(item, items_schema, path=f"{path}[{index}]"))
+                errors.extend(
+                    _validate_json_schema(item, items_schema, path=f"{path}[{index}]")
+                )
 
     if isinstance(value, str):
         min_length = schema.get("minLength")
@@ -198,7 +212,9 @@ def _build_retry_prompt(
     previous_raw_output: str,
     attempt: int,
 ) -> str:
-    errors_block = "\n".join(f"- {item}" for item in errors[:10]) or "- unknown validation failure"
+    errors_block = (
+        "\n".join(f"- {item}" for item in errors[:10]) or "- unknown validation failure"
+    )
     return (
         f"{base_prompt}\n\n"
         f"Previous attempt {attempt} was invalid.\n"
@@ -230,7 +246,11 @@ async def validate_with_retries(
     while attempt <= max_retries:
         attempt += 1
         candidate = await invoke(current_prompt)
-        last_raw_output = candidate if isinstance(candidate, str) else json.dumps(candidate, ensure_ascii=False)
+        last_raw_output = (
+            candidate
+            if isinstance(candidate, str)
+            else json.dumps(candidate, ensure_ascii=False)
+        )
         try:
             validated = validate_output(candidate, schema)
             return ValidationResult(

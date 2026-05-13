@@ -28,7 +28,13 @@ async def test_run_review_can_skip_when_prd_is_too_sparse(monkeypatch, tmp_path)
         trace = dict(state.get("trace", {}))
         trace["parser"] = _trace_span()
         return {
-            "parsed_items": [{"id": "REQ-001", "description": "Login", "acceptance_criteria": ["Works"]}],
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Login",
+                    "acceptance_criteria": ["Works"],
+                }
+            ],
             "trace": trace,
         }
 
@@ -36,7 +42,12 @@ async def test_run_review_can_skip_when_prd_is_too_sparse(monkeypatch, tmp_path)
         trace = dict(state.get("trace", {}))
         trace["planner"] = _trace_span()
         return {
-            "plan": {"tasks": [], "milestones": [], "dependencies": [], "estimation": {}},
+            "plan": {
+                "tasks": [],
+                "milestones": [],
+                "dependencies": [],
+                "estimation": {},
+            },
             "trace": trace,
         }
 
@@ -47,17 +58,40 @@ async def test_run_review_can_skip_when_prd_is_too_sparse(monkeypatch, tmp_path)
 
     async def fake_delivery(state):
         return {
-            "implementation_plan": {"implementation_steps": [], "target_modules": [], "constraints": []},
+            "implementation_plan": {
+                "implementation_steps": [],
+                "target_modules": [],
+                "constraints": [],
+            },
             "test_plan": {"test_scope": [], "edge_cases": [], "regression_focus": []},
-            "codex_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
-            "claude_code_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+            "codex_prompt_handoff": {
+                "agent_prompt": "",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
+            "claude_code_prompt_handoff": {
+                "agent_prompt": "",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
         }
 
     async def fake_reviewer(state):
         trace = dict(state.get("trace", {}))
         trace["reviewer"] = {**_trace_span(), "input_chars": 40, "output_chars": 20}
         return {
-            "review_results": [{"id": "REQ-001", "is_clear": True, "is_testable": True, "is_ambiguous": False, "issues": [], "suggestions": ""}],
+            "review_results": [
+                {
+                    "id": "REQ-001",
+                    "is_clear": True,
+                    "is_testable": True,
+                    "is_ambiguous": False,
+                    "issues": [],
+                    "suggestions": "",
+                }
+            ],
             "plan_review": {},
             "high_risk_ratio": 0.0,
             "trace": trace,
@@ -66,11 +100,17 @@ async def test_run_review_can_skip_when_prd_is_too_sparse(monkeypatch, tmp_path)
     async def fake_reporter(state):
         trace = dict(state.get("trace", {}))
         trace["reporter"] = _trace_span()
-        return {"final_report": "# Requirement Review Report\n\nSingle mode.", "metrics": {}, "trace": trace}
+        return {
+            "final_report": "# Requirement Review Report\n\nSingle mode.",
+            "metrics": {},
+            "trace": trace,
+        }
 
     monkeypatch.setattr("prd_pal.agents.parser_agent.run", fake_parser)
     monkeypatch.setattr("prd_pal.agents.planner_agent.run", fake_planner)
-    monkeypatch.setattr("prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk)
+    monkeypatch.setattr(
+        "prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk
+    )
     monkeypatch.setattr("prd_pal.agents.delivery_planning_agent.run", fake_delivery)
     monkeypatch.setattr("prd_pal.agents.reviewer_agent.run", fake_reviewer)
     monkeypatch.setattr("prd_pal.agents.reporter_agent.run", fake_reporter)
@@ -83,19 +123,31 @@ async def test_run_review_can_skip_when_prd_is_too_sparse(monkeypatch, tmp_path)
     assert result["parallel-review_meta"]["review_mode"] == "skip"
     assert result["parallel-review_meta"]["reviewers_completed"] == []
     assert result["parallel-review_meta"]["manual_review_required"] is True
-    report_payload = json.loads((tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8"))
-    trace_payload = json.loads((tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8"))
+    report_payload = json.loads(
+        (tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8")
+    )
+    trace_payload = json.loads(
+        (tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8")
+    )
     assert report_payload["parallel-review_meta"]["selected_mode"] == "skip"
     assert trace_payload["parallel-review_meta"]["selected_mode"] == "skip"
 
 
 @pytest.mark.asyncio
-async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch, tmp_path):
+async def test_run_review_forced_parallel_mode_uses_parallel_manager(
+    monkeypatch, tmp_path
+):
     async def fake_parser(state):
         trace = dict(state.get("trace", {}))
         trace["parser"] = _trace_span()
         return {
-            "parsed_items": [{"id": "REQ-001", "description": "Export data", "acceptance_criteria": ["Export works"]}],
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Export data",
+                    "acceptance_criteria": ["Export works"],
+                }
+            ],
             "trace": trace,
         }
 
@@ -103,7 +155,12 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
         trace = dict(state.get("trace", {}))
         trace["planner"] = _trace_span()
         return {
-            "plan": {"tasks": [], "milestones": [], "dependencies": [], "estimation": {}},
+            "plan": {
+                "tasks": [],
+                "milestones": [],
+                "dependencies": [],
+                "estimation": {},
+            },
             "trace": trace,
         }
 
@@ -114,32 +171,113 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
 
     async def fake_delivery(state):
         return {
-            "implementation_plan": {"implementation_steps": [], "target_modules": [], "constraints": []},
+            "implementation_plan": {
+                "implementation_steps": [],
+                "target_modules": [],
+                "constraints": [],
+            },
             "test_plan": {"test_scope": [], "edge_cases": [], "regression_focus": []},
-            "codex_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
-            "claude_code_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+            "codex_prompt_handoff": {
+                "agent_prompt": "",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
+            "claude_code_prompt_handoff": {
+                "agent_prompt": "",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
         }
 
-    async def fake_parallel_review(_prd_text, output_dir, reviewer_config=None, gating_decision=None):
+    async def fake_parallel_review(
+        _prd_text, output_dir, reviewer_config=None, gating_decision=None
+    ):
         return ParallelReviewResult(
             normalized_requirement={"summary": "Parallel export review"},
-            reviewer_inputs={"product": "p", "engineering": "e", "qa": "q", "security": "s"},
+            reviewer_inputs={
+                "product": "p",
+                "engineering": "e",
+                "qa": "q",
+                "security": "s",
+            },
             reviewer_results=(
-                {"reviewer": "product", "findings": [], "open_questions": [], "risk_items": [], "summary": "product", "status": "completed", "error_message": ""},
-                {"reviewer": "engineering", "findings": [], "open_questions": [], "risk_items": [], "summary": "engineering", "status": "completed", "error_message": ""},
-                {"reviewer": "qa", "findings": [], "open_questions": [], "risk_items": [], "summary": "qa", "status": "completed", "error_message": ""},
-                {"reviewer": "security", "findings": [], "open_questions": [], "risk_items": [], "summary": "security", "status": "completed", "error_message": ""},
+                {
+                    "reviewer": "product",
+                    "findings": [],
+                    "open_questions": [],
+                    "risk_items": [],
+                    "summary": "product",
+                    "status": "completed",
+                    "error_message": "",
+                },
+                {
+                    "reviewer": "engineering",
+                    "findings": [],
+                    "open_questions": [],
+                    "risk_items": [],
+                    "summary": "engineering",
+                    "status": "completed",
+                    "error_message": "",
+                },
+                {
+                    "reviewer": "qa",
+                    "findings": [],
+                    "open_questions": [],
+                    "risk_items": [],
+                    "summary": "qa",
+                    "status": "completed",
+                    "error_message": "",
+                },
+                {
+                    "reviewer": "security",
+                    "findings": [],
+                    "open_questions": [],
+                    "risk_items": [],
+                    "summary": "security",
+                    "status": "completed",
+                    "error_message": "",
+                },
             ),
             aggregated={
-                "findings": [{"finding_id": "finding-123456789abc", "title": "Security review gate required", "detail": "Sensitive export", "description": "Sensitive export", "severity": "high", "category": "security", "source_reviewer": "security", "suggested_action": "Approve release", "assignee": "security", "reviewers": ["security"]}],
-                "risk_items": [{"title": "Security review gate required", "detail": "Sensitive export", "severity": "high", "category": "security", "mitigation": "Approve release", "reviewers": ["security"]}],
-                "open_questions": [{"question": "Who approves the export?", "reviewers": ["product"]}],
+                "findings": [
+                    {
+                        "finding_id": "finding-123456789abc",
+                        "title": "Security review gate required",
+                        "detail": "Sensitive export",
+                        "description": "Sensitive export",
+                        "severity": "high",
+                        "category": "security",
+                        "source_reviewer": "security",
+                        "suggested_action": "Approve release",
+                        "assignee": "security",
+                        "reviewers": ["security"],
+                    }
+                ],
+                "risk_items": [
+                    {
+                        "title": "Security review gate required",
+                        "detail": "Sensitive export",
+                        "severity": "high",
+                        "category": "security",
+                        "mitigation": "Approve release",
+                        "reviewers": ["security"],
+                    }
+                ],
+                "open_questions": [
+                    {"question": "Who approves the export?", "reviewers": ["product"]}
+                ],
                 "conflicts": [],
                 "reviewer_summaries": [{"reviewer": "product", "summary": "product"}],
                 "reviewer_count": 4,
                 "meta": {
                     "review_mode": "full",
-                    "gating": {"selected_mode": "full", "reasons": ["mode=full explicitly requested"], "skipped": False},
+                    "gating": {
+                        "selected_mode": "full",
+                        "reasons": ["mode=full explicitly requested"],
+                        "skipped": False,
+                    },
                     "reviewers_used": ["product", "engineering", "qa", "security"],
                     "reviewers_skipped": [],
                     "reviewers_completed": ["product", "engineering", "qa", "security"],
@@ -148,8 +286,16 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
                 "review_mode": "full",
                 "reviewers_used": ["product", "engineering", "qa", "security"],
                 "reviewers_skipped": [],
-                "gating": {"selected_mode": "full", "reasons": ["mode=full explicitly requested"], "skipped": False},
-                "summary": {"overall_risk": "high", "in_scope": ["Export data"], "out_of_scope": []},
+                "gating": {
+                    "selected_mode": "full",
+                    "reasons": ["mode=full explicitly requested"],
+                    "skipped": False,
+                },
+                "summary": {
+                    "overall_risk": "high",
+                    "in_scope": ["Export data"],
+                    "out_of_scope": [],
+                },
                 "artifacts": {
                     "review_result_json": str(output_dir) + "\\review_result.json",
                     "review_report_md": str(output_dir) + "\\review_report.md",
@@ -162,19 +308,29 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
         )
 
     async def fail_reviewer(_state):
-        raise AssertionError("single reviewer should not run when parallel mode is forced")
+        raise AssertionError(
+            "single reviewer should not run when parallel mode is forced"
+        )
 
     async def fake_reporter(state):
         trace = dict(state.get("trace", {}))
         trace["reporter"] = _trace_span()
-        return {"final_report": "# Requirement Review Report\n\nParallel mode.", "metrics": {}, "trace": trace}
+        return {
+            "final_report": "# Requirement Review Report\n\nParallel mode.",
+            "metrics": {},
+            "trace": trace,
+        }
 
     monkeypatch.setattr("prd_pal.agents.parser_agent.run", fake_parser)
     monkeypatch.setattr("prd_pal.agents.planner_agent.run", fake_planner)
-    monkeypatch.setattr("prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk)
+    monkeypatch.setattr(
+        "prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk
+    )
     monkeypatch.setattr("prd_pal.agents.delivery_planning_agent.run", fake_delivery)
     monkeypatch.setattr("prd_pal.agents.reviewer_agent.run", fail_reviewer)
-    monkeypatch.setattr("prd_pal.workflow.run_parallel_review_async", fake_parallel_review)
+    monkeypatch.setattr(
+        "prd_pal.workflow.run_parallel_review_async", fake_parallel_review
+    )
     monkeypatch.setattr("prd_pal.agents.reporter_agent.run", fake_reporter)
 
     run_output = await run_review(
@@ -188,28 +344,58 @@ async def test_run_review_forced_parallel_mode_uses_parallel_manager(monkeypatch
     assert result["parallel-review_meta"]["selected_mode"] == "full"
     assert result["parallel-review_meta"]["review_mode"] == "full"
     assert result["parallel-review_meta"]["reviewer_count"] == 4
-    assert result["parallel-review_meta"]["reviewers_completed"] == ["product", "engineering", "qa", "security"]
+    assert result["parallel-review_meta"]["reviewers_completed"] == [
+        "product",
+        "engineering",
+        "qa",
+        "security",
+    ]
     assert result["parallel-review_meta"]["reviewers_failed"] == []
-    assert result["parallel-review_meta"]["artifact_paths"]["review_result_json"].endswith("review_result.json")
+    assert result["parallel-review_meta"]["artifact_paths"][
+        "review_result_json"
+    ].endswith("review_result.json")
     assert len(result["review_open_questions"]) == 1
     assert len(result["review_risk_items"]) == 1
-    report_payload = json.loads((tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8"))
-    trace_payload = json.loads((tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8"))
+    report_payload = json.loads(
+        (tmp_path / run_output["run_id"] / "report.json").read_text(encoding="utf-8")
+    )
+    trace_payload = json.loads(
+        (tmp_path / run_output["run_id"] / "run_trace.json").read_text(encoding="utf-8")
+    )
     assert report_payload["parallel-review_meta"]["selected_mode"] == "full"
     assert trace_payload["parallel-review_meta"]["selected_mode"] == "full"
 
 
 @pytest.mark.asyncio
-async def test_run_review_carries_review_profile_into_parallel_meta(monkeypatch, tmp_path):
+async def test_run_review_carries_review_profile_into_parallel_meta(
+    monkeypatch, tmp_path
+):
     async def fake_parser(state):
         trace = dict(state.get("trace", {}))
         trace["parser"] = _trace_span()
-        return {"parsed_items": [{"id": "REQ-001", "description": "Export data", "acceptance_criteria": ["Export works"]}], "trace": trace}
+        return {
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Export data",
+                    "acceptance_criteria": ["Export works"],
+                }
+            ],
+            "trace": trace,
+        }
 
     async def fake_planner(state):
         trace = dict(state.get("trace", {}))
         trace["planner"] = _trace_span()
-        return {"plan": {"tasks": [], "milestones": [], "dependencies": [], "estimation": {}}, "trace": trace}
+        return {
+            "plan": {
+                "tasks": [],
+                "milestones": [],
+                "dependencies": [],
+                "estimation": {},
+            },
+            "trace": trace,
+        }
 
     async def fake_risk(state):
         trace = dict(state.get("trace", {}))
@@ -218,17 +404,43 @@ async def test_run_review_carries_review_profile_into_parallel_meta(monkeypatch,
 
     async def fake_delivery(_state):
         return {
-            "implementation_plan": {"implementation_steps": [], "target_modules": [], "constraints": []},
+            "implementation_plan": {
+                "implementation_steps": [],
+                "target_modules": [],
+                "constraints": [],
+            },
             "test_plan": {"test_scope": [], "edge_cases": [], "regression_focus": []},
-            "codex_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
-            "claude_code_prompt_handoff": {"agent_prompt": "", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+            "codex_prompt_handoff": {
+                "agent_prompt": "",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
+            "claude_code_prompt_handoff": {
+                "agent_prompt": "",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
         }
 
-    async def fake_parallel_review(_prd_text, output_dir, reviewer_config=None, gating_decision=None):
+    async def fake_parallel_review(
+        _prd_text, output_dir, reviewer_config=None, gating_decision=None
+    ):
         return ParallelReviewResult(
             normalized_requirement={"summary": "Parallel export review"},
             reviewer_inputs={"product": "p"},
-            reviewer_results=({"reviewer": "product", "findings": [], "open_questions": [], "risk_items": [], "summary": "product", "status": "completed", "error_message": ""},),
+            reviewer_results=(
+                {
+                    "reviewer": "product",
+                    "findings": [],
+                    "open_questions": [],
+                    "risk_items": [],
+                    "summary": "product",
+                    "status": "completed",
+                    "error_message": "",
+                },
+            ),
             aggregated={
                 "findings": [],
                 "risk_items": [],
@@ -236,26 +448,50 @@ async def test_run_review_carries_review_profile_into_parallel_meta(monkeypatch,
                 "conflicts": [],
                 "reviewer_summaries": [{"reviewer": "product", "summary": "product"}],
                 "reviewer_count": 1,
-                "meta": {"review_mode": "full", "reviewers_used": ["product"], "reviewers_skipped": [], "reviewers_completed": ["product"], "reviewers_failed": []},
+                "meta": {
+                    "review_mode": "full",
+                    "reviewers_used": ["product"],
+                    "reviewers_skipped": [],
+                    "reviewers_completed": ["product"],
+                    "reviewers_failed": [],
+                },
                 "review_mode": "full",
                 "reviewers_used": ["product"],
                 "reviewers_skipped": [],
-                "gating": {"selected_mode": "full", "reasons": ["mode=full explicitly requested"], "skipped": False},
-                "summary": {"overall_risk": "low", "in_scope": ["Export data"], "out_of_scope": []},
-                "artifacts": {"review_result_json": str(output_dir) + "\\review_result.json"},
+                "gating": {
+                    "selected_mode": "full",
+                    "reasons": ["mode=full explicitly requested"],
+                    "skipped": False,
+                },
+                "summary": {
+                    "overall_risk": "low",
+                    "in_scope": ["Export data"],
+                    "out_of_scope": [],
+                },
+                "artifacts": {
+                    "review_result_json": str(output_dir) + "\\review_result.json"
+                },
             },
         )
 
     async def fake_reporter(state):
         trace = dict(state.get("trace", {}))
         trace["reporter"] = _trace_span()
-        return {"final_report": "# Requirement Review Report\n\nProfile meta.", "metrics": {}, "trace": trace}
+        return {
+            "final_report": "# Requirement Review Report\n\nProfile meta.",
+            "metrics": {},
+            "trace": trace,
+        }
 
     monkeypatch.setattr("prd_pal.agents.parser_agent.run", fake_parser)
     monkeypatch.setattr("prd_pal.agents.planner_agent.run", fake_planner)
-    monkeypatch.setattr("prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk)
+    monkeypatch.setattr(
+        "prd_pal.workflow.run_risk_analysis_from_review_state", fake_risk
+    )
     monkeypatch.setattr("prd_pal.agents.delivery_planning_agent.run", fake_delivery)
-    monkeypatch.setattr("prd_pal.workflow.run_parallel_review_async", fake_parallel_review)
+    monkeypatch.setattr(
+        "prd_pal.workflow.run_parallel_review_async", fake_parallel_review
+    )
     monkeypatch.setattr("prd_pal.agents.reporter_agent.run", fake_reporter)
 
     run_output = await run_review(

@@ -7,7 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from prd_pal.packs.delivery_bundle import ArtifactRef, BundleStatus, DeliveryArtifacts, DeliveryBundle
+from prd_pal.packs.delivery_bundle import (
+    ArtifactRef,
+    BundleStatus,
+    DeliveryArtifacts,
+    DeliveryBundle,
+)
 
 
 def _utc_now_iso() -> str:
@@ -32,9 +37,16 @@ class DeliveryBundleBuilder:
             scope_boundary=artifact_refs["scope_boundary"],
             tech_design_draft=artifact_refs["tech_design_draft"],
             test_checklist=artifact_refs["test_checklist"],
-            implementation_pack=ArtifactRef(artifact_type="implementation_pack", path=str(pack_paths["implementation_pack"])),
-            test_pack=ArtifactRef(artifact_type="test_pack", path=str(pack_paths["test_pack"])),
-            execution_pack=ArtifactRef(artifact_type="execution_pack", path=str(pack_paths["execution_pack"])),
+            implementation_pack=ArtifactRef(
+                artifact_type="implementation_pack",
+                path=str(pack_paths["implementation_pack"]),
+            ),
+            test_pack=ArtifactRef(
+                artifact_type="test_pack", path=str(pack_paths["test_pack"])
+            ),
+            execution_pack=ArtifactRef(
+                artifact_type="execution_pack", path=str(pack_paths["execution_pack"])
+            ),
         )
 
         return DeliveryBundle(
@@ -53,5 +65,8 @@ class DeliveryBundleBuilder:
     def save(self, bundle: DeliveryBundle, output_dir: Path) -> Path:
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / "delivery_bundle.json"
-        path.write_text(json.dumps(bundle.model_dump(mode="python"), ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(bundle.model_dump(mode="python"), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         return path

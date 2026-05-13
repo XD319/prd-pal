@@ -24,8 +24,12 @@ async def review(
     memory_evidence = build_memory_evidence(memory_context)
     memory_notes = build_memory_notes(memory_context, memory_mode=memory_mode)
 
-    query = " ".join(part for part in (requirement.summary, reviewer_input[:200]) if part).strip()
-    web_tool = get_reviewer_toolbox().web_search.run(reviewer="product", query=query or requirement.summary)
+    query = " ".join(
+        part for part in (requirement.summary, reviewer_input[:200]) if part
+    ).strip()
+    web_tool = get_reviewer_toolbox().web_search.run(
+        reviewer="product", query=query or requirement.summary
+    )
     tool_calls = (web_tool.tool_call,) if web_tool.tool_call else ()
 
     if not requirement.scenarios:
@@ -51,15 +55,26 @@ async def review(
         )
 
     if requirement.summary == "Requirement summary unavailable.":
-        open_questions.append("What is the concise product goal and success outcome for this PRD?")
+        open_questions.append(
+            "What is the concise product goal and success outcome for this PRD?"
+        )
 
     if requirement.scenarios and not requirement.roles:
-        open_questions.append("Which user roles or operators own the described scenarios?")
+        open_questions.append(
+            "Which user roles or operators own the described scenarios?"
+        )
 
-    ambiguity_type = "missing_product_goal" if requirement.summary == "Requirement summary unavailable." else ""
-    clarification_question = "What user outcome, target persona, and success metric should this requirement optimize for?" if ambiguity_type else ""
-    reviewer_status_detail = (
-        f"Product review completed with {len(findings)} findings. Competitive-search hook is {'configured' if web_tool.evidence else 'available as an optional stub'}. Memory assists={len(memory_evidence)}.")
+    ambiguity_type = (
+        "missing_product_goal"
+        if requirement.summary == "Requirement summary unavailable."
+        else ""
+    )
+    clarification_question = (
+        "What user outcome, target persona, and success metric should this requirement optimize for?"
+        if ambiguity_type
+        else ""
+    )
+    reviewer_status_detail = f"Product review completed with {len(findings)} findings. Competitive-search hook is {'configured' if web_tool.evidence else 'available as an optional stub'}. Memory assists={len(memory_evidence)}."
 
     await asyncio.sleep(0)
     return ReviewerResult(

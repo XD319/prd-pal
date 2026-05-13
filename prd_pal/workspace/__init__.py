@@ -26,7 +26,12 @@ from .artifact_patch_models import (
     StructuredArtifactDocument,
 )
 from .artifact_repository import ArtifactRepository
-from .models import ApprovalRecord, ReviewWorkspaceRecord, StatusSnapshot, WorkspaceStatus
+from .models import (
+    ApprovalRecord,
+    ReviewWorkspaceRecord,
+    StatusSnapshot,
+    WorkspaceStatus,
+)
 from .repository import (
     APPROVAL_RECORDS_FILENAME,
     STATUS_SNAPSHOT_FILENAME,

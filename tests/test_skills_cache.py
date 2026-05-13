@@ -167,7 +167,9 @@ async def test_sqlite_cache_reuses_results_across_executor_instances(tmp_path):
     assert trace_first["tests.sample_skill"]["cache_lookup_status"] == "miss"
     assert trace_second["tests.sample_skill"]["cache_hit"] is True
     assert trace_second["tests.sample_skill"]["cache_backend"] == "sqlite"
-    assert trace_second["tests.sample_skill"]["cache_backend_target"] == str(cache_path.resolve())
+    assert trace_second["tests.sample_skill"]["cache_backend_target"] == str(
+        cache_path.resolve()
+    )
     assert trace_second["tests.sample_skill"]["cache_lookup_status"] == "hit"
 
 

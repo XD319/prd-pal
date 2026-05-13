@@ -1,4 +1,4 @@
-﻿"""Adapter abstractions for downstream execution payload builders."""
+"""Adapter abstractions for downstream execution payload builders."""
 
 from __future__ import annotations
 
@@ -22,7 +22,9 @@ def get_adapter(name: str) -> BaseAdapter:
         return ADAPTER_REGISTRY[normalized]()
     except KeyError as exc:
         available = ", ".join(sorted(ADAPTER_REGISTRY))
-        raise ValueError(f"unknown adapter '{normalized}'. Available: {available}") from exc
+        raise ValueError(
+            f"unknown adapter '{normalized}'. Available: {available}"
+        ) from exc
 
 
 __all__ = [

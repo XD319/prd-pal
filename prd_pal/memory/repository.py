@@ -40,11 +40,15 @@ class MemoryRepository(SQLiteRepositoryBase):
 
         return await self._run("memory_repository.initialize", operation)
 
-    async def save_memory(self, record: MemoryRecord, *, actor: str = "system") -> RepositoryResult[MemoryRecord]:
+    async def save_memory(
+        self, record: MemoryRecord, *, actor: str = "system"
+    ) -> RepositoryResult[MemoryRecord]:
         async def operation(connection: Any) -> MemoryRecord:
             await self._ensure_schema(connection)
             saved = await self._upsert_memory_with_connection(connection, record)
-            await self._append_audit_row_with_connection(connection, saved, actor=actor, operation="save")
+            await self._append_audit_row_with_connection(
+                connection, saved, actor=actor, operation="save"
+            )
             await connection.commit()
             return saved
 
@@ -71,7 +75,7 @@ class MemoryRepository(SQLiteRepositoryBase):
                 f"""
                 SELECT *
                 FROM memories
-                WHERE {' AND '.join(where_clauses)}
+                WHERE {" AND ".join(where_clauses)}
                 ORDER BY updated_at DESC, memory_id
                 """,
                 tuple(params),
@@ -81,7 +85,9 @@ class MemoryRepository(SQLiteRepositoryBase):
 
         return await self._run("memory_repository.list_by_scope", operation)
 
-    async def query_memories(self, query: MemoryQuery) -> RepositoryResult[list[MemoryRecord]]:
+    async def query_memories(
+        self, query: MemoryQuery
+    ) -> RepositoryResult[list[MemoryRecord]]:
         async def operation(connection: Any) -> list[MemoryRecord]:
             await self._ensure_schema(connection)
             clauses = ["1 = 1"]
@@ -116,7 +122,7 @@ class MemoryRepository(SQLiteRepositoryBase):
                 SELECT DISTINCT m.*
                 FROM memories m
                 {join_clause}
-                WHERE {' AND '.join(clauses)}
+                WHERE {" AND ".join(clauses)}
                 ORDER BY m.updated_at DESC, m.memory_id
                 """,
                 tuple(params),
@@ -126,7 +132,9 @@ class MemoryRepository(SQLiteRepositoryBase):
 
         return await self._run("memory_repository.query_memories", operation)
 
-    async def list_audit_rows(self, memory_id: str) -> RepositoryResult[list[dict[str, Any]]]:
+    async def list_audit_rows(
+        self, memory_id: str
+    ) -> RepositoryResult[list[dict[str, Any]]]:
         async def operation(connection: Any) -> list[dict[str, Any]]:
             await self._ensure_schema(connection)
             cursor = await connection.execute(
@@ -208,7 +216,9 @@ class MemoryRepository(SQLiteRepositoryBase):
             """
         )
 
-    async def _upsert_memory_with_connection(self, connection: Any, record: MemoryRecord) -> MemoryRecord:
+    async def _upsert_memory_with_connection(
+        self, connection: Any, record: MemoryRecord
+    ) -> MemoryRecord:
         normalized = MemoryRecord.model_validate(record.model_dump())
         if not normalized.memory_id.strip():
             self._raise_validation_error("memory_id is required")
@@ -296,7 +306,9 @@ class MemoryRepository(SQLiteRepositoryBase):
                 """,
                 (normalized.memory_id, requirement_type),
             )
-        return normalized.model_copy(update={"created_at": created_at, "updated_at": updated_at})
+        return normalized.model_copy(
+            update={"created_at": created_at, "updated_at": updated_at}
+        )
 
     async def _append_audit_row_with_connection(
         self,
@@ -351,10 +363,18 @@ class MemoryRepository(SQLiteRepositoryBase):
                 level=str(row["scope_level"]),
                 team_id=str(row["scope_team_id"]),
                 project_id=str(row["scope_project_id"]),
-                requirement_type=[str(item["requirement_type"]) for item in requirement_rows],
+                requirement_type=[
+                    str(item["requirement_type"]) for item in requirement_rows
+                ],
             ),
-            applicability=MemoryApplicability.model_validate(self._load_json_object(row["applicability_json"])),
-            evidence=[MemoryEvidence.model_validate(item) for item in evidence_payload if isinstance(item, dict)],
+            applicability=MemoryApplicability.model_validate(
+                self._load_json_object(row["applicability_json"])
+            ),
+            evidence=[
+                MemoryEvidence.model_validate(item)
+                for item in evidence_payload
+                if isinstance(item, dict)
+            ],
             confidence=float(row["confidence"]),
             reuse_score=float(row["reuse_score"]),
             expiry_hint=str(row["expiry_hint"]),

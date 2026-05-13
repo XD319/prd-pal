@@ -20,7 +20,9 @@ class TraceabilityMap:
     def links(self) -> list[TraceLink]:
         return list(self._links)
 
-    def build_from_bundle(self, bundle: DeliveryBundle, tasks: list[ExecutionTask]) -> "TraceabilityMap":
+    def build_from_bundle(
+        self, bundle: DeliveryBundle, tasks: list[ExecutionTask]
+    ) -> "TraceabilityMap":
         report_payload = self._load_report_payload(bundle)
         requirements = report_payload.get("parsed_items")
         review_results = report_payload.get("review_results")
@@ -30,7 +32,11 @@ class TraceabilityMap:
         review_results = review_results if isinstance(review_results, list) else []
         plan_tasks = plan_tasks if isinstance(plan_tasks, list) else []
 
-        review_by_requirement = {str(item.get("id", "")).strip(): item for item in review_results if isinstance(item, dict)}
+        review_by_requirement = {
+            str(item.get("id", "")).strip(): item
+            for item in review_results
+            if isinstance(item, dict)
+        }
         tasks_by_requirement: dict[str, list[dict[str, Any]]] = {}
         for task in plan_tasks:
             if not isinstance(task, dict):
@@ -45,7 +51,9 @@ class TraceabilityMap:
         for execution_task in tasks:
             plan_task_id = str(execution_task.metadata.get("plan_task_id", "")).strip()
             if plan_task_id:
-                execution_by_plan_task.setdefault(plan_task_id, []).append(execution_task)
+                execution_by_plan_task.setdefault(plan_task_id, []).append(
+                    execution_task
+                )
             else:
                 execution_fallback.append(execution_task)
 
@@ -56,7 +64,9 @@ class TraceabilityMap:
             requirement_id = str(requirement.get("id", "")).strip()
             if not requirement_id:
                 continue
-            review_item_id = str(review_by_requirement.get(requirement_id, {}).get("id", "")).strip()
+            review_item_id = str(
+                review_by_requirement.get(requirement_id, {}).get("id", "")
+            ).strip()
             related_plan_tasks = tasks_by_requirement.get(requirement_id, [])
 
             if not related_plan_tasks:
@@ -71,14 +81,18 @@ class TraceabilityMap:
 
             for plan_task in related_plan_tasks:
                 plan_task_id = str(plan_task.get("id", "")).strip()
-                execution_tasks = execution_by_plan_task.get(plan_task_id) or execution_fallback
+                execution_tasks = (
+                    execution_by_plan_task.get(plan_task_id) or execution_fallback
+                )
                 if not execution_tasks:
                     links.append(
                         TraceLink(
                             requirement_id=requirement_id,
                             review_item_id=review_item_id,
                             plan_task_id=plan_task_id,
-                            test_item_id=f"test::{plan_task_id}" if plan_task_id else "",
+                            test_item_id=f"test::{plan_task_id}"
+                            if plan_task_id
+                            else "",
                             link_type="partial",
                         )
                     )
@@ -90,7 +104,9 @@ class TraceabilityMap:
                             requirement_id=requirement_id,
                             review_item_id=review_item_id,
                             plan_task_id=plan_task_id,
-                            test_item_id=f"test::{plan_task_id}" if plan_task_id else "",
+                            test_item_id=f"test::{plan_task_id}"
+                            if plan_task_id
+                            else "",
                             execution_task_id=execution_task.task_id,
                             link_type="full",
                         )
@@ -113,17 +129,23 @@ class TraceabilityMap:
             "counts": {
                 "total": len(self._links),
                 "full": sum(1 for link in self._links if link.link_type == "full"),
-                "partial": sum(1 for link in self._links if link.link_type == "partial"),
+                "partial": sum(
+                    1 for link in self._links if link.link_type == "partial"
+                ),
                 "orphan": sum(1 for link in self._links if link.link_type == "orphan"),
             },
         }
 
     def save(self, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def _load_report_payload(self, bundle: DeliveryBundle) -> dict[str, Any]:
-        artifact_dir = Path(str(bundle.artifacts.execution_pack.path or "")).resolve().parent
+        artifact_dir = (
+            Path(str(bundle.artifacts.execution_pack.path or "")).resolve().parent
+        )
         candidates = [
             artifact_dir / "report.json",
             artifact_dir / "traceability_source.json",

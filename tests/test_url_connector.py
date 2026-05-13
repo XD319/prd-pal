@@ -11,7 +11,9 @@ from prd_pal.connectors import SourceType, URLConnector
 
 
 class FakeResponse:
-    def __init__(self, body: bytes, *, url: str, content_type: str, charset: str = "utf-8") -> None:
+    def __init__(
+        self, body: bytes, *, url: str, content_type: str, charset: str = "utf-8"
+    ) -> None:
         self._body = body
         self._url = url
         self.headers = Message()
@@ -37,12 +39,16 @@ class FakeResponse:
 def allow_public_hosts(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_getaddrinfo(host: str, port, *args, **kwargs):
         del host, port, args, kwargs
-        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("8.8.8.8", 0))]
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("8.8.8.8", 0))
+        ]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
 
-def test_url_connector_fetches_markdown_into_source_document(allow_public_hosts) -> None:
+def test_url_connector_fetches_markdown_into_source_document(
+    allow_public_hosts,
+) -> None:
     captured: dict[str, object] = {}
 
     def opener(request: Request, timeout: float = 0.0) -> FakeResponse:
@@ -56,7 +62,9 @@ def test_url_connector_fetches_markdown_into_source_document(allow_public_hosts)
             content_type="text/markdown",
         )
 
-    document = URLConnector(opener=opener, timeout_seconds=3.5).get_content("https://openai.com/spec.md")
+    document = URLConnector(opener=opener, timeout_seconds=3.5).get_content(
+        "https://openai.com/spec.md"
+    )
 
     assert captured == {
         "url": "https://openai.com/spec.md",
@@ -81,7 +89,9 @@ def test_url_connector_normalizes_html_to_text(allow_public_hosts) -> None:
     body = b"<html><head><title>Hosted PRD</title></head><body><main><h1>Hello</h1><p>World</p></main></body></html>"
 
     document = URLConnector(
-        opener=lambda request, timeout=0.0: FakeResponse(body, url=request.full_url, content_type="text/html")
+        opener=lambda request, timeout=0.0: FakeResponse(
+            body, url=request.full_url, content_type="text/html"
+        )
     ).get_content("https://openai.com/prd")
 
     assert document.title == "Hosted PRD"
@@ -91,26 +101,42 @@ def test_url_connector_normalizes_html_to_text(allow_public_hosts) -> None:
 
 def test_url_connector_rejects_non_text_content_types(allow_public_hosts) -> None:
     connector = URLConnector(
-        opener=lambda request, timeout=0.0: FakeResponse(b"%PDF", url=request.full_url, content_type="application/pdf")
+        opener=lambda request, timeout=0.0: FakeResponse(
+            b"%PDF", url=request.full_url, content_type="application/pdf"
+        )
     )
 
     with pytest.raises(ValueError, match="Unsupported URL content type"):
         connector.get_content("https://openai.com/spec.pdf")
 
 
-def test_url_connector_raises_clear_error_when_network_is_unavailable(allow_public_hosts) -> None:
+def test_url_connector_raises_clear_error_when_network_is_unavailable(
+    allow_public_hosts,
+) -> None:
     def failing_opener(request: Request, timeout: float = 0.0) -> FakeResponse:
         del request, timeout
         raise URLError(socket.gaierror(11001, "getaddrinfo failed"))
 
-    with pytest.raises(ConnectionError, match="Network unavailable while fetching URL source"):
+    with pytest.raises(
+        ConnectionError, match="Network unavailable while fetching URL source"
+    ):
         URLConnector(opener=failing_opener).get_content("https://openai.com/spec")
 
 
-def test_url_connector_rejects_private_hosts_before_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_url_connector_rejects_private_hosts_before_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def private_getaddrinfo(host: str, port, *args, **kwargs):
         del host, port, args, kwargs
-        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("127.0.0.1", 0))]
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("127.0.0.1", 0),
+            )
+        ]
 
     called = False
 
@@ -118,7 +144,9 @@ def test_url_connector_rejects_private_hosts_before_fetch(monkeypatch: pytest.Mo
         del request, timeout
         nonlocal called
         called = True
-        return FakeResponse(b"hello", url="https://localhost/spec", content_type="text/plain")
+        return FakeResponse(
+            b"hello", url="https://localhost/spec", content_type="text/plain"
+        )
 
     monkeypatch.setattr(socket, "getaddrinfo", private_getaddrinfo)
 
@@ -128,12 +156,18 @@ def test_url_connector_rejects_private_hosts_before_fetch(monkeypatch: pytest.Mo
     assert called is False
 
 
-def test_url_connector_surfaces_dns_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_url_connector_surfaces_dns_validation_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def failing_getaddrinfo(host: str, port, *args, **kwargs):
         del host, port, args, kwargs
         raise socket.gaierror(11001, "getaddrinfo failed")
 
     monkeypatch.setattr(socket, "getaddrinfo", failing_getaddrinfo)
 
-    with pytest.raises(ConnectionError, match="Network unavailable while validating URL source"):
-        URLConnector(opener=lambda request, timeout=0.0: None).get_content("https://openai.com/spec")
+    with pytest.raises(
+        ConnectionError, match="Network unavailable while validating URL source"
+    ):
+        URLConnector(opener=lambda request, timeout=0.0: None).get_content(
+            "https://openai.com/spec"
+        )

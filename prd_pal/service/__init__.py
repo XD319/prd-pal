@@ -1,6 +1,10 @@
 """Shared service APIs for prd_pal entrypoints."""
 
-from prd_pal.memory.service import DEFAULT_MEMORY_DB_PATH, MemoryService, MemoryServiceError
+from prd_pal.memory.service import (
+    DEFAULT_MEMORY_DB_PATH,
+    MemoryService,
+    MemoryServiceError,
+)
 
 from .artifact_service import ArtifactReviewSummary, review_artifact_version_async
 from .artifact_patch_service import (

@@ -10,34 +10,80 @@ from typing import Iterable
 _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s*(.+?)\s*$")
 _BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)\s*$")
 _MODULE_INLINE_RE = re.compile(r"`([A-Za-z0-9_./:-]{2,80})`")
-_SCENARIO_TITLES = ("scenario", "scenarios", "use case", "use cases", "flow", "flows", "journey", "journeys")
+_SCENARIO_TITLES = (
+    "scenario",
+    "scenarios",
+    "use case",
+    "use cases",
+    "flow",
+    "flows",
+    "journey",
+    "journeys",
+)
 _ACCEPTANCE_TITLES = ("acceptance criteria", "acceptance criterion", "done when")
 _IN_SCOPE_TITLES = ("in scope", "scope")
 _OUT_OF_SCOPE_TITLES = ("out of scope", "non goals", "non-goals", "not in scope")
 _MAX_SUMMARY_CHARS = 280
 
 _ROLE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("frontend", re.compile(r"\b(frontend|front-end|ui engineer|web engineer|fe)\b", re.IGNORECASE)),
-    ("backend", re.compile(r"\b(backend|back-end|server engineer|be)\b", re.IGNORECASE)),
-    ("qa", re.compile(r"\b(qa|tester|test engineer|quality assurance)\b", re.IGNORECASE)),
+    (
+        "frontend",
+        re.compile(
+            r"\b(frontend|front-end|ui engineer|web engineer|fe)\b", re.IGNORECASE
+        ),
+    ),
+    (
+        "backend",
+        re.compile(r"\b(backend|back-end|server engineer|be)\b", re.IGNORECASE),
+    ),
+    (
+        "qa",
+        re.compile(r"\b(qa|tester|test engineer|quality assurance)\b", re.IGNORECASE),
+    ),
     ("product", re.compile(r"\b(pm|product manager|product owner)\b", re.IGNORECASE)),
     ("design", re.compile(r"\b(design|designer|ux|ui/ux)\b", re.IGNORECASE)),
     ("devops", re.compile(r"\b(devops|sre|platform engineer|ops)\b", re.IGNORECASE)),
-    ("security", re.compile(r"\b(security|infosec|application security)\b", re.IGNORECASE)),
-    ("data", re.compile(r"\b(data engineer|analytics engineer|bi|data platform)\b", re.IGNORECASE)),
+    (
+        "security",
+        re.compile(r"\b(security|infosec|application security)\b", re.IGNORECASE),
+    ),
+    (
+        "data",
+        re.compile(
+            r"\b(data engineer|analytics engineer|bi|data platform)\b", re.IGNORECASE
+        ),
+    ),
     ("mobile", re.compile(r"\b(mobile|ios|android)\b", re.IGNORECASE)),
 )
 
 _DEPENDENCY_HINT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\b(depends on|dependency|dependent on|requires|rely on|integration|upstream|downstream)\b", re.IGNORECASE),
-    re.compile(r"\b(api|event|queue|webhook|cron|batch|sync|async|sso|oauth|database|cache|redis|kafka)\b", re.IGNORECASE),
-    re.compile(r"\b(third[- ]party|external|vendor|legacy system|shared service)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(depends on|dependency|dependent on|requires|rely on|integration|upstream|downstream)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(api|event|queue|webhook|cron|batch|sync|async|sso|oauth|database|cache|redis|kafka)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(third[- ]party|external|vendor|legacy system|shared service)\b",
+        re.IGNORECASE,
+    ),
 )
 
 _RISK_HINT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\b(risk|rollback|migration|security|privacy|compliance|audit|pii|payment)\b", re.IGNORECASE),
-    re.compile(r"\b(latency|performance|timeout|failure|fallback|retry|rate limit|idempotent)\b", re.IGNORECASE),
-    re.compile(r"\b(data loss|data consistency|breaking change|availability|sla)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(risk|rollback|migration|security|privacy|compliance|audit|pii|payment)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(latency|performance|timeout|failure|fallback|retry|rate limit|idempotent)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(data loss|data consistency|breaking change|availability|sla)\b",
+        re.IGNORECASE,
+    ),
 )
 
 
@@ -75,7 +121,9 @@ class NormalizedRequirement:
         return replace(
             self,
             memory_mode=str(memory_mode or "off").strip().lower() or "off",
-            reviewer_memory_context=tuple(str(item) for item in reviewer_memory_context or [] if str(item).strip()),
+            reviewer_memory_context=tuple(
+                str(item) for item in reviewer_memory_context or [] if str(item).strip()
+            ),
         )
 
 
@@ -90,7 +138,10 @@ def normalize_requirement(prd_text: str) -> NormalizedRequirement:
     summary = _extract_summary(lines)
     scenarios = _extract_section_items(lines, _SCENARIO_TITLES)
     if not scenarios:
-        scenarios = _extract_matching_lines(lines, (re.compile(r"\b(scenario|flow|journey|user story)\b", re.IGNORECASE),))
+        scenarios = _extract_matching_lines(
+            lines,
+            (re.compile(r"\b(scenario|flow|journey|user story)\b", re.IGNORECASE),),
+        )
 
     acceptance_criteria = _extract_section_items(lines, _ACCEPTANCE_TITLES)
     if not acceptance_criteria:
@@ -98,7 +149,9 @@ def normalize_requirement(prd_text: str) -> NormalizedRequirement:
             lines,
             (
                 re.compile(r"^\s*(?:given|when|then|must|should)\b", re.IGNORECASE),
-                re.compile(r"\b(acceptance|verify|validated|success criteria)\b", re.IGNORECASE),
+                re.compile(
+                    r"\b(acceptance|verify|validated|success criteria)\b", re.IGNORECASE
+                ),
             ),
         )
 
@@ -107,7 +160,9 @@ def normalize_requirement(prd_text: str) -> NormalizedRequirement:
     modules = _extract_modules(text)
     roles = _extract_roles(text)
     headings = _extract_headings(lines)
-    in_scope = _extract_scope_items(lines, include_titles=_IN_SCOPE_TITLES, exclude_titles=_OUT_OF_SCOPE_TITLES)
+    in_scope = _extract_scope_items(
+        lines, include_titles=_IN_SCOPE_TITLES, exclude_titles=_OUT_OF_SCOPE_TITLES
+    )
     out_of_scope = _extract_scope_items(lines, include_titles=_OUT_OF_SCOPE_TITLES)
     completeness_signals = _derive_completeness_signals(
         summary=summary,
@@ -141,24 +196,40 @@ def build_reviewer_inputs(
     requirement: NormalizedRequirement,
     reviewers: Iterable[str] | None = None,
 ) -> dict[str, str]:
-    reviewer_names = tuple(reviewers or ("general", "architecture", "qa", "security", "delivery"))
-    return {reviewer: build_reviewer_input(requirement, reviewer) for reviewer in reviewer_names}
+    reviewer_names = tuple(
+        reviewers or ("general", "architecture", "qa", "security", "delivery")
+    )
+    return {
+        reviewer: build_reviewer_input(requirement, reviewer)
+        for reviewer in reviewer_names
+    }
 
 
 def build_reviewer_input(requirement: NormalizedRequirement, reviewer: str) -> str:
     normalized_reviewer = str(reviewer or "general").strip().lower() or "general"
-    sections: list[tuple[str, tuple[str, ...] | str]] = [("Summary", requirement.summary)]
+    sections: list[tuple[str, tuple[str, ...] | str]] = [
+        ("Summary", requirement.summary)
+    ]
 
     if requirement.modules:
         sections.append(("Impacted Modules", requirement.modules))
 
-    if normalized_reviewer in {"general", "architecture", "delivery"} and requirement.scenarios:
+    if (
+        normalized_reviewer in {"general", "architecture", "delivery"}
+        and requirement.scenarios
+    ):
         sections.append(("Key Scenarios", requirement.scenarios))
 
-    if normalized_reviewer in {"general", "qa", "delivery"} and requirement.acceptance_criteria:
+    if (
+        normalized_reviewer in {"general", "qa", "delivery"}
+        and requirement.acceptance_criteria
+    ):
         sections.append(("Acceptance Criteria", requirement.acceptance_criteria))
 
-    if normalized_reviewer in {"architecture", "security", "delivery"} and requirement.dependency_hints:
+    if (
+        normalized_reviewer in {"architecture", "security", "delivery"}
+        and requirement.dependency_hints
+    ):
         sections.append(("Dependency Hints", requirement.dependency_hints))
 
     if normalized_reviewer in {"qa", "security", "delivery"} and requirement.risk_hints:
@@ -182,7 +253,9 @@ def build_reviewer_input(requirement: NormalizedRequirement, reviewer: str) -> s
             continue
         if not body:
             continue
-        rendered_sections.append(f"{title}:\n" + "\n".join(f"- {item}" for item in body))
+        rendered_sections.append(
+            f"{title}:\n" + "\n".join(f"- {item}" for item in body)
+        )
     return "\n\n".join(rendered_sections)
 
 
@@ -198,7 +271,9 @@ def _extract_summary(lines: list[str]) -> str:
     return "Requirement summary unavailable."
 
 
-def _extract_section_items(lines: list[str], section_titles: tuple[str, ...]) -> list[str]:
+def _extract_section_items(
+    lines: list[str], section_titles: tuple[str, ...]
+) -> list[str]:
     items: list[str] = []
     active = False
     for line in lines:
@@ -217,7 +292,9 @@ def _extract_section_items(lines: list[str], section_titles: tuple[str, ...]) ->
     return _dedupe(items)
 
 
-def _extract_matching_lines(lines: list[str], patterns: tuple[re.Pattern[str], ...]) -> list[str]:
+def _extract_matching_lines(
+    lines: list[str], patterns: tuple[re.Pattern[str], ...]
+) -> list[str]:
     matches: list[str] = []
     for line in lines:
         bullet_match = _BULLET_RE.match(line)
@@ -263,7 +340,9 @@ def _extract_scope_items(
         heading_match = _HEADING_RE.match(line)
         if heading_match:
             heading = _normalize_inline_text(heading_match.group(1)).lower()
-            active = any(title in heading for title in include_titles) and not any(title in heading for title in exclude_titles)
+            active = any(title in heading for title in include_titles) and not any(
+                title in heading for title in exclude_titles
+            )
             continue
         if not active:
             continue
@@ -316,7 +395,9 @@ def _paragraphs_from_lines(lines: list[str]) -> list[str]:
         if _HEADING_RE.match(line):
             continue
         bullet_match = _BULLET_RE.match(line)
-        normalized = _normalize_inline_text(bullet_match.group(1) if bullet_match else line)
+        normalized = _normalize_inline_text(
+            bullet_match.group(1) if bullet_match else line
+        )
         if normalized:
             current.append(normalized)
             continue

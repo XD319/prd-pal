@@ -19,7 +19,9 @@ class FeishuEventEnvelope(BaseModel):
     event: dict[str, Any] | None = None
 
     def is_challenge(self) -> bool:
-        return bool(self.challenge) or str(self.type or "").strip() == "url_verification"
+        return (
+            bool(self.challenge) or str(self.type or "").strip() == "url_verification"
+        )
 
 
 class FeishuSubmitRequest(BaseModel):
@@ -60,7 +62,14 @@ class FeishuSubmitRequest(BaseModel):
         if not payload["source"]:
             payload["prd_text"] = self.prd_text
 
-        for key in ("fast_llm", "smart_llm", "strategic_llm", "temperature", "reasoning_effort", "llm_kwargs"):
+        for key in (
+            "fast_llm",
+            "smart_llm",
+            "strategic_llm",
+            "temperature",
+            "reasoning_effort",
+            "llm_kwargs",
+        ):
             value = getattr(self, key)
             if value is not None:
                 payload["llm_options"][key] = value

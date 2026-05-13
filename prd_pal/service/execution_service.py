@@ -22,7 +22,11 @@ from prd_pal.execution import (
     request_review,
     start_task,
 )
-from prd_pal.monitoring import append_audit_event, normalize_audit_context, retry_metadata_for_status
+from prd_pal.monitoring import (
+    append_audit_event,
+    normalize_audit_context,
+    retry_metadata_for_status,
+)
 from prd_pal.notifications import NotificationType, dispatch_notification
 from prd_pal.packs.delivery_bundle import DeliveryBundle
 from prd_pal.service.review_service import (
@@ -61,10 +65,18 @@ def _resolve_task_status(status: str) -> ExecutionTaskStatus:
     try:
         resolved = ExecutionTaskStatus(normalized)
     except ValueError as exc:
-        allowed = ", ".join(item.value for item in ExecutionTaskStatus if item != ExecutionTaskStatus.pending)
+        allowed = ", ".join(
+            item.value
+            for item in ExecutionTaskStatus
+            if item != ExecutionTaskStatus.pending
+        )
         raise ValueError(f"status must be one of: {allowed}") from exc
     if resolved == ExecutionTaskStatus.pending:
-        allowed = ", ".join(item.value for item in ExecutionTaskStatus if item != ExecutionTaskStatus.pending)
+        allowed = ", ".join(
+            item.value
+            for item in ExecutionTaskStatus
+            if item != ExecutionTaskStatus.pending
+        )
         raise ValueError(f"status must be one of: {allowed}")
     return resolved
 
@@ -130,7 +142,9 @@ def _dispatch_notification(
     )
 
 
-def _load_bundle_context(bundle_id: str, outputs_root: str | Path) -> tuple[Path, Path, DeliveryBundle]:
+def _load_bundle_context(
+    bundle_id: str, outputs_root: str | Path
+) -> tuple[Path, Path, DeliveryBundle]:
     bundle_path = _locate_bundle_path(bundle_id, outputs_root)
     bundle = DeliveryBundle.model_validate(_load_json_object(bundle_path))
     return bundle_path, bundle_path.parent, bundle
@@ -164,7 +178,11 @@ def _load_tasks(run_dir: Path) -> list[ExecutionTask]:
     raw_tasks = payload.get("tasks")
     if not isinstance(raw_tasks, list):
         return []
-    return [ExecutionTask.model_validate(item) for item in raw_tasks if isinstance(item, dict)]
+    return [
+        ExecutionTask.model_validate(item)
+        for item in raw_tasks
+        if isinstance(item, dict)
+    ]
 
 
 def _load_traceability_payload(run_dir: Path) -> dict[str, Any]:
@@ -183,7 +201,9 @@ def _resolve_adapter(executor_type: str):
     try:
         return get_adapter(normalized)
     except ValueError as exc:
-        raise ValueError(f"no adapter available for executor_type '{normalized}'") from exc
+        raise ValueError(
+            f"no adapter available for executor_type '{normalized}'"
+        ) from exc
 
 
 def _sanitize_filename_fragment(value: str) -> str:
@@ -197,7 +217,9 @@ def _task_context_path(run_dir: Path, task: ExecutionTask) -> Path:
     return run_dir / f"{_sanitize_filename_fragment(task.task_id)}_execution_context.md"
 
 
-def _rewrite_request_context_paths(request_payload: dict[str, Any], context_path: Path) -> dict[str, Any]:
+def _rewrite_request_context_paths(
+    request_payload: dict[str, Any], context_path: Path
+) -> dict[str, Any]:
     payload = dict(request_payload)
     payload["context_path"] = str(context_path)
 
@@ -235,27 +257,37 @@ def _attach_adapter_artifacts(
     return ExecutionTask.model_validate(payload)
 
 
-def _materialize_adapter_requests(tasks: list[ExecutionTask], bundle: DeliveryBundle, run_dir: Path) -> list[ExecutionTask]:
+def _materialize_adapter_requests(
+    tasks: list[ExecutionTask], bundle: DeliveryBundle, run_dir: Path
+) -> list[ExecutionTask]:
     materialized_tasks: list[ExecutionTask] = []
     for task in tasks:
         adapter = _resolve_adapter(task.executor_type)
         result = adapter.build_pack({"task": task, "bundle": bundle})
 
         request_path = Path(str(result.get("request_path", "")).strip())
-        request_payload = result.get("request") if isinstance(result.get("request"), dict) else {}
+        request_payload = (
+            result.get("request") if isinstance(result.get("request"), dict) else {}
+        )
         if not request_path.name:
-            raise ValueError(f"adapter did not return a request path for task '{task.task_id}'")
+            raise ValueError(
+                f"adapter did not return a request path for task '{task.task_id}'"
+            )
         if not request_payload:
             request_payload = _load_json_object(request_path)
 
         temporary_context_path = Path(str(result.get("context_path", "")).strip())
         final_context_path = _task_context_path(run_dir, task)
         if temporary_context_path.exists():
-            final_context_path.write_text(temporary_context_path.read_text(encoding="utf-8"), encoding="utf-8")
+            final_context_path.write_text(
+                temporary_context_path.read_text(encoding="utf-8"), encoding="utf-8"
+            )
             if temporary_context_path != final_context_path:
                 temporary_context_path.unlink()
 
-        updated_request_payload = _rewrite_request_context_paths(request_payload, final_context_path)
+        updated_request_payload = _rewrite_request_context_paths(
+            request_payload, final_context_path
+        )
         _write_json(request_path, updated_request_payload)
 
         materialized_tasks.append(
@@ -304,7 +336,9 @@ def _build_prepare_handoff_tasks(
         source_pack_type = _HANDOFF_AGENT_TO_PACK[executor_type]
         artifact_ref = getattr(bundle.artifacts, source_pack_type, None)
         if artifact_ref is None or not str(artifact_ref.path or "").strip():
-            raise FileNotFoundError(f"{source_pack_type} is unavailable for agent '{executor_type}'")
+            raise FileNotFoundError(
+                f"{source_pack_type} is unavailable for agent '{executor_type}'"
+            )
         task_id = f"{bundle.bundle_id}:{executor_type}:{source_pack_type}"
         tasks.append(
             ExecutionTask(
@@ -354,17 +388,29 @@ def prepare_agent_handoff_for_run_for_mcp(
         raise FileNotFoundError(f"delivery_bundle.json not found for run_id={run_id}")
 
     bundle = DeliveryBundle.model_validate(_load_json_object(bundle_path))
-    execution_mode = _resolve_mode(str(resolved_options.get("execution_mode", "agent_assisted") or "agent_assisted"))
+    execution_mode = _resolve_mode(
+        str(
+            resolved_options.get("execution_mode", "agent_assisted") or "agent_assisted"
+        )
+    )
     materialized_tasks = _materialize_adapter_requests(
-        _build_prepare_handoff_tasks(bundle, agent=agent, execution_mode=execution_mode),
+        _build_prepare_handoff_tasks(
+            bundle, agent=agent, execution_mode=execution_mode
+        ),
         bundle,
         run_dir,
     )
 
     requests: list[dict[str, Any]] = []
     for task in materialized_tasks:
-        adapter_artifacts = task.metadata.get("adapter_artifacts") if isinstance(task.metadata, dict) else {}
-        request_path = Path(str(adapter_artifacts.get("request_path", "") or "").strip())
+        adapter_artifacts = (
+            task.metadata.get("adapter_artifacts")
+            if isinstance(task.metadata, dict)
+            else {}
+        )
+        request_path = Path(
+            str(adapter_artifacts.get("request_path", "") or "").strip()
+        )
         context_path = str(adapter_artifacts.get("context_path", "") or "").strip()
         request_payload = _load_json_object(request_path) if request_path.name else {}
         requests.append(
@@ -400,7 +446,9 @@ def prepare_agent_handoff_for_run_for_mcp(
         "bundle_id": str(bundle.bundle_id),
         "status": "prepared",
         "agent_selection": _normalize_agent_selection(agent),
-        "handoff_source": bundle.metadata.get("handoff_source", {}) if isinstance(bundle.metadata, dict) else {},
+        "handoff_source": bundle.metadata.get("handoff_source", {})
+        if isinstance(bundle.metadata, dict)
+        else {},
         "request_count": len(requests),
         "requests": requests,
         "paths": {
@@ -411,7 +459,9 @@ def prepare_agent_handoff_for_run_for_mcp(
     }
 
 
-def _load_task_context(task_id: str, outputs_root: str | Path) -> tuple[Path, DeliveryBundle, list[ExecutionTask], int]:
+def _load_task_context(
+    task_id: str, outputs_root: str | Path
+) -> tuple[Path, DeliveryBundle, list[ExecutionTask], int]:
     normalized_task_id = str(task_id or "").strip()
     if not normalized_task_id:
         raise ValueError("task_id is required")
@@ -423,7 +473,9 @@ def _load_task_context(task_id: str, outputs_root: str | Path) -> tuple[Path, De
                 continue
             bundle_payload = _load_json_object(run_dir / "delivery_bundle.json")
             if not bundle_payload:
-                raise FileNotFoundError(f"delivery_bundle.json not found for run_id={run_dir.name}")
+                raise FileNotFoundError(
+                    f"delivery_bundle.json not found for run_id={run_dir.name}"
+                )
             bundle = DeliveryBundle.model_validate(bundle_payload)
             return run_dir, bundle, tasks, index
     raise FileNotFoundError(f"execution task not found: {normalized_task_id}")
@@ -487,7 +539,11 @@ def _merge_task_writeback(
 
     if artifact_paths:
         existing_artifact_paths = metadata.get("artifact_paths")
-        merged_artifact_paths = dict(existing_artifact_paths) if isinstance(existing_artifact_paths, dict) else {}
+        merged_artifact_paths = (
+            dict(existing_artifact_paths)
+            if isinstance(existing_artifact_paths, dict)
+            else {}
+        )
         merged_artifact_paths.update(artifact_paths)
         metadata["artifact_paths"] = merged_artifact_paths
 
@@ -504,7 +560,12 @@ def _apply_lifecycle_update(
     result_summary: str,
     assigned_to: str,
 ) -> tuple[ExecutionTask, bool]:
-    normalized_actor = str(actor or "").strip() or str(task.assigned_to or "").strip() or task.executor_type or "external_executor"
+    normalized_actor = (
+        str(actor or "").strip()
+        or str(task.assigned_to or "").strip()
+        or task.executor_type
+        or "external_executor"
+    )
     normalized_detail = str(detail or "").strip()
     normalized_result_summary = str(result_summary or "").strip()
     normalized_assigned_to = str(assigned_to or "").strip()
@@ -513,12 +574,18 @@ def _apply_lifecycle_update(
         return task, False
 
     if to_status == ExecutionTaskStatus.assigned:
-        executor = normalized_assigned_to or str(task.assigned_to or "").strip() or normalized_actor
+        executor = (
+            normalized_assigned_to
+            or str(task.assigned_to or "").strip()
+            or normalized_actor
+        )
         return assign_task(task, executor=executor, actor=normalized_actor), True
     if to_status == ExecutionTaskStatus.in_progress:
         return start_task(task, actor=normalized_actor), True
     if to_status == ExecutionTaskStatus.waiting_review:
-        return request_review(task, actor=normalized_actor, detail=normalized_detail or "checkpoint ready"), True
+        return request_review(
+            task, actor=normalized_actor, detail=normalized_detail or "checkpoint ready"
+        ), True
     if to_status == ExecutionTaskStatus.completed:
         summary = normalized_result_summary or normalized_detail or "completed"
         return complete_task(task, actor=normalized_actor, result_summary=summary), True
@@ -573,7 +640,12 @@ def _build_execution_snapshot_payload(
     return payload
 
 
-def _save_execution_status_snapshot(run_dir: Path, bundle: DeliveryBundle, tasks: list[ExecutionTask], updated_task: ExecutionTask) -> tuple[Path, dict[str, Any]]:
+def _save_execution_status_snapshot(
+    run_dir: Path,
+    bundle: DeliveryBundle,
+    tasks: list[ExecutionTask],
+    updated_task: ExecutionTask,
+) -> tuple[Path, dict[str, Any]]:
     repository = ReviewWorkspaceRepository(run_dir)
     existing_payload = _load_json_object(repository.status_snapshot_path)
     updated_payload = dict(existing_payload) if existing_payload else {}
@@ -632,7 +704,9 @@ def handoff_to_executor_for_mcp(
 ) -> dict[str, Any]:
     resolved_options = _validate_options(options)
     audit_context = _resolve_audit_context(resolved_options)
-    _, run_dir, bundle = _load_bundle_context(bundle_id, resolved_options.get("outputs_root", "outputs"))
+    _, run_dir, bundle = _load_bundle_context(
+        bundle_id, resolved_options.get("outputs_root", "outputs")
+    )
     router = ExecutorRouter(default_mode=_resolve_mode(execution_mode))
     tasks = router.route(bundle)
     tasks = _materialize_adapter_requests(tasks, bundle, run_dir)
@@ -695,7 +769,9 @@ def list_execution_tasks_for_mcp(
     resolved_options = _validate_options(options)
     outputs_root = resolved_options.get("outputs_root", "outputs")
     normalized_bundle_id = str(bundle_id or "").strip()
-    normalized_status = _resolve_task_status_filter(status) if str(status or "").strip() else None
+    normalized_status = (
+        _resolve_task_status_filter(status) if str(status or "").strip() else None
+    )
 
     tasks: list[ExecutionTask] = []
     bundle_ids: list[str] = []
@@ -748,10 +824,16 @@ def get_execution_status_for_mcp(
             "traceability": traceability,
         }
 
-    run_dir, _bundle, tasks, index = _load_task_context(str(task_id or ""), outputs_root)
+    run_dir, _bundle, tasks, index = _load_task_context(
+        str(task_id or ""), outputs_root
+    )
     task = tasks[index]
     traceability = _load_traceability_payload(run_dir)
-    links = [link for link in traceability.get("links", []) if isinstance(link, dict) and link.get("execution_task_id") == task.task_id]
+    links = [
+        link
+        for link in traceability.get("links", [])
+        if isinstance(link, dict) and link.get("execution_task_id") == task.task_id
+    ]
     return {
         "bundle_id": task.bundle_id,
         "task": task.model_dump(mode="python"),
@@ -802,13 +884,22 @@ def update_execution_task_for_mcp(
     supplemental_details: list[str] = []
     if not transitioned:
         supplemental_details.append(f"status confirmed: {target_status.value}")
-    if normalized_detail and (not transitioned or target_status in {ExecutionTaskStatus.assigned, ExecutionTaskStatus.in_progress}):
+    if normalized_detail and (
+        not transitioned
+        or target_status
+        in {ExecutionTaskStatus.assigned, ExecutionTaskStatus.in_progress}
+    ):
         supplemental_details.append(normalized_detail)
     if normalized_artifact_paths:
-        supplemental_details.append("artifact_paths=" + ", ".join(sorted(normalized_artifact_paths)))
+        supplemental_details.append(
+            "artifact_paths=" + ", ".join(sorted(normalized_artifact_paths))
+        )
     if normalized_assigned_to and target_status != ExecutionTaskStatus.assigned:
         supplemental_details.append(f"assigned_to={normalized_assigned_to}")
-    if normalized_result_summary and target_status not in {ExecutionTaskStatus.completed, ExecutionTaskStatus.failed}:
+    if normalized_result_summary and target_status not in {
+        ExecutionTaskStatus.completed,
+        ExecutionTaskStatus.failed,
+    }:
         supplemental_details.append(f"result_summary={normalized_result_summary}")
     if supplemental_details:
         updated_task = append_execution_event(
@@ -820,7 +911,9 @@ def update_execution_task_for_mcp(
 
     tasks[index] = updated_task
     tasks_path = _save_tasks(tasks, run_dir)
-    status_snapshot_path, status_snapshot = _save_execution_status_snapshot(run_dir, bundle, tasks, updated_task)
+    status_snapshot_path, status_snapshot = _save_execution_status_snapshot(
+        run_dir, bundle, tasks, updated_task
+    )
     trace_path, trace_entry = _append_execution_update_trace(
         run_dir,
         task=updated_task,
@@ -849,9 +942,14 @@ def update_execution_task_for_mcp(
             "artifact_paths": normalized_artifact_paths,
             "transitioned": transitioned,
         },
-        retry=retry_metadata_for_status(status=str(updated_task.status), non_blocking=False),
+        retry=retry_metadata_for_status(
+            status=str(updated_task.status), non_blocking=False
+        ),
     )
-    if transitioned and str(updated_task.status) in {ExecutionTaskStatus.completed.value, ExecutionTaskStatus.failed.value}:
+    if transitioned and str(updated_task.status) in {
+        ExecutionTaskStatus.completed.value,
+        ExecutionTaskStatus.failed.value,
+    }:
         notification_type = (
             NotificationType.execution_completed
             if str(updated_task.status) == ExecutionTaskStatus.completed.value
@@ -862,7 +960,11 @@ def update_execution_task_for_mcp(
             if notification_type == NotificationType.execution_completed
             else f"Execution failed: {updated_task.task_id}"
         )
-        summary = normalized_result_summary or normalized_detail or str(updated_task.result_summary or updated_task.status)
+        summary = (
+            normalized_result_summary
+            or normalized_detail
+            or str(updated_task.result_summary or updated_task.status)
+        )
         _dispatch_notification(
             run_dir,
             notification_type=notification_type,
@@ -907,7 +1009,9 @@ def get_traceability_for_mcp(
     task_key = str(task_id or "").strip()
     bundle_key = str(bundle_id or "").strip()
     if not any((requirement_key, task_key, bundle_key)):
-        raise ValueError("provide at least one of requirement_id, task_id, or bundle_id")
+        raise ValueError(
+            "provide at least one of requirement_id, task_id, or bundle_id"
+        )
 
     if bundle_key:
         _, run_dir, bundle = _load_bundle_context(bundle_key, outputs_root)

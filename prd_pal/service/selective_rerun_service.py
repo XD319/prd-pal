@@ -8,7 +8,10 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
-from prd_pal.service.impact_analysis_service import WORKFLOW_NODES, analyze_affected_nodes_async
+from prd_pal.service.impact_analysis_service import (
+    WORKFLOW_NODES,
+    analyze_affected_nodes_async,
+)
 
 _WORKFLOW_EDGES: dict[str, list[str]] = {
     "parser": ["planner", "risk"],
@@ -45,7 +48,9 @@ def build_artifact_diff(prd_v1: str, prd_v2: str) -> dict[str, Any]:
     section_v2 = _extract_sections(normalized_v2)
     all_sections = sorted(set(section_v1) | set(section_v2))
     changed_sections = [
-        name for name in all_sections if str(section_v1.get(name, "")) != str(section_v2.get(name, ""))
+        name
+        for name in all_sections
+        if str(section_v1.get(name, "")) != str(section_v2.get(name, ""))
     ]
     unchanged_sections = [name for name in all_sections if name not in changed_sections]
     similarity = SequenceMatcher(None, normalized_v1, normalized_v2).ratio()
@@ -65,7 +70,11 @@ def build_artifact_diff(prd_v1: str, prd_v2: str) -> dict[str, Any]:
         "sections": {
             "added": [name for name in all_sections if name not in section_v1],
             "removed": [name for name in all_sections if name not in section_v2],
-            "modified": [name for name in changed_sections if name in section_v1 and name in section_v2],
+            "modified": [
+                name
+                for name in changed_sections
+                if name in section_v1 and name in section_v2
+            ],
             "unchanged": unchanged_sections,
         },
     }
@@ -119,8 +128,12 @@ async def build_rerun_plan_async(
 ) -> dict[str, Any]:
     cache = dict(cached_node_outputs or {})
     artifact_diff = build_artifact_diff(prd_v1, prd_v2)
-    impact = await analyze_affected_nodes_async(artifact_diff=artifact_diff, baseline_snapshot=baseline_snapshot or cache)
-    directly_affected = [node for node in WORKFLOW_NODES if node in set(impact.get("affected_nodes", []))]
+    impact = await analyze_affected_nodes_async(
+        artifact_diff=artifact_diff, baseline_snapshot=baseline_snapshot or cache
+    )
+    directly_affected = [
+        node for node in WORKFLOW_NODES if node in set(impact.get("affected_nodes", []))
+    ]
     rerun_nodes = _closure(directly_affected)
     steps: list[dict[str, Any]] = []
     cache_hits = 0
@@ -133,14 +146,22 @@ async def build_rerun_plan_async(
         steps.append(
             {
                 "node": node,
-                "action": "rerun" if should_rerun else ("reuse_cache" if has_cache else "skip"),
+                "action": "rerun"
+                if should_rerun
+                else ("reuse_cache" if has_cache else "skip"),
                 "reason": (
                     "impact_or_dependency"
                     if should_rerun
-                    else ("cache_hit_for_unaffected_node" if has_cache else "unaffected_without_cache")
+                    else (
+                        "cache_hit_for_unaffected_node"
+                        if has_cache
+                        else "unaffected_without_cache"
+                    )
                 ),
                 "cache_hit": bool((not should_rerun) and has_cache),
-                "cache_source": cache_payload if ((not should_rerun) and has_cache) else {},
+                "cache_source": cache_payload
+                if ((not should_rerun) and has_cache)
+                else {},
             }
         )
     return {
@@ -152,7 +173,9 @@ async def build_rerun_plan_async(
         "cache_stats": {
             "eligible_nodes": len(WORKFLOW_NODES) - len(rerun_nodes),
             "cache_hit_nodes": cache_hits,
-            "cache_miss_nodes": max(0, len(WORKFLOW_NODES) - len(rerun_nodes) - cache_hits),
+            "cache_miss_nodes": max(
+                0, len(WORKFLOW_NODES) - len(rerun_nodes) - cache_hits
+            ),
         },
         "steps": steps,
         "execution_mode": "plan_only",

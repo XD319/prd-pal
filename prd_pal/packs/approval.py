@@ -37,10 +37,14 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _transition(bundle: DeliveryBundle, to_status: BundleStatus, reviewer: str, comment: str) -> DeliveryBundle:
+def _transition(
+    bundle: DeliveryBundle, to_status: BundleStatus, reviewer: str, comment: str
+) -> DeliveryBundle:
     from_status = BundleStatus(bundle.status)
     if to_status not in VALID_TRANSITIONS.get(from_status, set()):
-        raise InvalidTransitionError(f"invalid bundle transition: {from_status} -> {to_status}")
+        raise InvalidTransitionError(
+            f"invalid bundle transition: {from_status} -> {to_status}"
+        )
 
     history = list(bundle.approval_history)
     history.append(
@@ -53,10 +57,14 @@ def _transition(bundle: DeliveryBundle, to_status: BundleStatus, reviewer: str, 
             comment=comment,
         )
     )
-    return bundle.model_copy(update={"status": to_status, "approval_history": history}, deep=True)
+    return bundle.model_copy(
+        update={"status": to_status, "approval_history": history}, deep=True
+    )
 
 
-def build_approval_record(bundle: DeliveryBundle, event: ApprovalEvent, action: str = "") -> ApprovalRecord:
+def build_approval_record(
+    bundle: DeliveryBundle, event: ApprovalEvent, action: str = ""
+) -> ApprovalRecord:
     """Convert one bundle approval event into a persisted workspace approval record."""
 
     from prd_pal.workspace.models import ApprovalRecord
@@ -76,17 +84,25 @@ def build_approval_record(bundle: DeliveryBundle, event: ApprovalEvent, action: 
     )
 
 
-def approve_bundle(bundle: DeliveryBundle, reviewer: str, comment: str) -> DeliveryBundle:
+def approve_bundle(
+    bundle: DeliveryBundle, reviewer: str, comment: str
+) -> DeliveryBundle:
     return _transition(bundle, BundleStatus.approved, reviewer, comment)
 
 
-def request_more_info(bundle: DeliveryBundle, reviewer: str, comment: str) -> DeliveryBundle:
+def request_more_info(
+    bundle: DeliveryBundle, reviewer: str, comment: str
+) -> DeliveryBundle:
     return _transition(bundle, BundleStatus.need_more_info, reviewer, comment)
 
 
-def block_by_risk(bundle: DeliveryBundle, reviewer: str, comment: str) -> DeliveryBundle:
+def block_by_risk(
+    bundle: DeliveryBundle, reviewer: str, comment: str
+) -> DeliveryBundle:
     return _transition(bundle, BundleStatus.blocked_by_risk, reviewer, comment)
 
 
-def reset_to_draft(bundle: DeliveryBundle, reviewer: str, comment: str) -> DeliveryBundle:
+def reset_to_draft(
+    bundle: DeliveryBundle, reviewer: str, comment: str
+) -> DeliveryBundle:
     return _transition(bundle, BundleStatus.draft, reviewer, comment)

@@ -8,7 +8,10 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, Iterator
 
-from review_runtime.llm_provider.generic.base import ReasoningEfforts, _SUPPORTED_PROVIDERS
+from review_runtime.llm_provider.generic.base import (
+    ReasoningEfforts,
+    _SUPPORTED_PROVIDERS,
+)
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "FAST_LLM": "openai:gpt-5-nano",
@@ -65,11 +68,15 @@ class Config:
         self.report_source = self._get_str("REPORT_SOURCE", config)
         self.doc_path = self._get_str("DOC_PATH", config)
         self.llm_kwargs = self._get_dict("LLM_KWARGS", config)
-        self.reasoning_effort = self.parse_reasoning_effort(self._get_str("REASONING_EFFORT", config) or None)
+        self.reasoning_effort = self.parse_reasoning_effort(
+            self._get_str("REASONING_EFFORT", config) or None
+        )
 
         self.fast_llm_provider, self.fast_llm_model = self.parse_llm(self.fast_llm)
         self.smart_llm_provider, self.smart_llm_model = self.parse_llm(self.smart_llm)
-        self.strategic_llm_provider, self.strategic_llm_model = self.parse_llm(self.strategic_llm)
+        self.strategic_llm_provider, self.strategic_llm_model = self.parse_llm(
+            self.strategic_llm
+        )
 
         if self.report_source != "web" and self.doc_path:
             os.makedirs(self.doc_path, exist_ok=True)

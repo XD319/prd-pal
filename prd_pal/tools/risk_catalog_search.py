@@ -78,7 +78,9 @@ def _build_idf(catalog: list[dict[str, Any]]) -> dict[str, float]:
     return {t: math.log((n_docs + 1) / (count + 1)) + 1.0 for t, count in df.items()}
 
 
-def _build_snippet(item: dict[str, Any], matched_terms: set[str], max_len: int = 180) -> str:
+def _build_snippet(
+    item: dict[str, Any], matched_terms: set[str], max_len: int = 180
+) -> str:
     candidates = [
         _field_text(item.get("description", "")),
         _field_text(item.get("triggers", "")),
@@ -140,4 +142,3 @@ def search_risk_catalog(
             }
         )
     return results
-

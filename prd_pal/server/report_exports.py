@@ -44,15 +44,23 @@ def _safe_iso_to_datetime(value: str):
 def load_report_payload(run_dir: Path) -> dict[str, Any]:
     report_json_path = run_dir / "report.json"
     if not report_json_path.exists():
-        raise HTTPException(status_code=404, detail=f"report.json not found for run_id={run_dir.name}")
+        raise HTTPException(
+            status_code=404, detail=f"report.json not found for run_id={run_dir.name}"
+        )
 
     try:
         payload = json.loads(report_json_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=500, detail=f"report.json parse failed for run_id={run_dir.name}: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"report.json parse failed for run_id={run_dir.name}: {exc}",
+        ) from exc
 
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=500, detail=f"report.json must contain an object for run_id={run_dir.name}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"report.json must contain an object for run_id={run_dir.name}",
+        )
     return payload
 
 
@@ -124,7 +132,9 @@ def _render_markdown_html(markdown_text: str) -> str:
     try:
         import markdown as markdown_lib
 
-        return markdown_lib.markdown(markdown_text, extensions=["extra", "tables", "fenced_code", "sane_lists"])
+        return markdown_lib.markdown(
+            markdown_text, extensions=["extra", "tables", "fenced_code", "sane_lists"]
+        )
     except Exception:
         pass
 
@@ -173,15 +183,21 @@ def _render_markdown_html(markdown_text: str) -> str:
         body_rows = parsed_rows[2:] if len(parsed_rows) > 2 else []
         head_html = "".join(f"<th>{_inline_markdown(cell)}</th>" for cell in header)
         body_html = "".join(
-            "<tr>" + "".join(f"<td>{_inline_markdown(cell)}</td>" for cell in row) + "</tr>"
+            "<tr>"
+            + "".join(f"<td>{_inline_markdown(cell)}</td>" for cell in row)
+            + "</tr>"
             for row in body_rows
         )
-        blocks.append(f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>")
+        blocks.append(
+            f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
+        )
         table_lines = []
 
     def flush_code() -> None:
         nonlocal code_lines
-        blocks.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+        blocks.append(
+            f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>"
+        )
         code_lines = []
 
     for line in lines:
@@ -202,7 +218,11 @@ def _render_markdown_html(markdown_text: str) -> str:
             code_lines.append(stripped)
             continue
 
-        if "|" in stripped and stripped.strip().startswith("|") and stripped.strip().endswith("|"):
+        if (
+            "|" in stripped
+            and stripped.strip().startswith("|")
+            and stripped.strip().endswith("|")
+        ):
             flush_paragraph()
             flush_list()
             table_lines.append(stripped)
@@ -219,10 +239,15 @@ def _render_markdown_html(markdown_text: str) -> str:
         heading_level = 0
         while heading_level < len(stripped) and stripped[heading_level] == "#":
             heading_level += 1
-        if 1 <= heading_level <= 6 and stripped[heading_level:heading_level + 1] == " ":
+        if (
+            1 <= heading_level <= 6
+            and stripped[heading_level : heading_level + 1] == " "
+        ):
             flush_paragraph()
             flush_list()
-            blocks.append(f"<h{heading_level}>{_inline_markdown(stripped[heading_level + 1:].strip())}</h{heading_level}>")
+            blocks.append(
+                f"<h{heading_level}>{_inline_markdown(stripped[heading_level + 1 :].strip())}</h{heading_level}>"
+            )
             continue
 
         if stripped.lstrip().startswith(("- ", "* ")):
@@ -241,10 +266,14 @@ def _render_markdown_html(markdown_text: str) -> str:
     return "\n".join(blocks)
 
 
-def build_report_html(*, run_id: str, report_payload: dict[str, Any], report_md: str, run_dir: Path) -> str:
+def build_report_html(
+    *, run_id: str, report_payload: dict[str, Any], report_md: str, run_dir: Path
+) -> str:
     title = _derive_report_title(report_payload, report_md)
     review_time = _derive_review_timestamp(report_payload, run_dir)
-    review_mode = _derive_review_mode(report_payload) or str(report_payload.get("mode", "unknown") or "unknown")
+    review_mode = _derive_review_mode(report_payload) or str(
+        report_payload.get("mode", "unknown") or "unknown"
+    )
     reviewers = _derive_reviewers_used(report_payload)
     reviewers_label = ", ".join(reviewers) if reviewers else "N/A"
     content_html = _render_markdown_html(report_md)
@@ -421,22 +450,41 @@ def build_report_csv(report_payload: dict[str, Any]) -> str:
     findings = _derive_review_findings(report_payload)
     buffer = StringIO()
     writer = csv.writer(buffer, lineterminator="\r\n")
-    writer.writerow(["id", "requirement", "severity", "category", "description", "suggestion", "reviewer"])
+    writer.writerow(
+        [
+            "id",
+            "requirement",
+            "severity",
+            "category",
+            "description",
+            "suggestion",
+            "reviewer",
+        ]
+    )
 
     for item in findings:
         reviewers = item.get("reviewers")
         if isinstance(reviewers, list):
-            reviewer = ", ".join(str(value).strip() for value in reviewers if str(value).strip())
+            reviewer = ", ".join(
+                str(value).strip() for value in reviewers if str(value).strip()
+            )
         else:
             reviewer = str(item.get("source_reviewer", "") or "").strip()
         writer.writerow(
             [
                 str(item.get("finding_id", item.get("id", "")) or "").strip(),
-                str(item.get("requirement_id", item.get("requirement", item.get("title", ""))) or "").strip(),
+                str(
+                    item.get(
+                        "requirement_id", item.get("requirement", item.get("title", ""))
+                    )
+                    or ""
+                ).strip(),
                 str(item.get("severity", "") or "").strip(),
                 str(item.get("category", "") or "").strip(),
                 str(item.get("description", item.get("detail", "")) or "").strip(),
-                str(item.get("suggestion", item.get("suggested_action", "")) or "").strip(),
+                str(
+                    item.get("suggestion", item.get("suggested_action", "")) or ""
+                ).strip(),
                 reviewer,
             ]
         )

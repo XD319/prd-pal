@@ -5,27 +5,15 @@ from pydantic import ValidationError
 
 from prd_pal.schemas.base import normalize_bool, safe_list
 from prd_pal.schemas.parser_schema import (
-    ParsedItem,
-    ParserOutput,
     validate_parser_output,
 )
 from prd_pal.schemas.planner_schema import (
-    Dependency,
-    Estimation,
-    Milestone,
-    PlannerOutput,
-    Task,
     validate_planner_output,
 )
 from prd_pal.schemas.reviewer_schema import (
-    PlanReview,
-    ReviewerOutput,
-    ReviewResult,
     validate_reviewer_output,
 )
 from prd_pal.schemas.risk_schema import (
-    RiskItem,
-    RiskOutput,
     validate_risk_output,
 )
 
@@ -94,7 +82,11 @@ class TestParserSchema:
     def test_none_acceptance_criteria_coerced(self):
         data = {
             "parsed_items": [
-                {"id": "REQ-002", "description": "Dashboard", "acceptance_criteria": None}
+                {
+                    "id": "REQ-002",
+                    "description": "Dashboard",
+                    "acceptance_criteria": None,
+                }
             ]
         }
         out = validate_parser_output(data)
@@ -138,9 +130,7 @@ class TestPlannerSchema:
         "milestones": [
             {"id": "M-1", "title": "API Ready", "includes": ["T-1"], "target_days": 5}
         ],
-        "dependencies": [
-            {"from": "T-2", "to": "T-1", "type": "blocked_by"}
-        ],
+        "dependencies": [{"from": "T-2", "to": "T-1", "type": "blocked_by"}],
         "estimation": {"total_days": 10, "buffer_days": 2},
     }
 
@@ -205,9 +195,7 @@ class TestRiskSchema:
 
     def test_invalid_impact_raises(self):
         with pytest.raises(ValidationError):
-            validate_risk_output(
-                {"risks": [{"id": "R-1", "impact": "critical"}]}
-            )
+            validate_risk_output({"risks": [{"id": "R-1", "impact": "critical"}]})
 
     def test_default_impact_is_medium(self):
         out = validate_risk_output({"risks": [{"id": "R-1"}]})
@@ -249,7 +237,12 @@ class TestReviewerSchema:
     def test_string_bools_coerced(self):
         data = {
             "review_results": [
-                {"id": "REQ-001", "is_clear": "yes", "is_testable": "0", "is_ambiguous": "TRUE"}
+                {
+                    "id": "REQ-001",
+                    "is_clear": "yes",
+                    "is_testable": "0",
+                    "is_ambiguous": "TRUE",
+                }
             ]
         }
         out = validate_reviewer_output(data)
@@ -315,20 +308,27 @@ class TestInitReExports:
             validate_reviewer_output,
             validate_risk_output,
         )
-        assert all(cls is not None for cls in [
-            ParserOutput,
-            PlannerOutput,
-            RevisionAgentOutput,
-            ReviewerOutput,
-            RoadmapDiffOutput,
-            RoadmapItem,
-            RoadmapOutput,
-            RiskOutput,
-        ])
-        assert all(callable(f) for f in [
-            validate_parser_output,
-            validate_planner_output,
-            validate_revision_output,
-            validate_reviewer_output,
-            validate_risk_output,
-        ])
+
+        assert all(
+            cls is not None
+            for cls in [
+                ParserOutput,
+                PlannerOutput,
+                RevisionAgentOutput,
+                ReviewerOutput,
+                RoadmapDiffOutput,
+                RoadmapItem,
+                RoadmapOutput,
+                RiskOutput,
+            ]
+        )
+        assert all(
+            callable(f)
+            for f in [
+                validate_parser_output,
+                validate_planner_output,
+                validate_revision_output,
+                validate_reviewer_output,
+                validate_risk_output,
+            ]
+        )

@@ -37,7 +37,9 @@ class ExecutorRouter:
 
     def route(self, bundle: DeliveryBundle) -> list[ExecutionTask]:
         if bundle.status != BundleStatus.approved:
-            raise BundleNotApprovedError("bundle must be approved before execution routing")
+            raise BundleNotApprovedError(
+                "bundle must be approved before execution routing"
+            )
 
         effective_mode = self._resolve_mode(bundle)
         tasks: list[ExecutionTask] = []
@@ -75,7 +77,9 @@ class ExecutorRouter:
             )
         return tasks
 
-    def reassign(self, task: ExecutionTask, new_executor: str, new_mode: ExecutionMode) -> ExecutionTask:
+    def reassign(
+        self, task: ExecutionTask, new_executor: str, new_mode: ExecutionMode
+    ) -> ExecutionTask:
         now = _utc_now_iso()
         payload = task.model_dump(mode="python")
         execution_log = list(task.execution_log)
@@ -110,15 +114,23 @@ class ExecutorRouter:
         risks = metadata.get("risk_summary")
         if isinstance(risks, list):
             for risk in risks:
-                if isinstance(risk, dict) and str(risk.get("level", "")).lower() == "high":
+                if (
+                    isinstance(risk, dict)
+                    and str(risk.get("level", "")).lower() == "high"
+                ):
                     return True
 
-        execution_pack_path = Path(str(bundle.artifacts.execution_pack.path or "").strip())
+        execution_pack_path = Path(
+            str(bundle.artifacts.execution_pack.path or "").strip()
+        )
         payload = self._load_json(execution_pack_path)
         risk_pack = payload.get("risk_pack")
         if not isinstance(risk_pack, list):
             return False
-        return any(isinstance(item, dict) and str(item.get("level", "")).lower() == "high" for item in risk_pack)
+        return any(
+            isinstance(item, dict) and str(item.get("level", "")).lower() == "high"
+            for item in risk_pack
+        )
 
     def _load_json(self, path: Path) -> dict[str, Any]:
         if not path.exists():

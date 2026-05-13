@@ -16,15 +16,21 @@ def build_clarification_payload(
     existing_payload = dict(existing) if isinstance(existing, dict) else {}
     existing_questions = existing_payload.get("questions")
     if isinstance(existing_questions, list) and existing_questions:
-        questions = [dict(item) for item in existing_questions if isinstance(item, dict)]
+        questions = [
+            dict(item) for item in existing_questions if isinstance(item, dict)
+        ]
     else:
         questions = identify_clarification_questions(findings, reviewer_summaries)
 
     answers_applied = [
-        dict(item) for item in existing_payload.get("answers_applied", []) if isinstance(item, dict)
+        dict(item)
+        for item in existing_payload.get("answers_applied", [])
+        if isinstance(item, dict)
     ]
     findings_updated = [
-        dict(item) for item in existing_payload.get("findings_updated", []) if isinstance(item, dict)
+        dict(item)
+        for item in existing_payload.get("findings_updated", [])
+        if isinstance(item, dict)
     ]
     triggered = bool(questions)
 
@@ -37,7 +43,9 @@ def build_clarification_payload(
             if str(item.get("question_id", "")).strip()
         }
         pending_questions = [
-            item for item in questions if str(item.get("id", "")).strip() not in answered_ids
+            item
+            for item in questions
+            if str(item.get("id", "")).strip() not in answered_ids
         ]
         status = "pending" if pending_questions else "answered"
     else:
@@ -56,7 +64,9 @@ def identify_clarification_questions(
     findings: list[dict[str, Any]],
     reviewer_summaries: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    eligible_findings = [dict(item) for item in findings if _is_clarification_candidate(item)]
+    eligible_findings = [
+        dict(item) for item in findings if _is_clarification_candidate(item)
+    ]
     if not eligible_findings:
         return []
 
@@ -103,21 +113,32 @@ def apply_clarification_answers(
     clarification: dict[str, Any],
     answers: list[dict[str, str]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    questions = [dict(item) for item in clarification.get("questions", []) if isinstance(item, dict)]
+    questions = [
+        dict(item)
+        for item in clarification.get("questions", [])
+        if isinstance(item, dict)
+    ]
     answers_by_id = {
         str(item.get("question_id", "")).strip(): str(item.get("answer", "")).strip()
         for item in answers
-        if str(item.get("question_id", "")).strip() and str(item.get("answer", "")).strip()
+        if str(item.get("question_id", "")).strip()
+        and str(item.get("answer", "")).strip()
     }
     if not answers_by_id:
-        return [dict(item) for item in findings], build_clarification_payload(findings, [], clarification)
+        return [dict(item) for item in findings], build_clarification_payload(
+            findings, [], clarification
+        )
 
     updated_findings = [dict(item) for item in findings]
     findings_updated: list[dict[str, Any]] = [
-        dict(item) for item in clarification.get("findings_updated", []) if isinstance(item, dict)
+        dict(item)
+        for item in clarification.get("findings_updated", [])
+        if isinstance(item, dict)
     ]
     answers_applied: list[dict[str, Any]] = [
-        dict(item) for item in clarification.get("answers_applied", []) if isinstance(item, dict)
+        dict(item)
+        for item in clarification.get("answers_applied", [])
+        if isinstance(item, dict)
     ]
 
     for question in questions:
@@ -134,20 +155,34 @@ def apply_clarification_answers(
                 "reviewer": str(question.get("reviewer", "")).strip(),
             },
         )
-        target_finding_ids = {str(item).strip() for item in question.get("finding_ids", []) if str(item).strip()}
+        target_finding_ids = {
+            str(item).strip()
+            for item in question.get("finding_ids", [])
+            if str(item).strip()
+        }
         for finding in updated_findings:
             finding_id = str(finding.get("finding_id", "")).strip()
             if finding_id not in target_finding_ids:
                 continue
-            original_severity = str(
-                finding.get("original_severity", "") or finding.get("severity", "medium")
-            ).strip().lower() or "medium"
+            original_severity = (
+                str(
+                    finding.get("original_severity", "")
+                    or finding.get("severity", "medium")
+                )
+                .strip()
+                .lower()
+                or "medium"
+            )
             finding["original_severity"] = original_severity
             finding["user_clarification"] = answer
             finding["clarification_applied"] = True
-            finding["severity"] = _resolved_severity(answer=answer, current_severity=original_severity)
+            finding["severity"] = _resolved_severity(
+                answer=answer, current_severity=original_severity
+            )
             finding["detail"] = _append_clarification_text(
-                str(finding.get("detail", "") or finding.get("description", "")).strip(),
+                str(
+                    finding.get("detail", "") or finding.get("description", "")
+                ).strip(),
                 answer,
             )
             finding["description"] = finding["detail"]
@@ -158,17 +193,23 @@ def apply_clarification_answers(
                     "question_id": question_id,
                     "reviewer": str(question.get("reviewer", "")).strip(),
                     "severity_before": original_severity,
-                    "severity_after": str(finding.get("severity", "medium")).strip().lower(),
+                    "severity_after": str(finding.get("severity", "medium"))
+                    .strip()
+                    .lower(),
                 },
             )
 
-    updated_clarification = build_clarification_payload(updated_findings, [], {
-        **clarification,
-        "questions": questions,
-        "answers_applied": answers_applied,
-        "findings_updated": findings_updated,
-        "status": "answered",
-    })
+    updated_clarification = build_clarification_payload(
+        updated_findings,
+        [],
+        {
+            **clarification,
+            "questions": questions,
+            "answers_applied": answers_applied,
+            "findings_updated": findings_updated,
+            "status": "answered",
+        },
+    )
     return updated_findings, updated_clarification
 
 

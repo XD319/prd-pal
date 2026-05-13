@@ -6,7 +6,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from prd_pal.monitoring import append_audit_event, normalize_audit_context, resolve_audit_actor
+from prd_pal.monitoring import (
+    append_audit_event,
+    normalize_audit_context,
+    resolve_audit_actor,
+)
 
 from .models import (
     MemoryApplicability,
@@ -31,8 +35,28 @@ _EPHEMERAL_HINTS = (
     "today",
     "this week",
 )
-_RULE_HINTS = ("must", "require", "required", "before release", "sign-off", "owner", "rollback", "audit", "approval")
-_RISK_HINTS = ("risk", "break", "drift", "regress", "rollback", "dependency", "audit", "security", "qa")
+_RULE_HINTS = (
+    "must",
+    "require",
+    "required",
+    "before release",
+    "sign-off",
+    "owner",
+    "rollback",
+    "audit",
+    "approval",
+)
+_RISK_HINTS = (
+    "risk",
+    "break",
+    "drift",
+    "regress",
+    "rollback",
+    "dependency",
+    "audit",
+    "security",
+    "qa",
+)
 _TYPE_PRIORITY = {
     MemoryType.team_rule.value: 0,
     MemoryType.risk_pattern.value: 1,
@@ -84,7 +108,11 @@ class CandidateRejection:
     reason: str
 
     def to_dict(self) -> dict[str, Any]:
-        return {"candidate_id": self.candidate_id, "title": self.title, "reason": self.reason}
+        return {
+            "candidate_id": self.candidate_id,
+            "title": self.title,
+            "reason": self.reason,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,35 +144,95 @@ def extract_memory_candidates(
 ) -> list[MemoryCandidate]:
     request = dict(canonical_review_request or {})
     profile = dict(review_profile or {})
-    parallel_review = review_result.get("parallel_review") if isinstance(review_result.get("parallel_review"), dict) else review_result
-    findings = [dict(item) for item in parallel_review.get("findings", []) if isinstance(item, dict)]
-    risk_items = [dict(item) for item in parallel_review.get("risk_items", []) if isinstance(item, dict)]
-    clarification = parallel_review.get("clarification") if isinstance(parallel_review.get("clarification"), dict) else {}
-    summary = parallel_review.get("summary") if isinstance(parallel_review.get("summary"), dict) else {}
+    parallel_review = (
+        review_result.get("parallel_review")
+        if isinstance(review_result.get("parallel_review"), dict)
+        else review_result
+    )
+    findings = [
+        dict(item)
+        for item in parallel_review.get("findings", [])
+        if isinstance(item, dict)
+    ]
+    risk_items = [
+        dict(item)
+        for item in parallel_review.get("risk_items", [])
+        if isinstance(item, dict)
+    ]
+    clarification = (
+        parallel_review.get("clarification")
+        if isinstance(parallel_review.get("clarification"), dict)
+        else {}
+    )
+    summary = (
+        parallel_review.get("summary")
+        if isinstance(parallel_review.get("summary"), dict)
+        else {}
+    )
 
     candidates: list[MemoryCandidate] = []
     for finding in findings:
         reviewer = str(finding.get("source_reviewer", "") or "reviewer").strip().lower()
         severity = str(finding.get("severity", "") or "").strip().lower()
-        detail = str(finding.get("detail", finding.get("description", "")) or "").strip()
-        if reviewer in {"engineering", "qa", "security", "product"} and severity in {"high", "medium"}:
+        detail = str(
+            finding.get("detail", finding.get("description", "")) or ""
+        ).strip()
+        if reviewer in {"engineering", "qa", "security", "product"} and severity in {
+            "high",
+            "medium",
+        }:
             if any(hint in detail.lower() for hint in _RULE_HINTS):
-                candidates.append(_build_team_rule_candidate(run_id=run_id, finding=finding, request=request, profile=profile))
-        if severity in {"high", "medium"} and any(hint in detail.lower() for hint in _RISK_HINTS):
-            candidates.append(_build_risk_pattern_candidate(run_id=run_id, finding=finding, request=request, profile=profile))
+                candidates.append(
+                    _build_team_rule_candidate(
+                        run_id=run_id, finding=finding, request=request, profile=profile
+                    )
+                )
+        if severity in {"high", "medium"} and any(
+            hint in detail.lower() for hint in _RISK_HINTS
+        ):
+            candidates.append(
+                _build_risk_pattern_candidate(
+                    run_id=run_id, finding=finding, request=request, profile=profile
+                )
+            )
 
     for risk_item in risk_items:
         severity = str(risk_item.get("severity", "") or "").strip().lower()
-        mitigation = str(risk_item.get("mitigation", risk_item.get("detail", "")) or "").strip()
+        mitigation = str(
+            risk_item.get("mitigation", risk_item.get("detail", "")) or ""
+        ).strip()
         if severity in {"high", "medium"} and mitigation:
-            candidates.append(_build_risk_item_candidate(run_id=run_id, risk_item=risk_item, request=request, profile=profile))
+            candidates.append(
+                _build_risk_item_candidate(
+                    run_id=run_id, risk_item=risk_item, request=request, profile=profile
+                )
+            )
 
-    for answer in [dict(item) for item in clarification.get("answers_applied", []) if isinstance(item, dict)]:
+    for answer in [
+        dict(item)
+        for item in clarification.get("answers_applied", [])
+        if isinstance(item, dict)
+    ]:
         if len(str(answer.get("answer", "") or "").strip()) >= 40:
-            candidates.append(_build_clarification_candidate(run_id=run_id, answer=answer, request=request, profile=profile))
+            candidates.append(
+                _build_clarification_candidate(
+                    run_id=run_id, answer=answer, request=request, profile=profile
+                )
+            )
 
-    if str(summary.get("overall_risk", "") or "").strip().lower() == "high" and len(findings) >= 2:
-        candidates.append(_build_review_case_candidate(run_id=run_id, findings=findings, summary=summary, request=request, profile=profile))
+    if (
+        str(summary.get("overall_risk", "") or "").strip().lower() == "high"
+        and len(findings) >= 2
+    ):
+        candidates.append(
+            _build_review_case_candidate(
+                run_id=run_id,
+                findings=findings,
+                summary=summary,
+                request=request,
+                profile=profile,
+            )
+        )
 
     return [_normalize_candidate(candidate) for candidate in candidates]
 
@@ -168,7 +256,11 @@ def gatekeep_memory_candidates(
             if duplicate_candidate is not None:
                 rejection_reason = f"duplicate_batch:{duplicate_candidate.candidate_id}"
         if rejection_reason:
-            rejected.append(CandidateRejection(candidate.candidate_id, candidate.title, rejection_reason))
+            rejected.append(
+                CandidateRejection(
+                    candidate.candidate_id, candidate.title, rejection_reason
+                )
+            )
             continue
         seen_candidates.append(candidate)
 
@@ -181,8 +273,12 @@ def gatekeep_memory_candidates(
         ),
     )
     kept = ranked[: max(0, int(max_memories))]
-    for candidate in ranked[max(0, int(max_memories)):]:
-        rejected.append(CandidateRejection(candidate.candidate_id, candidate.title, "limit_exceeded"))
+    for candidate in ranked[max(0, int(max_memories)) :]:
+        rejected.append(
+            CandidateRejection(
+                candidate.candidate_id, candidate.title, "limit_exceeded"
+            )
+        )
     return kept, rejected
 
 
@@ -214,11 +310,16 @@ async def process_review_memory_extraction_async(
         status="ok",
         run_id=run_id,
         audit_context=context,
-        details={"candidate_count": len(candidates), "candidates": [item.to_dict() for item in candidates]},
+        details={
+            "candidate_count": len(candidates),
+            "candidates": [item.to_dict() for item in candidates],
+        },
     )
 
     existing = await _load_existing_memories_async(memory_service, request)
-    kept, rejected = gatekeep_memory_candidates(candidates, existing_memories=existing, max_memories=max_memories)
+    kept, rejected = gatekeep_memory_candidates(
+        candidates, existing_memories=existing, max_memories=max_memories
+    )
     _audit_memory_event(
         run_dir,
         operation="memory_gatekeeping",
@@ -291,11 +392,24 @@ def _build_team_rule_candidate(
         memory_type=MemoryType.team_rule.value,
         title=f"{reviewer.title()} review gate: {str(finding.get('title', 'Stable requirement rule') or '').strip()}",
         summary=_truncate_sentence(suggested_action or detail),
-        content=" ".join(part for part in (detail, suggested_action, f"Clarified: {clarification}" if clarification else "") if part),
-        scope=_build_scope(memory_type=MemoryType.team_rule.value, request=request, profile=profile),
+        content=" ".join(
+            part
+            for part in (
+                detail,
+                suggested_action,
+                f"Clarified: {clarification}" if clarification else "",
+            )
+            if part
+        ),
+        scope=_build_scope(
+            memory_type=MemoryType.team_rule.value, request=request, profile=profile
+        ),
         applicability=MemoryApplicability(
             summary="Apply when similar requirements trigger the same reviewer gate before delivery.",
-            conditions=[f"reviewer:{reviewer.lower()}", f"severity:{str(finding.get('severity', '') or '').strip().lower()}"],
+            conditions=[
+                f"reviewer:{reviewer.lower()}",
+                f"severity:{str(finding.get('severity', '') or '').strip().lower()}",
+            ],
             signals=[str(finding.get("category", "") or "").strip().lower()],
         ),
         evidence=(
@@ -303,7 +417,10 @@ def _build_team_rule_candidate(
                 kind="finding",
                 reference=str(finding.get("finding_id", "") or "").strip(),
                 summary=detail,
-                metadata={"reviewer": reviewer.lower(), "severity": str(finding.get("severity", "") or "").strip().lower()},
+                metadata={
+                    "reviewer": reviewer.lower(),
+                    "severity": str(finding.get("severity", "") or "").strip().lower(),
+                },
             ),
         ),
         confidence=0.84 if clarification else 0.74,
@@ -330,10 +447,16 @@ def _build_risk_pattern_candidate(
         summary=_truncate_sentence(detail),
         content=" ".join(
             part
-            for part in (detail, str(finding.get("suggested_action", "") or "").strip(), f"Observed severity: {str(finding.get('severity', '') or '').strip().lower()}")
+            for part in (
+                detail,
+                str(finding.get("suggested_action", "") or "").strip(),
+                f"Observed severity: {str(finding.get('severity', '') or '').strip().lower()}",
+            )
             if part
         ),
-        scope=_build_scope(memory_type=MemoryType.risk_pattern.value, request=request, profile=profile),
+        scope=_build_scope(
+            memory_type=MemoryType.risk_pattern.value, request=request, profile=profile
+        ),
         applicability=MemoryApplicability(
             summary="Apply when similar scopes or dependencies suggest the same regression pattern.",
             conditions=[str(finding.get("category", "") or "").strip().lower()],
@@ -344,7 +467,9 @@ def _build_risk_pattern_candidate(
                 kind="finding",
                 reference=str(finding.get("finding_id", "") or "").strip(),
                 summary=detail,
-                metadata={"severity": str(finding.get("severity", "") or "").strip().lower()},
+                metadata={
+                    "severity": str(finding.get("severity", "") or "").strip().lower()
+                },
             ),
         ),
         confidence=0.76,
@@ -365,14 +490,19 @@ def _build_risk_item_candidate(
 ) -> MemoryCandidate:
     detail = str(risk_item.get("detail", "") or "").strip()
     mitigation = str(risk_item.get("mitigation", "") or "").strip()
-    reference = str(risk_item.get("risk_id", risk_item.get("id", risk_item.get("title", "risk"))) or "").strip()
+    reference = str(
+        risk_item.get("risk_id", risk_item.get("id", risk_item.get("title", "risk")))
+        or ""
+    ).strip()
     return MemoryCandidate(
         candidate_id=f"candidate:{run_id}:risk_item:{reference or 'risk'}",
         memory_type=MemoryType.risk_pattern.value,
         title=f"Reusable risk pattern: {str(risk_item.get('title', 'Risk item') or '').strip()}",
         summary=_truncate_sentence(detail or mitigation),
         content=" ".join(part for part in (detail, mitigation) if part),
-        scope=_build_scope(memory_type=MemoryType.risk_pattern.value, request=request, profile=profile),
+        scope=_build_scope(
+            memory_type=MemoryType.risk_pattern.value, request=request, profile=profile
+        ),
         applicability=MemoryApplicability(
             summary="Apply when a future requirement shows the same failure mode and mitigation shape.",
             conditions=[str(risk_item.get("severity", "") or "").strip().lower()],
@@ -383,7 +513,9 @@ def _build_risk_item_candidate(
                 kind="risk_item",
                 reference=reference,
                 summary=detail or mitigation,
-                metadata={"severity": str(risk_item.get("severity", "") or "").strip().lower()},
+                metadata={
+                    "severity": str(risk_item.get("severity", "") or "").strip().lower()
+                },
             ),
         ),
         confidence=0.72,
@@ -411,7 +543,11 @@ def _build_clarification_candidate(
         title=f"Clarified fact: {question or 'Answered review question'}",
         summary=_truncate_sentence(answer_text),
         content=f"Question: {question}\nAnswer: {answer_text}",
-        scope=_build_scope(memory_type=MemoryType.clarification_fact.value, request=request, profile=profile),
+        scope=_build_scope(
+            memory_type=MemoryType.clarification_fact.value,
+            request=request,
+            profile=profile,
+        ),
         applicability=MemoryApplicability(
             summary="Project fact that may unblock repeated review questions for the same requirement scope.",
             conditions=[f"reviewer:{reviewer}"] if reviewer else [],
@@ -443,7 +579,9 @@ def _build_review_case_candidate(
     profile: dict[str, Any],
 ) -> MemoryCandidate:
     top_findings = findings[:2]
-    in_scope = [str(item) for item in summary.get("in_scope", []) or [] if str(item).strip()]
+    in_scope = [
+        str(item) for item in summary.get("in_scope", []) or [] if str(item).strip()
+    ]
     return MemoryCandidate(
         candidate_id=f"candidate:{run_id}:review_case:summary",
         memory_type=MemoryType.review_case.value,
@@ -453,10 +591,17 @@ def _build_review_case_candidate(
             [
                 f"High-risk review with {len(findings)} findings.",
                 f"In scope: {', '.join(in_scope[:3])}" if in_scope else "",
-                "Key findings: " + "; ".join(str(item.get("title", "") or "").strip() for item in top_findings if str(item.get("title", "") or "").strip()),
+                "Key findings: "
+                + "; ".join(
+                    str(item.get("title", "") or "").strip()
+                    for item in top_findings
+                    if str(item.get("title", "") or "").strip()
+                ),
             ]
         ).strip(),
-        scope=_build_scope(memory_type=MemoryType.review_case.value, request=request, profile=profile),
+        scope=_build_scope(
+            memory_type=MemoryType.review_case.value, request=request, profile=profile
+        ),
         applicability=MemoryApplicability(
             summary="Reference case for future reviews with similar high-risk, multi-finding profiles.",
             conditions=["overall_risk:high"],
@@ -467,7 +612,9 @@ def _build_review_case_candidate(
                 kind="finding",
                 reference=str(item.get("finding_id", "") or "").strip(),
                 summary=str(item.get("title", "") or "").strip(),
-                metadata={"severity": str(item.get("severity", "") or "").strip().lower()},
+                metadata={
+                    "severity": str(item.get("severity", "") or "").strip().lower()
+                },
             )
             for item in top_findings
         ),
@@ -480,7 +627,9 @@ def _build_review_case_candidate(
     )
 
 
-def _build_scope(*, memory_type: str, request: dict[str, Any], profile: dict[str, Any]) -> MemoryScope:
+def _build_scope(
+    *, memory_type: str, request: dict[str, Any], profile: dict[str, Any]
+) -> MemoryScope:
     team_id = str(request.get("team_id", "") or "").strip()
     project_id = str(request.get("project_id", "") or "").strip()
     requirement_types = [str(request.get("requirement_type", "") or "").strip()]
@@ -491,7 +640,10 @@ def _build_scope(*, memory_type: str, request: dict[str, Any], profile: dict[str
 
     if memory_type == MemoryType.clarification_fact.value and project_id:
         level = MemoryScopeLevel.project
-    elif memory_type in {MemoryType.team_rule.value, MemoryType.risk_pattern.value} and team_id:
+    elif (
+        memory_type in {MemoryType.team_rule.value, MemoryType.risk_pattern.value}
+        and team_id
+    ):
         level = MemoryScopeLevel.team
     elif project_id:
         level = MemoryScopeLevel.project
@@ -508,7 +660,9 @@ def _build_scope(*, memory_type: str, request: dict[str, Any], profile: dict[str
     )
 
 
-def _candidate_tags(payload: dict[str, Any], *, extra: list[str] | None = None) -> list[str]:
+def _candidate_tags(
+    payload: dict[str, Any], *, extra: list[str] | None = None
+) -> list[str]:
     tags = list(extra or [])
     for key in ("category", "source_reviewer", "severity"):
         value = str(payload.get(key, "") or "").strip().lower()
@@ -516,7 +670,9 @@ def _candidate_tags(payload: dict[str, Any], *, extra: list[str] | None = None) 
             tags.append(value)
     reviewers = payload.get("reviewers")
     if isinstance(reviewers, list):
-        tags.extend(str(item).strip().lower() for item in reviewers if str(item).strip())
+        tags.extend(
+            str(item).strip().lower() for item in reviewers if str(item).strip()
+        )
     return _normalize_tags(tags)
 
 
@@ -528,8 +684,13 @@ def _normalize_candidate(candidate: MemoryCandidate) -> MemoryCandidate:
         summary=_normalize_text(candidate.summary, max_len=240),
         content=_normalize_text(candidate.content, max_len=1500),
         scope=MemoryScope.model_validate(candidate.scope.model_dump(mode="json")),
-        applicability=MemoryApplicability.model_validate(candidate.applicability.model_dump(mode="json")),
-        evidence=tuple(MemoryEvidence.model_validate(item.model_dump(mode="json")) for item in candidate.evidence),
+        applicability=MemoryApplicability.model_validate(
+            candidate.applicability.model_dump(mode="json")
+        ),
+        evidence=tuple(
+            MemoryEvidence.model_validate(item.model_dump(mode="json"))
+            for item in candidate.evidence
+        ),
         confidence=round(max(0.0, min(float(candidate.confidence), 1.0)), 4),
         reuse_score=round(max(0.0, min(float(candidate.reuse_score), 1.0)), 4),
         expiry_hint=_normalize_text(candidate.expiry_hint, max_len=240),
@@ -558,14 +719,23 @@ def _find_duplicate(candidate: MemoryCandidate, existing: list[Any]) -> Any | No
         item_type = str(getattr(item, "memory_type", "") or "").strip()
         if item_type and item_type != candidate.memory_type:
             continue
-        existing_tokens = _tokens(getattr(item, "title", ""), getattr(item, "summary", ""), getattr(item, "content", ""))
+        existing_tokens = _tokens(
+            getattr(item, "title", ""),
+            getattr(item, "summary", ""),
+            getattr(item, "content", ""),
+        )
         if _similarity(candidate_tokens, existing_tokens) >= 0.82:
             return item
     return None
 
 
 def _tokens(*parts: Any) -> set[str]:
-    return {match.group(0) for match in _WORD_RE.finditer(" ".join(str(part or "").lower() for part in parts))}
+    return {
+        match.group(0)
+        for match in _WORD_RE.finditer(
+            " ".join(str(part or "").lower() for part in parts)
+        )
+    }
 
 
 def _similarity(left: set[str], right: set[str]) -> float:
@@ -593,20 +763,28 @@ def _normalize_text(value: str, *, max_len: int) -> str:
 
 def _truncate_sentence(value: str, *, max_len: int = 180) -> str:
     compact = _normalize_text(value, max_len=max_len)
-    return compact.rstrip(".") + "." if compact and not compact.endswith(".") else compact
+    return (
+        compact.rstrip(".") + "." if compact and not compact.endswith(".") else compact
+    )
 
 
-async def _load_existing_memories_async(memory_service: MemoryService, request: dict[str, Any]) -> list[MemoryRecord]:
+async def _load_existing_memories_async(
+    memory_service: MemoryService, request: dict[str, Any]
+) -> list[MemoryRecord]:
     seen: dict[str, MemoryRecord] = {}
     for record in await memory_service.list_memory_by_scope(level="global"):
         seen[record.memory_id] = record
     team_id = str(request.get("team_id", "") or "").strip()
     project_id = str(request.get("project_id", "") or "").strip()
     if team_id:
-        for record in await memory_service.list_memory_by_scope(level="team", team_id=team_id):
+        for record in await memory_service.list_memory_by_scope(
+            level="team", team_id=team_id
+        ):
             seen[record.memory_id] = record
     if project_id:
-        for record in await memory_service.list_memory_by_scope(level="project", project_id=project_id):
+        for record in await memory_service.list_memory_by_scope(
+            level="project", project_id=project_id
+        ):
             seen[record.memory_id] = record
     return list(seen.values())
 

@@ -15,11 +15,23 @@ def test_generate_constrained_roadmap_returns_stable_items():
     roadmap = generate_constrained_roadmap(
         tasks=[
             {"id": "T-1", "title": "Core API", "depends_on": [], "estimate_days": 3},
-            {"id": "T-2", "title": "UI Flow", "depends_on": ["T-1"], "estimate_days": 5},
+            {
+                "id": "T-2",
+                "title": "UI Flow",
+                "depends_on": ["T-1"],
+                "estimate_days": 5,
+            },
         ],
         milestones=[{"id": "M-1", "includes": ["T-1", "T-2"]}],
         dependencies=[{"from": "T-2", "to": "T-1", "type": "blocked_by"}],
-        risk_items=[{"id": "R-1", "severity": "high", "task_ids": ["T-2"], "description": "UI regression risk"}],
+        risk_items=[
+            {
+                "id": "R-1",
+                "severity": "high",
+                "task_ids": ["T-2"],
+                "description": "UI regression risk",
+            }
+        ],
         acceptance_criteria_coverage={"T-1": 0.8, "T-2": 0.4},
         business_priority_hints={"T-2": 0.9, "T-1": 0.4},
         version="v1",
@@ -93,7 +105,9 @@ def test_diff_roadmap_versions_tracks_added_removed_and_changed():
 
 def test_integrate_with_execution_plan_embeds_scores():
     roadmap = generate_constrained_roadmap(
-        tasks=[{"id": "T-1", "title": "Core API", "depends_on": [], "estimate_days": 2}],
+        tasks=[
+            {"id": "T-1", "title": "Core API", "depends_on": [], "estimate_days": 2}
+        ],
         dependencies=[],
         risk_items=[],
         acceptance_criteria_coverage={"T-1": 0.6},

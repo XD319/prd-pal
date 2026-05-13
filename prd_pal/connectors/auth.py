@@ -49,19 +49,29 @@ class ConnectorAuthConfig(AgentSchemaModel):
                 raise ValueError("auth_type 'none' cannot include credentials")
             return self
 
-        if self.auth_type in {ConnectorAuthType.bearer_token, ConnectorAuthType.api_key} and not self.token:
+        if (
+            self.auth_type
+            in {ConnectorAuthType.bearer_token, ConnectorAuthType.api_key}
+            and not self.token
+        ):
             raise ValueError(f"auth_type '{self.auth_type}' requires a token")
 
-        if self.auth_type == ConnectorAuthType.basic and (not self.username or not self.password):
+        if self.auth_type == ConnectorAuthType.basic and (
+            not self.username or not self.password
+        ):
             raise ValueError("auth_type 'basic' requires both username and password")
 
-        if self.auth_type == ConnectorAuthType.oauth_client_credentials and (not self.client_id or not self.client_secret):
+        if self.auth_type == ConnectorAuthType.oauth_client_credentials and (
+            not self.client_id or not self.client_secret
+        ):
             raise ValueError(
                 "auth_type 'oauth_client_credentials' requires both client_id and client_secret"
             )
 
-        if self.auth_type == ConnectorAuthType.api_key and not str(self.header_name or "").strip():
+        if (
+            self.auth_type == ConnectorAuthType.api_key
+            and not str(self.header_name or "").strip()
+        ):
             raise ValueError("auth_type 'api_key' requires a non-empty header_name")
 
         return self
-

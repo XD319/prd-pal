@@ -56,23 +56,41 @@ def _copy_dict_list(value: Any) -> list[dict[str, Any]]:
     return [dict(item) for item in value if isinstance(item, dict)]
 
 
-def _derive_findings(report_payload: dict[str, Any], result_payload: dict[str, Any], review_report_payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _derive_findings(
+    report_payload: dict[str, Any],
+    result_payload: dict[str, Any],
+    review_report_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
     for payload in (review_report_payload, report_payload, result_payload):
         direct = _copy_dict_list(payload.get("findings"))
         if direct:
             return direct
 
     findings: list[dict[str, Any]] = []
-    review_results = _copy_dict_list(report_payload.get("review_results")) or _copy_dict_list(result_payload.get("review_results"))
+    review_results = _copy_dict_list(
+        report_payload.get("review_results")
+    ) or _copy_dict_list(result_payload.get("review_results"))
     for item in review_results:
-        issues = [str(issue).strip() for issue in list(item.get("issues", []) or []) if str(issue).strip()]
+        issues = [
+            str(issue).strip()
+            for issue in list(item.get("issues", []) or [])
+            if str(issue).strip()
+        ]
         suggestions = str(item.get("suggestions", "") or "").strip()
-        if not (issues or suggestions or item.get("is_ambiguous") or not item.get("is_clear", True) or not item.get("is_testable", True)):
+        if not (
+            issues
+            or suggestions
+            or item.get("is_ambiguous")
+            or not item.get("is_clear", True)
+            or not item.get("is_testable", True)
+        ):
             continue
         findings.append(
             {
                 "title": str(item.get("id", "") or "review-finding").strip(),
-                "detail": "; ".join(issues) or suggestions or str(item.get("description", "") or "").strip(),
+                "detail": "; ".join(issues)
+                or suggestions
+                or str(item.get("description", "") or "").strip(),
                 "suggestion": suggestions,
                 "requirement_id": str(item.get("id", "") or "").strip(),
                 "description": str(item.get("description", "") or "").strip(),
@@ -83,7 +101,12 @@ def _derive_findings(report_payload: dict[str, Any], result_payload: dict[str, A
 
 def _derive_source_artifacts(run_dir: Path) -> list[str]:
     names = []
-    for filename in ("report.json", "review_report.json", "open_questions.json", "risk_items.json"):
+    for filename in (
+        "report.json",
+        "review_report.json",
+        "open_questions.json",
+        "risk_items.json",
+    ):
         if (run_dir / filename).exists():
             names.append(filename)
     return names or ["ReviewState.result"]
@@ -99,9 +122,19 @@ def generate_task_bundle_v1_artifact(run_output: dict[str, Any]) -> TaskBundleAr
 
     run_dir = Path(run_dir_raw).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    report_paths = dict(run_output.get("report_paths", {}) or {}) if isinstance(run_output.get("report_paths"), dict) else {}
-    result_payload = dict(run_output.get("result", {}) or {}) if isinstance(run_output.get("result"), dict) else {}
-    report_payload = _load_json_dict(Path(str(report_paths.get("report_json", "") or ""))) or dict(result_payload)
+    report_paths = (
+        dict(run_output.get("report_paths", {}) or {})
+        if isinstance(run_output.get("report_paths"), dict)
+        else {}
+    )
+    result_payload = (
+        dict(run_output.get("result", {}) or {})
+        if isinstance(run_output.get("result"), dict)
+        else {}
+    )
+    report_payload = _load_json_dict(
+        Path(str(report_paths.get("report_json", "") or ""))
+    ) or dict(result_payload)
     review_report_payload = _load_json_dict(run_dir / "review_report.json")
     open_questions = _load_named_list(run_dir / "open_questions.json", "open_questions")
     risk_items = _load_named_list(run_dir / "risk_items.json", "risk_items")
@@ -110,16 +143,28 @@ def generate_task_bundle_v1_artifact(run_output: dict[str, Any]) -> TaskBundleAr
     builder_inputs = {
         "run_id": run_id,
         "source_artifacts": _derive_source_artifacts(run_dir),
-        "requirements": report_payload.get("parsed_items") or result_payload.get("parsed_items"),
-        "tasks": report_payload.get("tasks") or result_payload.get("tasks") or (report_payload.get("plan") or {}).get("tasks") or (result_payload.get("plan") or {}).get("tasks"),
+        "requirements": report_payload.get("parsed_items")
+        or result_payload.get("parsed_items"),
+        "tasks": report_payload.get("tasks")
+        or result_payload.get("tasks")
+        or (report_payload.get("plan") or {}).get("tasks")
+        or (result_payload.get("plan") or {}).get("tasks"),
         "risks": report_payload.get("risks") or result_payload.get("risks"),
-        "implementation_plan_output": report_payload.get("implementation_plan") or result_payload.get("implementation_plan"),
-        "test_plan_output": report_payload.get("test_plan") or result_payload.get("test_plan"),
-        "codex_prompt_output": report_payload.get("codex_prompt_handoff") or result_payload.get("codex_prompt_handoff"),
-        "claude_code_prompt_output": report_payload.get("claude_code_prompt_handoff") or result_payload.get("claude_code_prompt_handoff"),
+        "implementation_plan_output": report_payload.get("implementation_plan")
+        or result_payload.get("implementation_plan"),
+        "test_plan_output": report_payload.get("test_plan")
+        or result_payload.get("test_plan"),
+        "codex_prompt_output": report_payload.get("codex_prompt_handoff")
+        or result_payload.get("codex_prompt_handoff"),
+        "claude_code_prompt_output": report_payload.get("claude_code_prompt_handoff")
+        or result_payload.get("claude_code_prompt_handoff"),
         "review_findings": findings,
-        "open_questions": open_questions or report_payload.get("review_open_questions") or result_payload.get("review_open_questions"),
-        "risk_items": risk_items or report_payload.get("review_risk_items") or result_payload.get("review_risk_items"),
+        "open_questions": open_questions
+        or report_payload.get("review_open_questions")
+        or result_payload.get("review_open_questions"),
+        "risk_items": risk_items
+        or report_payload.get("review_risk_items")
+        or result_payload.get("review_risk_items"),
         "generated_at": _utc_now_iso(),
     }
 
@@ -127,7 +172,9 @@ def generate_task_bundle_v1_artifact(run_output: dict[str, Any]) -> TaskBundleAr
     bundle = TaskBundleBuilder().build(**builder_inputs)
     payload = bundle.model_dump(mode="python")
     output_path = run_dir / "task_bundle_v1.json"
-    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     duration_ms = round((perf_counter() - started) * 1000)
     return TaskBundleArtifact(
         artifact_key="task_bundle_v1",
@@ -144,7 +191,10 @@ def generate_task_bundle_v1_artifact(run_output: dict[str, Any]) -> TaskBundleAr
             "generator_version": GENERATOR_VERSION,
             "artifact_path": str(output_path),
             "source_artifacts": list(bundle.source_artifacts),
-            "task_count": sum(len(items) for items in bundle.tasks_by_role.model_dump(mode="python").values()),
+            "task_count": sum(
+                len(items)
+                for items in bundle.tasks_by_role.model_dump(mode="python").values()
+            ),
         },
     )
 

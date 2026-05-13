@@ -93,7 +93,10 @@ def test_workspace_state_tracks_current_versions_and_rerun_targets() -> None:
     assert state.get_current_version("review_report") is not None
     assert state.current_version_ids["review_report"] == "ver-2"
     assert state.rerun_targets == ["review_report"]
-    assert state.list_versions("review_report")[0].trace_links[0].target_type == "feishu_block"
+    assert (
+        state.list_versions("review_report")[0].trace_links[0].target_type
+        == "feishu_block"
+    )
 
 
 def test_workspace_state_validates_current_version_ids() -> None:

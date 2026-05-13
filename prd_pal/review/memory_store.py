@@ -53,7 +53,9 @@ class BaseMemoryStore:
     def import_seeds(self, *, force: bool = False) -> list[str]:
         raise NotImplementedError
 
-    def retrieve_similar(self, requirement: NormalizedRequirement, *, limit: int = 3) -> list[MemoryHit]:
+    def retrieve_similar(
+        self, requirement: NormalizedRequirement, *, limit: int = 3
+    ) -> list[MemoryHit]:
         raise NotImplementedError
 
     def store_review_case(
@@ -72,7 +74,9 @@ class NoopMemoryStore(BaseMemoryStore):
     def import_seeds(self, *, force: bool = False) -> list[str]:
         return []
 
-    def retrieve_similar(self, requirement: NormalizedRequirement, *, limit: int = 3) -> list[MemoryHit]:
+    def retrieve_similar(
+        self, requirement: NormalizedRequirement, *, limit: int = 3
+    ) -> list[MemoryHit]:
         return []
 
     def store_review_case(
@@ -88,14 +92,20 @@ class NoopMemoryStore(BaseMemoryStore):
 class FileBackedMemoryStore(BaseMemoryStore):
     backend_name = "file"
 
-    def __init__(self, storage_path: str | Path, *, seeds_dir: str | Path | None = None) -> None:
+    def __init__(
+        self, storage_path: str | Path, *, seeds_dir: str | Path | None = None
+    ) -> None:
         self.storage_path = Path(storage_path)
         default_seeds_dir = Path(__file__).resolve().parents[2] / "memory" / "seeds"
         self.seeds_dir = Path(seeds_dir) if seeds_dir is not None else default_seeds_dir
 
     def import_seeds(self, *, force: bool = False) -> list[str]:
         payload = self._load_payload()
-        imported_seed_ids = set(str(item) for item in payload.get("imported_seed_ids", []) if str(item).strip())
+        imported_seed_ids = set(
+            str(item)
+            for item in payload.get("imported_seed_ids", [])
+            if str(item).strip()
+        )
         records = list(payload.get("records", []) or [])
         imported: list[str] = []
 
@@ -107,7 +117,11 @@ class FileBackedMemoryStore(BaseMemoryStore):
                 seed_payload = json.loads(seed_file.read_text(encoding="utf-8"))
             except Exception:
                 continue
-            raw_records = seed_payload.get("records", seed_payload) if isinstance(seed_payload, dict) else seed_payload
+            raw_records = (
+                seed_payload.get("records", seed_payload)
+                if isinstance(seed_payload, dict)
+                else seed_payload
+            )
             if not isinstance(raw_records, list):
                 continue
             for item in raw_records:
@@ -116,7 +130,12 @@ class FileBackedMemoryStore(BaseMemoryStore):
                     continue
                 if not force and record.reference_id in imported_seed_ids:
                     continue
-                records = [existing for existing in records if str(existing.get("reference_id", "") or "") != record.reference_id]
+                records = [
+                    existing
+                    for existing in records
+                    if str(existing.get("reference_id", "") or "")
+                    != record.reference_id
+                ]
                 records.append(record.to_dict())
                 imported_seed_ids.add(record.reference_id)
                 imported.append(record.reference_id)
@@ -126,9 +145,14 @@ class FileBackedMemoryStore(BaseMemoryStore):
         self._write_payload(payload)
         return imported
 
-    def retrieve_similar(self, requirement: NormalizedRequirement, *, limit: int = 3) -> list[MemoryHit]:
+    def retrieve_similar(
+        self, requirement: NormalizedRequirement, *, limit: int = 3
+    ) -> list[MemoryHit]:
         self.import_seeds()
-        records = [_coerce_record(item) for item in self._load_payload().get("records", []) or []]
+        records = [
+            _coerce_record(item)
+            for item in self._load_payload().get("records", []) or []
+        ]
         query_tokens = _requirement_tokens(requirement)
         scored: list[MemoryHit] = []
         for record in records:
@@ -150,7 +174,9 @@ class FileBackedMemoryStore(BaseMemoryStore):
                     metadata=record.metadata,
                 )
             )
-        return sorted(scored, key=lambda item: item.score, reverse=True)[: max(0, int(limit))]
+        return sorted(scored, key=lambda item: item.score, reverse=True)[
+            : max(0, int(limit))
+        ]
 
     def store_review_case(
         self,
@@ -164,24 +190,42 @@ class FileBackedMemoryStore(BaseMemoryStore):
             return None
 
         payload = self._load_payload()
-        records = [item for item in payload.get("records", []) or [] if str(item.get("reference_id", "") or "") != f"review:{normalized_run_id}"]
-        findings = review_payload.get("findings", []) if isinstance(review_payload.get("findings"), list) else []
-        summary = review_payload.get("summary", {}) if isinstance(review_payload.get("summary"), dict) else {}
+        records = [
+            item
+            for item in payload.get("records", []) or []
+            if str(item.get("reference_id", "") or "") != f"review:{normalized_run_id}"
+        ]
+        findings = (
+            review_payload.get("findings", [])
+            if isinstance(review_payload.get("findings"), list)
+            else []
+        )
+        summary = (
+            review_payload.get("summary", {})
+            if isinstance(review_payload.get("summary"), dict)
+            else {}
+        )
         record = MemoryRecord(
             reference_id=f"review:{normalized_run_id}",
             source_kind="history",
             title=f"Review {normalized_run_id}",
-            summary=str(summary.get("overall_risk", "unknown")).strip() + " risk review with persisted outcome context.",
+            summary=str(summary.get("overall_risk", "unknown")).strip()
+            + " risk review with persisted outcome context.",
             requirement_summary=requirement.summary,
             finding_excerpt=_build_finding_excerpt(findings),
-            review_mode=str(review_payload.get("review_mode", review_payload.get("mode", "quick")) or "quick"),
+            review_mode=str(
+                review_payload.get("review_mode", review_payload.get("mode", "quick"))
+                or "quick"
+            ),
             tags=tuple(str(item) for item in requirement.modules[:4]),
             created_at=datetime.now(timezone.utc).isoformat(),
             metadata={
                 "run_id": normalized_run_id,
                 "overall_risk": summary.get("overall_risk", "unknown"),
                 "reviewers_used": list(review_payload.get("reviewers_used", []) or []),
-                "similar_reviews_referenced": list(review_payload.get("similar_reviews_referenced", []) or []),
+                "similar_reviews_referenced": list(
+                    review_payload.get("similar_reviews_referenced", []) or []
+                ),
             },
         )
         records.append(record.to_dict())
@@ -205,7 +249,9 @@ class FileBackedMemoryStore(BaseMemoryStore):
 
     def _write_payload(self, payload: dict[str, Any]) -> None:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        self.storage_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.storage_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
 
 class ChromaMemoryStore(NoopMemoryStore):
@@ -214,7 +260,9 @@ class ChromaMemoryStore(NoopMemoryStore):
     backend_name = "chroma"
 
 
-def _coerce_record(payload: Any, fallback_source_kind: str = "history") -> MemoryRecord | None:
+def _coerce_record(
+    payload: Any, fallback_source_kind: str = "history"
+) -> MemoryRecord | None:
     if not isinstance(payload, dict):
         return None
     reference_id = str(payload.get("reference_id", "") or "").strip()
@@ -222,10 +270,16 @@ def _coerce_record(payload: Any, fallback_source_kind: str = "history") -> Memor
     summary = str(payload.get("summary", "") or "").strip()
     if not reference_id or not title or not summary:
         return None
-    metadata = dict(payload.get("metadata", {}) or {}) if isinstance(payload.get("metadata"), dict) else {}
+    metadata = (
+        dict(payload.get("metadata", {}) or {})
+        if isinstance(payload.get("metadata"), dict)
+        else {}
+    )
     return MemoryRecord(
         reference_id=reference_id,
-        source_kind=str(payload.get("source_kind", fallback_source_kind) or fallback_source_kind),
+        source_kind=str(
+            payload.get("source_kind", fallback_source_kind) or fallback_source_kind
+        ),
         title=title,
         summary=summary,
         requirement_summary=str(payload.get("requirement_summary", "") or "").strip(),

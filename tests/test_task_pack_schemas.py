@@ -63,7 +63,9 @@ def test_execution_pack_nests_implementation_and_test_packs() -> None:
     pack = build_execution_pack(
         implementation_pack=implementation_pack,
         test_pack=test_pack,
-        risk_pack=[{"id": "RISK-001", "summary": "Integration drift", "level": "medium"}],
+        risk_pack=[
+            {"id": "RISK-001", "summary": "Integration drift", "level": "medium"}
+        ],
     )
 
     assert isinstance(pack, ExecutionPack)

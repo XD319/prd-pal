@@ -70,7 +70,9 @@ def test_mcp_get_report_tool_wrapper_works_with_outputs_root_option(tmp_path):
     (run_dir / "report.md").write_text("# report", encoding="utf-8")
     (run_dir / "report.json").write_text('{"ok":true}', encoding="utf-8")
 
-    result = mcp_server.get_report(run_id=run_id, options={"outputs_root": str(tmp_path)})
+    result = mcp_server.get_report(
+        run_id=run_id, options={"outputs_root": str(tmp_path)}
+    )
 
     assert "error" not in result
     assert result["run_id"] == run_id

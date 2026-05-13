@@ -7,12 +7,17 @@ from prd_pal.packs.bundle_builder import DeliveryBundleBuilder
 from prd_pal.packs.delivery_bundle import BundleStatus, DeliveryBundle
 
 
-def test_bundle_builder_builds_bundle_from_mock_data(tmp_path, sample_report_json: dict):
+def test_bundle_builder_builds_bundle_from_mock_data(
+    tmp_path, sample_report_json: dict
+):
     artifact_refs = ArtifactSplitter().split(sample_report_json, tmp_path)
     builder = DeliveryBundleBuilder()
 
     bundle = builder.build(
-        run_output={"run_id": "20260307T120000Z", "report_paths": {"report_json": str(tmp_path / "report.json")}},
+        run_output={
+            "run_id": "20260307T120000Z",
+            "report_paths": {"report_json": str(tmp_path / "report.json")},
+        },
         artifact_refs=artifact_refs,
         pack_paths={
             "implementation_pack": str(tmp_path / "implementation_pack.json"),
@@ -47,7 +52,9 @@ def test_bundle_builder_save_round_trips_schema(tmp_path, sample_report_json: di
     assert loaded.status == BundleStatus.draft
 
 
-def test_bundle_builder_contains_all_expected_artifact_refs(tmp_path, sample_report_json: dict):
+def test_bundle_builder_contains_all_expected_artifact_refs(
+    tmp_path, sample_report_json: dict
+):
     artifact_refs = ArtifactSplitter().split(sample_report_json, tmp_path)
     bundle = DeliveryBundleBuilder().build(
         run_output={"run_id": "20260307T120002Z", "report_paths": {}},

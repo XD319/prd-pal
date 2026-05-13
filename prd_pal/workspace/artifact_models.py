@@ -97,10 +97,14 @@ class ArtifactVersion(AgentSchemaModel):
     def validate_version_chain(self) -> ArtifactVersion:
         if self.parent_version_id and self.parent_version_id == self.version_id:
             raise ValueError("parent_version_id must not equal version_id")
-        if self.parent_version_id is None and (self.diff_from_parent_path or self.patch_from_parent_path):
+        if self.parent_version_id is None and (
+            self.diff_from_parent_path or self.patch_from_parent_path
+        ):
             raise ValueError("diff/patch paths require parent_version_id")
         if self.parent_version_id and self.version_number <= 1:
-            raise ValueError("version_number must be greater than 1 when parent_version_id is set")
+            raise ValueError(
+                "version_number must be greater than 1 when parent_version_id is set"
+            )
         return self
 
 
@@ -124,7 +128,10 @@ class DecisionRecord(AgentSchemaModel):
 
     @model_validator(mode="after")
     def validate_decision_reference(self) -> DecisionRecord:
-        if self.parent_version_id and self.parent_version_id == self.artifact_version_id:
+        if (
+            self.parent_version_id
+            and self.parent_version_id == self.artifact_version_id
+        ):
             raise ValueError("parent_version_id must not equal artifact_version_id")
         return self
 
@@ -156,7 +163,9 @@ class WorkspaceState(AgentSchemaModel):
         ]
         if missing_version_ids:
             missing_display = ", ".join(sorted(missing_version_ids))
-            raise ValueError(f"current_version_ids contains unknown version ids: {missing_display}")
+            raise ValueError(
+                f"current_version_ids contains unknown version ids: {missing_display}"
+            )
         return self
 
     def get_current_version(self, artifact_key: str) -> ArtifactVersion | None:
@@ -173,9 +182,13 @@ class WorkspaceState(AgentSchemaModel):
     def list_versions(self, artifact_key: str) -> list[ArtifactVersion]:
         """Return all versions that belong to one logical artifact."""
 
-        return [version for version in self.versions if version.artifact_key == artifact_key]
+        return [
+            version for version in self.versions if version.artifact_key == artifact_key
+        ]
 
-    def register_version(self, version: ArtifactVersion, *, make_current: bool = True) -> None:
+    def register_version(
+        self, version: ArtifactVersion, *, make_current: bool = True
+    ) -> None:
         """Append a new version and optionally move the active pointer to it."""
 
         self.versions.append(version)

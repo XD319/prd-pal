@@ -73,7 +73,9 @@ def get_report_for_mcp(
         )
 
     # Defense in depth against path traversal, even if run_id validation changes in the future.
-    if os.path.commonpath([str(normalized_outputs_root), str(run_dir)]) != str(normalized_outputs_root):
+    if os.path.commonpath([str(normalized_outputs_root), str(run_dir)]) != str(
+        normalized_outputs_root
+    ):
         return _error_payload(
             run_id=normalized_run_id,
             format=normalized_format,
@@ -174,7 +176,9 @@ def get_report_for_mcp(
             message=f"report.md not found for run_id={normalized_run_id}",
         )
 
-    content, truncated = _read_markdown_window(report_md_path, offset=offset, limit=effective_limit)
+    content, truncated = _read_markdown_window(
+        report_md_path, offset=offset, limit=effective_limit
+    )
     return {
         "run_id": normalized_run_id,
         "format": normalized_format,

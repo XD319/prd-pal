@@ -12,7 +12,10 @@ from pydantic import BaseModel, model_validator
 
 from prd_pal.server.sse import ProgressBroadcaster
 from prd_pal.service.report_service import RUN_ID_PATTERN
-from prd_pal.service.review_service import classify_review_input_error, review_prd_text_async
+from prd_pal.service.review_service import (
+    classify_review_input_error,
+    review_prd_text_async,
+)
 
 RUN_PROGRESS_FILENAME = "run_progress.json"
 PRIMARY_NODES = (
@@ -89,11 +92,15 @@ class ClarificationAnswerRequest(BaseModel):
 
 
 class RevisionStageRequest(BaseModel):
-    decision: Literal["generate_from_review", "custom_requirements", "upload_notes", "skip_revision"]
+    decision: Literal[
+        "generate_from_review", "custom_requirements", "upload_notes", "skip_revision"
+    ]
 
 
 class RevisionInputRequest(BaseModel):
-    selected_review_basis: Literal["all_review_suggestions", "partial_review_suggestions", "user_only"]
+    selected_review_basis: Literal[
+        "all_review_suggestions", "partial_review_suggestions", "user_only"
+    ]
     extra_instructions: str = ""
     meeting_notes_text: str = ""
     meeting_notes_file_ref: dict[str, Any] | None = None
@@ -103,13 +110,18 @@ class RevisionInputRequest(BaseModel):
         notes_text = str(self.meeting_notes_text or "").strip()
         if notes_text:
             return self
-        if isinstance(self.meeting_notes_file_ref, dict) and self.meeting_notes_file_ref:
+        if (
+            isinstance(self.meeting_notes_file_ref, dict)
+            and self.meeting_notes_file_ref
+        ):
             return self
         return self
 
 
 class RevisionConfirmRequest(BaseModel):
-    action: Literal["confirm_revision", "regenerate_revision", "continue_without_revision"]
+    action: Literal[
+        "confirm_revision", "regenerate_revision", "continue_without_revision"
+    ]
     additional_requirements: str = ""
 
 
@@ -119,18 +131,27 @@ class JobRecord:
     run_dir: Path
     status: Literal["queued", "running", "completed", "failed"] = "queued"
     current_node: str = ""
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    updated_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     error: str = ""
     error_code: str = ""
     report_paths: dict[str, str] = field(default_factory=dict)
     node_progress: dict[str, dict[str, Any]] = field(
-        default_factory=lambda: {name: {"status": "pending", "runs": 0} for name in TRACKED_NODES}
+        default_factory=lambda: {
+            name: {"status": "pending", "runs": 0} for name in TRACKED_NODES
+        }
     )
     task: asyncio.Task[Any] | None = None
 
     def as_progress_payload(self) -> dict[str, Any]:
-        ordered_nodes = {name: self.node_progress[name] for name in ordered_node_names(self.node_progress)}
+        ordered_nodes = {
+            name: self.node_progress[name]
+            for name in ordered_node_names(self.node_progress)
+        }
         return {
             "percent": progress_percent_from_nodes(ordered_nodes, status=self.status),
             "current_node": self.current_node,
@@ -159,7 +180,10 @@ def safe_iso_to_datetime(value: str) -> datetime | None:
 
 
 def artifact_presence(run_dir: Path) -> dict[str, bool]:
-    return {key: (run_dir / filename).exists() for key, filename in RUN_LIST_ARTIFACTS.items()}
+    return {
+        key: (run_dir / filename).exists()
+        for key, filename in RUN_LIST_ARTIFACTS.items()
+    }
 
 
 def latest_run_timestamp(run_dir: Path) -> float:
@@ -191,20 +215,36 @@ def build_run_list_entry(
         created_dt = safe_iso_to_datetime(job.created_at)
         if created_dt is None:
             created_dt = run_id_to_datetime(run_id)
-        created_at = created_dt.isoformat() if created_dt else timestamp_to_iso(run_dir.stat().st_ctime)
+        created_at = (
+            created_dt.isoformat()
+            if created_dt
+            else timestamp_to_iso(run_dir.stat().st_ctime)
+        )
 
         updated_dt = safe_iso_to_datetime(job.updated_at)
-        updated_at = updated_dt.isoformat() if updated_dt else timestamp_to_iso(latest_run_timestamp(run_dir))
+        updated_at = (
+            updated_dt.isoformat()
+            if updated_dt
+            else timestamp_to_iso(latest_run_timestamp(run_dir))
+        )
         status = job.status
     else:
         persisted = persisted_status_payload(run_id, run_dir)
         created_dt = safe_iso_to_datetime(str(persisted.get("created_at", "") or ""))
         if created_dt is None:
             created_dt = run_id_to_datetime(run_id)
-        created_at = created_dt.isoformat() if created_dt else timestamp_to_iso(run_dir.stat().st_ctime)
+        created_at = (
+            created_dt.isoformat()
+            if created_dt
+            else timestamp_to_iso(run_dir.stat().st_ctime)
+        )
 
         updated_dt = safe_iso_to_datetime(str(persisted.get("updated_at", "") or ""))
-        updated_at = updated_dt.isoformat() if updated_dt else timestamp_to_iso(latest_run_timestamp(run_dir))
+        updated_at = (
+            updated_dt.isoformat()
+            if updated_dt
+            else timestamp_to_iso(latest_run_timestamp(run_dir))
+        )
         status = str(persisted.get("status", "failed") or "failed")
 
     return {
@@ -229,10 +269,20 @@ def run_sort_timestamp(run_dir: Path, job: JobRecord | None = None) -> float:
 
 def resolve_review_inputs(payload: ReviewCreateRequest) -> dict[str, str | None]:
     if payload.source and payload.source.strip():
-        return {"prd_text": None, "prd_path": None, "source": payload.source.strip(), "mode": payload.mode}
+        return {
+            "prd_text": None,
+            "prd_path": None,
+            "source": payload.source.strip(),
+            "mode": payload.mode,
+        }
 
     if payload.prd_text:
-        return {"prd_text": payload.prd_text, "prd_path": None, "source": None, "mode": payload.mode}
+        return {
+            "prd_text": payload.prd_text,
+            "prd_path": None,
+            "source": None,
+            "mode": payload.mode,
+        }
 
     if not payload.prd_path:
         raise HTTPException(status_code=400, detail="Missing prd_path")
@@ -242,19 +292,33 @@ def resolve_review_inputs(payload: ReviewCreateRequest) -> dict[str, str | None]
         prd_file = Path.cwd() / prd_file
     if not prd_file.exists() or not prd_file.is_file():
         raise HTTPException(status_code=404, detail=f"PRD file not found: {prd_file}")
-    return {"prd_text": None, "prd_path": str(prd_file), "source": None, "mode": payload.mode}
+    return {
+        "prd_text": None,
+        "prd_path": str(prd_file),
+        "source": None,
+        "mode": payload.mode,
+    }
 
 
 def resolve_runtime_llm_options(payload: ReviewCreateRequest) -> dict[str, Any]:
     options: dict[str, Any] = {}
-    for key in ("fast_llm", "smart_llm", "strategic_llm", "temperature", "reasoning_effort", "llm_kwargs"):
+    for key in (
+        "fast_llm",
+        "smart_llm",
+        "strategic_llm",
+        "temperature",
+        "reasoning_effort",
+        "llm_kwargs",
+    ):
         value = getattr(payload, key)
         if value is not None:
             options[key] = value
     return options
 
 
-def apply_progress_event(job: JobRecord, event: str, node_name: str, state: dict[str, Any]) -> None:
+def apply_progress_event(
+    job: JobRecord, event: str, node_name: str, state: dict[str, Any]
+) -> None:
     now = datetime.now(timezone.utc).isoformat()
     node = job.node_progress.setdefault(node_name, {"status": "pending", "runs": 0})
     if event == "start":
@@ -289,12 +353,16 @@ def read_trace_progress(run_dir: Path) -> dict[str, Any] | None:
     observed_nodes = {
         name: payload
         for name, payload in trace_data.items()
-        if isinstance(payload, dict) and any(key in payload for key in ("status", "start", "end"))
+        if isinstance(payload, dict)
+        and any(key in payload for key in ("status", "start", "end"))
     }
     if not observed_nodes:
         return None
 
-    nodes = {name: {"status": "pending", "runs": 0} for name in ordered_node_names(observed_nodes)}
+    nodes = {
+        name: {"status": "pending", "runs": 0}
+        for name in ordered_node_names(observed_nodes)
+    }
     for node_name in ordered_node_names(observed_nodes):
         node_trace = trace_data.get(node_name)
         if not isinstance(node_trace, dict):
@@ -359,11 +427,14 @@ def progress_percent_from_nodes(nodes: dict[str, Any] | None, *, status: str) ->
     return percent
 
 
-def terminal_sse_payload(run_id: str, status: str, timestamp: str, *, error: str = "") -> dict[str, Any]:
+def terminal_sse_payload(
+    run_id: str, status: str, timestamp: str, *, error: str = ""
+) -> dict[str, Any]:
     payload = {
         "node": "run",
         "status": str(status or "").strip(),
-        "timestamp": str(timestamp or "").strip() or datetime.now(timezone.utc).isoformat(),
+        "timestamp": str(timestamp or "").strip()
+        or datetime.now(timezone.utc).isoformat(),
         "run_id": run_id,
         "terminal": True,
     }
@@ -388,9 +459,15 @@ def terminal_payload_for_run_dir(
     status = str(persisted.get("status", "") or "").strip()
     if status not in {"completed", "failed"}:
         return None
-    progress = persisted.get("progress", {}) if isinstance(persisted.get("progress"), dict) else {}
+    progress = (
+        persisted.get("progress", {})
+        if isinstance(persisted.get("progress"), dict)
+        else {}
+    )
     error = str(progress.get("error", "") or "")
-    return terminal_sse_payload(run_id, status, str(persisted.get("updated_at", "") or ""), error=error)
+    return terminal_sse_payload(
+        run_id, status, str(persisted.get("updated_at", "") or ""), error=error
+    )
 
 
 def job_status_payload(job: JobRecord) -> dict[str, Any]:
@@ -432,10 +509,16 @@ def read_progress_snapshot(run_dir: Path) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
 
-    progress = dict(payload.get("progress", {}) or {}) if isinstance(payload.get("progress"), dict) else {}
+    progress = (
+        dict(payload.get("progress", {}) or {})
+        if isinstance(payload.get("progress"), dict)
+        else {}
+    )
     nodes = ordered_nodes_payload(progress.get("nodes"))
     progress["nodes"] = nodes
-    progress["percent"] = progress_percent_from_nodes(nodes, status=str(payload.get("status", "running") or "running"))
+    progress["percent"] = progress_percent_from_nodes(
+        nodes, status=str(payload.get("status", "running") or "running")
+    )
     progress.setdefault("current_node", "")
     progress.setdefault("updated_at", str(payload.get("updated_at", "") or ""))
     progress.setdefault("error", "")
@@ -443,7 +526,9 @@ def read_progress_snapshot(run_dir: Path) -> dict[str, Any] | None:
     return payload
 
 
-def merge_trace_nodes(progress_nodes: dict[str, Any] | None, trace_nodes: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+def merge_trace_nodes(
+    progress_nodes: dict[str, Any] | None, trace_nodes: dict[str, Any] | None
+) -> dict[str, dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
     if isinstance(progress_nodes, dict):
         for node_name, node_payload in progress_nodes.items():
@@ -456,11 +541,16 @@ def merge_trace_nodes(progress_nodes: dict[str, Any] | None, trace_nodes: dict[s
             current = dict(merged.get(node_name, {}))
             trace_status = str(node_payload.get("status", "pending") or "pending")
             current_status = str(current.get("status", "pending") or "pending")
-            if current_status in {"pending", "running"} and trace_status in {"completed", "failed"}:
+            if current_status in {"pending", "running"} and trace_status in {
+                "completed",
+                "failed",
+            }:
                 current["status"] = trace_status
             else:
                 current.setdefault("status", trace_status)
-            current["runs"] = max(int(current.get("runs", 0) or 0), int(node_payload.get("runs", 0) or 0))
+            current["runs"] = max(
+                int(current.get("runs", 0) or 0), int(node_payload.get("runs", 0) or 0)
+            )
             if node_payload.get("last_start"):
                 current["last_start"] = node_payload.get("last_start")
             else:
@@ -474,9 +564,7 @@ def merge_trace_nodes(progress_nodes: dict[str, Any] | None, trace_nodes: dict[s
 
 
 def inactive_run_message(run_id: str) -> str:
-    return (
-        f"Run {run_id} is no longer active. The backend process was restarted or exited before the review finished."
-    )
+    return f"Run {run_id} is no longer active. The backend process was restarted or exited before the review finished."
 
 
 def persisted_status_payload(run_id: str, run_dir: Path) -> dict[str, Any]:
@@ -486,7 +574,11 @@ def persisted_status_payload(run_id: str, run_dir: Path) -> dict[str, Any]:
     completed = report_md.exists() and report_json.exists()
 
     created_dt = run_id_to_datetime(run_id)
-    default_created_at = created_dt.isoformat() if created_dt else timestamp_to_iso(run_dir.stat().st_ctime)
+    default_created_at = (
+        created_dt.isoformat()
+        if created_dt
+        else timestamp_to_iso(run_dir.stat().st_ctime)
+    )
     default_updated_at = timestamp_to_iso(latest_run_timestamp(run_dir))
 
     payload = read_progress_snapshot(run_dir) or {
@@ -504,26 +596,44 @@ def persisted_status_payload(run_id: str, run_dir: Path) -> dict[str, Any]:
         "report_paths": {},
     }
 
-    progress = dict(payload.get("progress", {}) or {}) if isinstance(payload.get("progress"), dict) else {}
+    progress = (
+        dict(payload.get("progress", {}) or {})
+        if isinstance(payload.get("progress"), dict)
+        else {}
+    )
     trace_nodes = read_trace_progress(run_dir) or {}
     merged_nodes = merge_trace_nodes(progress.get("nodes"), trace_nodes)
     progress["nodes"] = merged_nodes
 
     created_at = str(payload.get("created_at", "") or default_created_at)
-    updated_at = str(payload.get("updated_at", "") or progress.get("updated_at", "") or default_updated_at)
+    updated_at = str(
+        payload.get("updated_at", "")
+        or progress.get("updated_at", "")
+        or default_updated_at
+    )
 
     payload["run_id"] = run_id
     payload["created_at"] = created_at
     payload["updated_at"] = updated_at
 
-    report_paths = dict(payload.get("report_paths", {}) or {}) if isinstance(payload.get("report_paths"), dict) else {}
+    report_paths = (
+        dict(payload.get("report_paths", {}) or {})
+        if isinstance(payload.get("report_paths"), dict)
+        else {}
+    )
     report_paths.setdefault("report_md", str(report_md))
     report_paths.setdefault("report_json", str(report_json))
     report_paths.setdefault("run_trace", str(run_trace))
     payload["report_paths"] = report_paths
 
-    error_payload = payload.get("error") if isinstance(payload.get("error"), dict) else None
-    status = str(payload.get("status", "") or ("completed" if completed else "failed")).strip().lower()
+    error_payload = (
+        payload.get("error") if isinstance(payload.get("error"), dict) else None
+    )
+    status = (
+        str(payload.get("status", "") or ("completed" if completed else "failed"))
+        .strip()
+        .lower()
+    )
 
     if completed:
         payload["status"] = "completed"
@@ -542,7 +652,11 @@ def persisted_status_payload(run_id: str, run_dir: Path) -> dict[str, Any]:
             progress["error"] = message
         elif status == "failed":
             message = message or inactive_run_message(run_id)
-            code = str(error_payload.get("code", "") or "run_failed") if error_payload else "run_failed"
+            code = (
+                str(error_payload.get("code", "") or "run_failed")
+                if error_payload
+                else "run_failed"
+            )
             payload["error"] = {"code": code, "message": message}
             progress["error"] = message
         progress["percent"] = progress_percent_from_nodes(
@@ -556,26 +670,39 @@ def persisted_status_payload(run_id: str, run_dir: Path) -> dict[str, Any]:
     return payload
 
 
-def hydrate_job_record(run_dir: Path, payload: dict[str, Any] | None = None) -> JobRecord | None:
+def hydrate_job_record(
+    run_dir: Path, payload: dict[str, Any] | None = None
+) -> JobRecord | None:
     hydrated = payload or read_progress_snapshot(run_dir)
     if not isinstance(hydrated, dict):
         return None
 
     run_id = str(hydrated.get("run_id", run_dir.name) or run_dir.name)
-    progress = hydrated.get("progress") if isinstance(hydrated.get("progress"), dict) else {}
+    progress = (
+        hydrated.get("progress") if isinstance(hydrated.get("progress"), dict) else {}
+    )
     nodes = ordered_nodes_payload(progress.get("nodes"))
-    error_payload = hydrated.get("error") if isinstance(hydrated.get("error"), dict) else {}
+    error_payload = (
+        hydrated.get("error") if isinstance(hydrated.get("error"), dict) else {}
+    )
     return JobRecord(
         run_id=run_id,
         run_dir=run_dir,
         status=str(hydrated.get("status", "failed") or "failed"),
         current_node=str(progress.get("current_node", "") or ""),
-        created_at=str(hydrated.get("created_at", "") or datetime.now(timezone.utc).isoformat()),
-        updated_at=str(hydrated.get("updated_at", "") or datetime.now(timezone.utc).isoformat()),
+        created_at=str(
+            hydrated.get("created_at", "") or datetime.now(timezone.utc).isoformat()
+        ),
+        updated_at=str(
+            hydrated.get("updated_at", "") or datetime.now(timezone.utc).isoformat()
+        ),
         error=str(error_payload.get("message", "") or progress.get("error", "") or ""),
         error_code=str(error_payload.get("code", "") or ""),
-        report_paths=dict(hydrated.get("report_paths", {}) or {}) if isinstance(hydrated.get("report_paths"), dict) else {},
-        node_progress=nodes or {name: {"status": "pending", "runs": 0} for name in TRACKED_NODES},
+        report_paths=dict(hydrated.get("report_paths", {}) or {})
+        if isinstance(hydrated.get("report_paths"), dict)
+        else {},
+        node_progress=nodes
+        or {name: {"status": "pending", "runs": 0} for name in TRACKED_NODES},
     )
 
 
@@ -603,7 +730,9 @@ def result_unavailable_detail(
         else:
             detail = {
                 "code": job.error_code if job.error_code else "result_unavailable",
-                "message": job.error if job.error else f"review result unavailable for run_id={run_id}",
+                "message": job.error
+                if job.error
+                else f"review result unavailable for run_id={run_id}",
                 "run_id": run_id,
                 "status": status,
             }
@@ -613,7 +742,9 @@ def result_unavailable_detail(
         return detail
 
     persisted = persisted_status_payload(run_id, outputs_root / run_id)
-    persisted_error = persisted.get("error") if isinstance(persisted.get("error"), dict) else {}
+    persisted_error = (
+        persisted.get("error") if isinstance(persisted.get("error"), dict) else {}
+    )
     status = str(persisted.get("status", "failed") or "failed")
     if status in {"queued", "running"}:
         detail = {
@@ -664,8 +795,14 @@ async def run_job(
             run_id=job.run_id,
             config_overrides={
                 "outputs_root": outputs_root,
-                "progress_hook": lambda event, node, state: apply_progress_event(job, event, node, state),
-                **({"audit_context": dict(audit_context)} if isinstance(audit_context, dict) and audit_context else {}),
+                "progress_hook": lambda event, node, state: apply_progress_event(
+                    job, event, node, state
+                ),
+                **(
+                    {"audit_context": dict(audit_context)}
+                    if isinstance(audit_context, dict) and audit_context
+                    else {}
+                ),
                 **({"mode": mode} if isinstance(mode, str) and mode.strip() else {}),
                 **(dict(llm_options) if isinstance(llm_options, dict) else {}),
             },
@@ -676,8 +813,12 @@ async def run_job(
     except Exception as exc:
         job.status = "failed"
         classified_error = classify_review_input_error(exc)
-        job.error_code = classified_error.code if classified_error is not None else "INTERNAL_ERROR"
-        job.error = classified_error.message if classified_error is not None else str(exc)
+        job.error_code = (
+            classified_error.code if classified_error is not None else "INTERNAL_ERROR"
+        )
+        job.error = (
+            classified_error.message if classified_error is not None else str(exc)
+        )
         job.current_node = ""
     finally:
         job.updated_at = datetime.now(timezone.utc).isoformat()
@@ -685,5 +826,7 @@ async def run_job(
         ProgressBroadcaster().publish(
             job.run_id,
             "run_status",
-            terminal_sse_payload(job.run_id, job.status, job.updated_at, error=job.error),
+            terminal_sse_payload(
+                job.run_id, job.status, job.updated_at, error=job.error
+            ),
         )

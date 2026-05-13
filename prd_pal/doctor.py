@@ -128,7 +128,9 @@ def _check_env_file() -> DoctorCheck:
 
 
 def _check_python_version() -> DoctorCheck:
-    current = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    current = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
     if sys.version_info >= (3, 11):
         return DoctorCheck(
             name="python",
@@ -167,7 +169,9 @@ def _fetch_json(url: str) -> tuple[int, Any]:
         return status, json.loads(content)
 
 
-def _http_check(name: str, url: str, *, success_field: str | None = "ok") -> DoctorCheck:
+def _http_check(
+    name: str, url: str, *, success_field: str | None = "ok"
+) -> DoctorCheck:
     try:
         status, payload = _fetch_json(url)
     except HTTPError as exc:

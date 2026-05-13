@@ -28,7 +28,9 @@ def _dedupe_items(*groups: list[str]) -> list[str]:
     return items
 
 
-def _as_execution_pack(execution_pack: ExecutionPack | BaseModel | dict[str, Any]) -> ExecutionPack:
+def _as_execution_pack(
+    execution_pack: ExecutionPack | BaseModel | dict[str, Any],
+) -> ExecutionPack:
     if isinstance(execution_pack, ExecutionPack):
         return execution_pack
     if isinstance(execution_pack, BaseModel):
@@ -90,27 +92,44 @@ def _build_constraints(
     return _render_list(lines, "- No explicit constraints were provided.")
 
 
-def _render_prompt(pack: ExecutionPack, template: PromptTemplate, prompt_source: str) -> str:
+def _render_prompt(
+    pack: ExecutionPack, template: PromptTemplate, prompt_source: str
+) -> str:
     implementation_pack = pack.implementation_pack
     test_pack = pack.test_pack
 
     if prompt_source == "implementation":
         handoff = implementation_pack.agent_handoff
-        required_changes = _dedupe_items(implementation_pack.implementation_steps, handoff.goals)
-        output_expectations = _dedupe_items([handoff.expected_output], [template.output_hint])
-        extra_constraints = [f"Primary agent handoff: {template.agent_name} is expected to drive implementation."]
+        required_changes = _dedupe_items(
+            implementation_pack.implementation_steps, handoff.goals
+        )
+        output_expectations = _dedupe_items(
+            [handoff.expected_output], [template.output_hint]
+        )
+        extra_constraints = [
+            f"Primary agent handoff: {template.agent_name} is expected to drive implementation."
+        ]
     else:
         handoff = test_pack.agent_handoff
-        required_changes = _dedupe_items(test_pack.test_scope, test_pack.edge_cases, handoff.goals)
-        output_expectations = _dedupe_items([handoff.expected_output], [template.output_hint])
-        extra_constraints = [f"Primary agent handoff: {template.agent_name} is expected to validate delivery readiness."]
+        required_changes = _dedupe_items(
+            test_pack.test_scope, test_pack.edge_cases, handoff.goals
+        )
+        output_expectations = _dedupe_items(
+            [handoff.expected_output], [template.output_hint]
+        )
+        extra_constraints = [
+            f"Primary agent handoff: {template.agent_name} is expected to validate delivery readiness."
+        ]
 
     sections = {
         "Goal": "\n".join(
             [
                 template.role_summary,
                 "",
-                _render_list(_dedupe_items([implementation_pack.summary], handoff.goals), "- No explicit goal was provided."),
+                _render_list(
+                    _dedupe_items([implementation_pack.summary], handoff.goals),
+                    "- No explicit goal was provided.",
+                ),
             ]
         ).strip(),
         "Project Context": _build_project_context(pack),
@@ -124,7 +143,9 @@ def _render_prompt(pack: ExecutionPack, template: PromptTemplate, prompt_source:
             "Do not expand scope beyond the execution pack.",
         ),
         "Acceptance Criteria": _render_list(
-            _dedupe_items(implementation_pack.acceptance_criteria, test_pack.acceptance_criteria),
+            _dedupe_items(
+                implementation_pack.acceptance_criteria, test_pack.acceptance_criteria
+            ),
             "- Acceptance criteria were not provided.",
         ),
         "Testing Requirements": _render_list(
@@ -137,27 +158,37 @@ def _render_prompt(pack: ExecutionPack, template: PromptTemplate, prompt_source:
         ),
     }
 
-    section_blocks = [_render_section(name, sections[name]) for name in template.section_order]
+    section_blocks = [
+        _render_section(name, sections[name]) for name in template.section_order
+    ]
     header = f"# {template.agent_name} Handoff Prompt"
     return "\n\n".join([header, *section_blocks]).strip() + "\n"
 
 
-def render_codex_prompt(execution_pack: ExecutionPack | BaseModel | dict[str, Any]) -> str:
+def render_codex_prompt(
+    execution_pack: ExecutionPack | BaseModel | dict[str, Any],
+) -> str:
     """Render a Markdown prompt tailored for Codex."""
 
     pack = _as_execution_pack(execution_pack)
     return _render_prompt(pack, CODEX_PROMPT_TEMPLATE, prompt_source="implementation")
 
 
-def render_claude_code_prompt(execution_pack: ExecutionPack | BaseModel | dict[str, Any]) -> str:
+def render_claude_code_prompt(
+    execution_pack: ExecutionPack | BaseModel | dict[str, Any],
+) -> str:
     """Render a Markdown prompt tailored for Claude Code."""
 
     pack = _as_execution_pack(execution_pack)
     return _render_prompt(pack, CLAUDE_CODE_PROMPT_TEMPLATE, prompt_source="validation")
 
 
-def render_openclaw_prompt(execution_pack: ExecutionPack | BaseModel | dict[str, Any]) -> str:
+def render_openclaw_prompt(
+    execution_pack: ExecutionPack | BaseModel | dict[str, Any],
+) -> str:
     """Render a Markdown prompt tailored for OpenClaw."""
 
     pack = _as_execution_pack(execution_pack)
-    return _render_prompt(pack, OPENCLAW_PROMPT_TEMPLATE, prompt_source="implementation")
+    return _render_prompt(
+        pack, OPENCLAW_PROMPT_TEMPLATE, prompt_source="implementation"
+    )

@@ -16,7 +16,10 @@ import json_repair
 from langchain_community.adapters.openai import convert_openai_messages
 from pydantic import BaseModel
 
-from ..prompt_quality.output_validator import SchemaValidationError, validate_with_retries
+from ..prompt_quality.output_validator import (
+    SchemaValidationError,
+    validate_with_retries,
+)
 from review_runtime.config.config import Config
 from review_runtime.utils.llm import create_chat_completion, get_llm
 
@@ -136,13 +139,17 @@ async def llm_structured_call(
                 result = await structured_llm.ainvoke(current_prompt)
                 output = _extract_dict_output(result)
                 metadata["structured_mode"] = "tools"
-                metadata["raw_output"] = json.dumps(output, ensure_ascii=False, indent=2)
+                metadata["raw_output"] = json.dumps(
+                    output, ensure_ascii=False, indent=2
+                )
                 return output
             except Exception:
                 pass
 
         fallback_prompt = _fallback_prompt(current_prompt, schema)
-        messages = convert_openai_messages([{"role": "user", "content": fallback_prompt}])
+        messages = convert_openai_messages(
+            [{"role": "user", "content": fallback_prompt}]
+        )
         raw = await create_chat_completion(
             model=model,
             messages=messages,
@@ -177,4 +184,3 @@ async def llm_structured_call(
             raw_output=str(metadata.get("raw_output", "") or ""),
             structured_mode=str(metadata.get("structured_mode", "unknown")),
         ) from exc
-

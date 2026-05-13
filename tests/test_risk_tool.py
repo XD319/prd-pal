@@ -211,7 +211,13 @@ class TestRiskAgentToolEnabled:
     @pytest.mark.asyncio
     async def test_tool_hit_attaches_evidence(self, base_state: ReviewState):
         catalog_hits = [
-            {"id": "RC-003", "title": "Insufficient schedule buffer", "score": 5.0, "snippet": "Buffer below 15%", "matched_terms": ["buffer"]},
+            {
+                "id": "RC-003",
+                "title": "Insufficient schedule buffer",
+                "score": 5.0,
+                "snippet": "Buffer below 15%",
+                "matched_terms": ["buffer"],
+            },
         ]
         with (
             patch(
@@ -224,7 +230,13 @@ class TestRiskAgentToolEnabled:
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=catalog_hits,
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {
+                    "RISK_AGENT_ENABLE_CATALOG_TOOL": "true",
+                    "SKILLS_CACHE_ENABLED": "true",
+                },
+            ),
         ):
             from prd_pal.agents import risk_agent
 
@@ -235,12 +247,17 @@ class TestRiskAgentToolEnabled:
         assert "RC-003" in risk["evidence_ids"]
         assert result["trace"]["risk"]["status"] == "ok"
         assert result["trace"]["risk"]["subflow_id"] == "risk_analysis.v1"
-        assert result["trace"]["risk_analysis.evidence"]["node_path"] == "risk_analysis.evidence"
+        assert (
+            result["trace"]["risk_analysis.evidence"]["node_path"]
+            == "risk_analysis.evidence"
+        )
         assert result["trace"]["risk_catalog.search"]["cache_hit"] is False
         assert result["trace"]["risk_catalog.search"]["ttl_sec"] == 300
 
     @pytest.mark.asyncio
-    async def test_tool_miss_returns_risks_without_evidence(self, base_state: ReviewState):
+    async def test_tool_miss_returns_risks_without_evidence(
+        self, base_state: ReviewState
+    ):
         with (
             patch(
                 "prd_pal.subflows.risk_analysis.llm_structured_call",
@@ -252,7 +269,13 @@ class TestRiskAgentToolEnabled:
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=[],
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {
+                    "RISK_AGENT_ENABLE_CATALOG_TOOL": "true",
+                    "SKILLS_CACHE_ENABLED": "true",
+                },
+            ),
         ):
             from prd_pal.agents import risk_agent
 
@@ -266,7 +289,13 @@ class TestRiskAgentToolEnabled:
     @pytest.mark.asyncio
     async def test_tool_second_run_hits_cache(self, base_state: ReviewState):
         catalog_hits = [
-            {"id": "RC-003", "title": "Insufficient schedule buffer", "score": 5.0, "snippet": "Buffer below 15%", "matched_terms": ["buffer"]},
+            {
+                "id": "RC-003",
+                "title": "Insufficient schedule buffer",
+                "score": 5.0,
+                "snippet": "Buffer below 15%",
+                "matched_terms": ["buffer"],
+            },
         ]
         mock_search = MagicMock(return_value=catalog_hits)
         with (
@@ -280,7 +309,13 @@ class TestRiskAgentToolEnabled:
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {
+                    "RISK_AGENT_ENABLE_CATALOG_TOOL": "true",
+                    "SKILLS_CACHE_ENABLED": "true",
+                },
+            ),
         ):
             from prd_pal.agents import risk_agent
 
@@ -316,7 +351,13 @@ class TestRiskAgentToolDisabled:
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "false", "SKILLS_CACHE_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {
+                    "RISK_AGENT_ENABLE_CATALOG_TOOL": "false",
+                    "SKILLS_CACHE_ENABLED": "true",
+                },
+            ),
         ):
             from prd_pal.agents import risk_agent
 
@@ -342,14 +383,20 @@ class TestRiskAgentToolDisabled:
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "0", "SKILLS_CACHE_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {"RISK_AGENT_ENABLE_CATALOG_TOOL": "0", "SKILLS_CACHE_ENABLED": "true"},
+            ),
         ):
             from prd_pal.agents import risk_agent
 
             result = await risk_agent.run(base_state)
 
         mock_search.assert_not_called()
-        assert result["trace"]["risk"].get("risk_catalog_tool_status") == "degraded_disabled"
+        assert (
+            result["trace"]["risk"].get("risk_catalog_tool_status")
+            == "degraded_disabled"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -373,7 +420,13 @@ class TestRiskAgentToolError:
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 side_effect=RuntimeError("catalog file missing"),
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {
+                    "RISK_AGENT_ENABLE_CATALOG_TOOL": "true",
+                    "SKILLS_CACHE_ENABLED": "true",
+                },
+            ),
         ):
             from prd_pal.agents import risk_agent
 
@@ -426,7 +479,13 @@ class TestRiskAnalysisSubflowContract:
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=[],
             ),
-            patch.dict(os.environ, {"RISK_AGENT_ENABLE_CATALOG_TOOL": "true", "SKILLS_CACHE_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {
+                    "RISK_AGENT_ENABLE_CATALOG_TOOL": "true",
+                    "SKILLS_CACHE_ENABLED": "true",
+                },
+            ),
         ):
             result = await run_risk_analysis_subflow(
                 {
@@ -452,4 +511,7 @@ class TestRiskAnalysisSubflowContract:
         assert isinstance(output["risks"], list)
         assert isinstance(output["evidence_summary"], dict)
         assert isinstance(output["tool_actions"], list)
-        assert result["trace"]["risk_analysis.generate"]["subflow_id"] == "risk_analysis.v1"
+        assert (
+            result["trace"]["risk_analysis.generate"]["subflow_id"]
+            == "risk_analysis.v1"
+        )

@@ -17,7 +17,13 @@ def test_normalize_ingress_request_feishu_payload() -> None:
                 "project_id": "proj-login",
                 "requirement_type": "prd",
                 "review_profile_hint": "security-heavy",
-                "attachments": [{"name": "diagram", "url": "https://example.com/a.png", "mime_type": "image/png"}],
+                "attachments": [
+                    {
+                        "name": "diagram",
+                        "url": "https://example.com/a.png",
+                        "mime_type": "image/png",
+                    }
+                ],
             },
         },
     )
@@ -63,7 +69,9 @@ def test_normalize_ingress_request_missing_team_project_metadata() -> None:
     assert canonical.team_id is None
     assert canonical.project_id is None
     assert any("team_id is missing" in note for note in canonical.normalization_notes)
-    assert any("project_id is missing" in note for note in canonical.normalization_notes)
+    assert any(
+        "project_id is missing" in note for note in canonical.normalization_notes
+    )
 
 
 def test_normalize_ingress_request_ambiguous_requirement_type_is_conservative() -> None:

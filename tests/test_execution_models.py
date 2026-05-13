@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import json
 
-from prd_pal.execution import ExecutionEvent, ExecutionMode, ExecutionTask, ExecutionTaskStatus, TraceLink
+from prd_pal.execution import (
+    ExecutionEvent,
+    ExecutionMode,
+    ExecutionTask,
+    ExecutionTaskStatus,
+    TraceLink,
+)
 
 
 def test_execution_task_model_instantiates_and_serializes() -> None:

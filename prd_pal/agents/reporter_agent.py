@@ -16,11 +16,13 @@ _IMPACT_EMOJI = {"high": "[H]", "medium": "[M]", "low": "[L]"}
 
 
 def _risk_level(result: dict) -> str:
-    flags = sum([
-        not result.get("is_clear", True),
-        not result.get("is_testable", True),
-        result.get("is_ambiguous", False),
-    ])
+    flags = sum(
+        [
+            not result.get("is_clear", True),
+            not result.get("is_testable", True),
+            result.get("is_ambiguous", False),
+        ]
+    )
     if flags >= 2:
         return _RISK_HIGH
     if flags == 1:
@@ -32,7 +34,10 @@ _RISK_MARKER = {_RISK_HIGH: "[H]", _RISK_MEDIUM: "[M]", _RISK_LOW: "[L]"}
 
 
 def _build_requirement_table(items: list[dict]) -> str:
-    rows = ["| ID | Description | Acceptance Criteria |", "|----|-------------|---------------------|"]
+    rows = [
+        "| ID | Description | Acceptance Criteria |",
+        "|----|-------------|---------------------|",
+    ]
     for item in items:
         rid = item.get("id", "-")
         desc = item.get("description", "-")
@@ -73,7 +78,10 @@ def _build_risk_summary(results: list[dict]) -> str:
     for r in results:
         counts[_risk_level(r)] += 1
     total = len(results) or 1
-    rows = ["| Risk Level | Count | Percentage |", "|------------|-------|------------|"]
+    rows = [
+        "| Risk Level | Count | Percentage |",
+        "|------------|-------|------------|",
+    ]
     for level in (_RISK_HIGH, _RISK_MEDIUM, _RISK_LOW):
         pct = round(counts[level] / total * 100)
         rows.append(f"| {_RISK_MARKER[level]} {level} | {counts[level]} | {pct}% |")
@@ -92,7 +100,9 @@ def _build_task_table(tasks: list[dict]) -> str:
         requirement_ids = ", ".join(t.get("requirement_ids", [])) or "-"
         deps = ", ".join(t.get("depends_on", [])) or "-"
         days = t.get("estimate_days", "-")
-        rows.append(f"| {tid} | {title} | {owner} | {requirement_ids} | {deps} | {days} |")
+        rows.append(
+            f"| {tid} | {title} | {owner} | {requirement_ids} | {deps} | {days} |"
+        )
     return "\n".join(rows)
 
 
@@ -113,7 +123,11 @@ def _build_milestone_table(milestones: list[dict]) -> str:
 def _build_estimation_summary(estimation: dict) -> str:
     total = estimation.get("total_days", "?")
     buffer = estimation.get("buffer_days", "?")
-    grand_total = total + buffer if isinstance(total, (int, float)) and isinstance(buffer, (int, float)) else "?"
+    grand_total = (
+        total + buffer
+        if isinstance(total, (int, float)) and isinstance(buffer, (int, float))
+        else "?"
+    )
     return (
         f"- **Total estimated days:** {total}\n"
         f"- **Buffer days:** {buffer}\n"
@@ -184,7 +198,9 @@ def _build_bullet_section(items: list[str], empty_message: str) -> str:
 
 def _build_prompt_handoff_section(title: str, prompt_handoff: dict[str, Any]) -> str:
     agent_prompt = str(prompt_handoff.get("agent_prompt", "") or "").strip()
-    recommended_execution_order = list(prompt_handoff.get("recommended_execution_order", []) or [])
+    recommended_execution_order = list(
+        prompt_handoff.get("recommended_execution_order", []) or []
+    )
     non_goals = list(prompt_handoff.get("non_goals", []) or [])
     validation_checklist = list(prompt_handoff.get("validation_checklist", []) or [])
 
@@ -196,11 +212,19 @@ def _build_prompt_handoff_section(title: str, prompt_handoff: dict[str, Any]) ->
         parts.append("_No agent prompt generated._")
 
     parts.append("\n**Recommended Execution Order**")
-    parts.append(_build_bullet_section(recommended_execution_order, "_No execution order generated._"))
+    parts.append(
+        _build_bullet_section(
+            recommended_execution_order, "_No execution order generated._"
+        )
+    )
     parts.append("\n**Non-Goals**")
     parts.append(_build_bullet_section(non_goals, "_No non-goals generated._"))
     parts.append("\n**Validation Checklist**")
-    parts.append(_build_bullet_section(validation_checklist, "_No validation checklist generated._"))
+    parts.append(
+        _build_bullet_section(
+            validation_checklist, "_No validation checklist generated._"
+        )
+    )
     return "\n".join(parts)
 
 
@@ -218,26 +242,33 @@ async def run(state: ReviewState) -> ReviewState:
     implementation_plan: dict = dict(state.get("implementation_plan", {}) or {})
     test_plan: dict = dict(state.get("test_plan", {}) or {})
     codex_prompt_handoff: dict = dict(state.get("codex_prompt_handoff", {}) or {})
-    claude_code_prompt_handoff: dict = dict(state.get("claude_code_prompt_handoff", {}) or {})
+    claude_code_prompt_handoff: dict = dict(
+        state.get("claude_code_prompt_handoff", {}) or {}
+    )
     risks: list[dict] = state.get("risks", [])
     plan_review: dict = state.get("plan_review", {})
     trace: dict[str, Any] = dict(state.get("trace", {}))
-    parallel_review_meta: dict[str, Any] = dict(state.get("parallel_review_meta", {}) or {})
+    parallel_review_meta: dict[str, Any] = dict(
+        state.get("parallel_review_meta", {}) or {}
+    )
 
-    input_chars = sum(len(str(v)) for v in (
-        parsed_items,
-        review_results,
-        tasks,
-        milestones,
-        estimation,
-        implementation_plan,
-        test_plan,
-        codex_prompt_handoff,
-        claude_code_prompt_handoff,
-        risks,
-        plan_review,
-        parallel_review_meta,
-    ))
+    input_chars = sum(
+        len(str(v))
+        for v in (
+            parsed_items,
+            review_results,
+            tasks,
+            milestones,
+            estimation,
+            implementation_plan,
+            test_plan,
+            codex_prompt_handoff,
+            claude_code_prompt_handoff,
+            risks,
+            plan_review,
+            parallel_review_meta,
+        )
+    )
     span = trace_start(_AGENT, model="none", input_chars=input_chars)
 
     results_by_id = {r["id"]: r for r in review_results if "id" in r}
@@ -251,60 +282,117 @@ async def run(state: ReviewState) -> ReviewState:
     covered_count = sum(1 for task_ids in req_to_tasks.values() if task_ids)
     total_count = len(req_to_tasks)
     partial_review = bool(parallel_review_meta.get("partial_review", False))
-    manual_review_message = str(parallel_review_meta.get("manual_review_message", "") or "").strip()
+    manual_review_message = str(
+        parallel_review_meta.get("manual_review_message", "") or ""
+    ).strip()
     reviewers_failed = list(parallel_review_meta.get("reviewers_failed", []) or [])
-    parts.append(f"**Coverage:** {ratio:.2%} ({covered_count}/{total_count} requirements covered)")
+    parts.append(
+        f"**Coverage:** {ratio:.2%} ({covered_count}/{total_count} requirements covered)"
+    )
     if uncovered:
         parts.append(f"**Uncovered:** {', '.join(uncovered)}")
     if partial_review:
         parts.append("**Partial Review:** Yes")
-        parts.append(f"**Reviewers Failed:** {_format_failed_reviewers(reviewers_failed)}")
+        parts.append(
+            f"**Reviewers Failed:** {_format_failed_reviewers(reviewers_failed)}"
+        )
     if manual_review_message:
         parts.append(f"**Attention:** {manual_review_message}")
     parts.append("")
 
     parts.append("## 1. Requirement List\n")
-    parts.append(_build_requirement_table(parsed_items) if parsed_items else "_No requirement items were parsed._")
+    parts.append(
+        _build_requirement_table(parsed_items)
+        if parsed_items
+        else "_No requirement items were parsed._"
+    )
 
     parts.append("\n## 2. Review Details\n")
-    parts.append(_build_detail_sections(parsed_items, results_by_id) if parsed_items and review_results else "_No review results available._")
+    parts.append(
+        _build_detail_sections(parsed_items, results_by_id)
+        if parsed_items and review_results
+        else "_No review results available._"
+    )
 
     parts.append("\n## 3. Risk Summary\n")
-    parts.append(_build_risk_summary(review_results) if review_results else "_No review results to summarize._")
+    parts.append(
+        _build_risk_summary(review_results)
+        if review_results
+        else "_No review results to summarize._"
+    )
 
     parts.append("\n## 4. Delivery Plan\n")
     parts.append("### 4.1 Task Breakdown\n")
     parts.append(_build_task_table(tasks) if tasks else "_No tasks generated._")
 
     parts.append("\n### 4.2 Milestones\n")
-    parts.append(_build_milestone_table(milestones) if milestones else "_No milestones generated._")
+    parts.append(
+        _build_milestone_table(milestones)
+        if milestones
+        else "_No milestones generated._"
+    )
 
     parts.append("\n### 4.3 Estimation\n")
-    parts.append(_build_estimation_summary(estimation) if estimation else "_No estimation available._")
+    parts.append(
+        _build_estimation_summary(estimation)
+        if estimation
+        else "_No estimation available._"
+    )
 
     parts.append("\n### 4.4 Implementation Planning\n")
     parts.append("**Implementation Steps**")
-    parts.append(_build_bullet_section(implementation_plan.get("implementation_steps", []), "_No implementation steps generated._"))
+    parts.append(
+        _build_bullet_section(
+            implementation_plan.get("implementation_steps", []),
+            "_No implementation steps generated._",
+        )
+    )
     parts.append("\n**Target Modules**")
-    parts.append(_build_bullet_section(implementation_plan.get("target_modules", []), "_No target modules generated._"))
+    parts.append(
+        _build_bullet_section(
+            implementation_plan.get("target_modules", []),
+            "_No target modules generated._",
+        )
+    )
     parts.append("\n**Constraints**")
-    parts.append(_build_bullet_section(implementation_plan.get("constraints", []), "_No implementation constraints generated._"))
+    parts.append(
+        _build_bullet_section(
+            implementation_plan.get("constraints", []),
+            "_No implementation constraints generated._",
+        )
+    )
 
     parts.append("\n### 4.5 Test Planning\n")
     parts.append("**Test Scope**")
-    parts.append(_build_bullet_section(test_plan.get("test_scope", []), "_No test scope generated._"))
+    parts.append(
+        _build_bullet_section(
+            test_plan.get("test_scope", []), "_No test scope generated._"
+        )
+    )
     parts.append("\n**Edge Cases**")
-    parts.append(_build_bullet_section(test_plan.get("edge_cases", []), "_No edge cases generated._"))
+    parts.append(
+        _build_bullet_section(
+            test_plan.get("edge_cases", []), "_No edge cases generated._"
+        )
+    )
     parts.append("\n**Regression Focus**")
-    parts.append(_build_bullet_section(test_plan.get("regression_focus", []), "_No regression focus generated._"))
+    parts.append(
+        _build_bullet_section(
+            test_plan.get("regression_focus", []), "_No regression focus generated._"
+        )
+    )
 
     parts.append("\n### 4.6 Coding-Agent Handoff Prompts\n")
     parts.append(_build_prompt_handoff_section("Codex", codex_prompt_handoff))
     parts.append("")
-    parts.append(_build_prompt_handoff_section("Claude Code", claude_code_prompt_handoff))
+    parts.append(
+        _build_prompt_handoff_section("Claude Code", claude_code_prompt_handoff)
+    )
 
     parts.append("\n## 5. Delivery Risk Register\n")
-    parts.append(_build_risk_register(risks) if risks else "_No delivery risks identified._")
+    parts.append(
+        _build_risk_register(risks) if risks else "_No delivery risks identified._"
+    )
 
     parts.append("\n## 6. Plan Review\n")
     parts.append(_build_plan_review_section(plan_review))

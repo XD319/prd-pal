@@ -13,7 +13,12 @@ class ConnectorRegistry:
     """Resolve a source string to the first connector that supports it."""
 
     def __init__(self, connectors: list[BaseConnector] | None = None) -> None:
-        self._connectors = connectors or [FeishuConnector(), NotionConnector(), URLConnector(), LocalFileConnector()]
+        self._connectors = connectors or [
+            FeishuConnector(),
+            NotionConnector(),
+            URLConnector(),
+            LocalFileConnector(),
+        ]
 
     def resolve(self, source: str) -> BaseConnector:
         for connector in self._connectors:

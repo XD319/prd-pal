@@ -22,7 +22,14 @@ class ReviewerToolAdapter:
     def run(self, *, reviewer: str, query: str) -> ToolExecution:
         raise NotImplementedError
 
-    def _degraded(self, *, reviewer: str, query: str, reason: str, metadata: dict[str, object] | None = None) -> ToolExecution:
+    def _degraded(
+        self,
+        *,
+        reviewer: str,
+        query: str,
+        reason: str,
+        metadata: dict[str, object] | None = None,
+    ) -> ToolExecution:
         return ToolExecution(
             evidence=(),
             tool_call=ToolCall(
@@ -61,7 +68,9 @@ class LocalRiskCatalogAdapter(ReviewerToolAdapter):
                 title=str(item.get("title", "") or "risk catalog hit"),
                 snippet=str(item.get("snippet", "") or ""),
                 ref=str(item.get("id", "") or ""),
-                score=float(item.get("score")) if item.get("score") is not None else None,
+                score=float(item.get("score"))
+                if item.get("score") is not None
+                else None,
                 metadata={"matched_terms": list(item.get("matched_terms", []) or [])},
             )
             for item in hits
@@ -82,7 +91,13 @@ class LocalRiskCatalogAdapter(ReviewerToolAdapter):
 
 
 class CallbackSearchAdapter(ReviewerToolAdapter):
-    def __init__(self, tool_name: str, callback: Callable[[str], Iterable[dict[str, object]]] | None = None, *, enabled: bool = False):
+    def __init__(
+        self,
+        tool_name: str,
+        callback: Callable[[str], Iterable[dict[str, object]]] | None = None,
+        *,
+        enabled: bool = False,
+    ):
         self.tool_name = tool_name
         self.callback = callback
         self.enabled = enabled
@@ -103,7 +118,9 @@ class CallbackSearchAdapter(ReviewerToolAdapter):
                 title=str(item.get("title", "") or self.tool_name),
                 snippet=str(item.get("snippet", "") or ""),
                 ref=str(item.get("ref", "") or ""),
-                score=float(item.get("score")) if item.get("score") is not None else None,
+                score=float(item.get("score"))
+                if item.get("score") is not None
+                else None,
                 metadata=dict(item.get("metadata", {}) or {}),
             )
             for item in items

@@ -13,7 +13,9 @@ from prd_pal.memory import (
 from prd_pal.workflow import _apply_review_context
 
 
-def _normalized_requirement_payload(summary: str, *, risk_hints: list[str] | None = None) -> dict:
+def _normalized_requirement_payload(
+    summary: str, *, risk_hints: list[str] | None = None
+) -> dict:
     return {
         "summary": summary,
         "risk_hints": list(risk_hints or []),
@@ -24,7 +26,9 @@ def _normalized_requirement_payload(summary: str, *, risk_hints: list[str] | Non
 
 
 @pytest.mark.asyncio
-async def test_retrieve_memories_returns_empty_when_no_relevant_memory(tmp_path) -> None:
+async def test_retrieve_memories_returns_empty_when_no_relevant_memory(
+    tmp_path,
+) -> None:
     service = MemoryService(MemoryRepository(tmp_path / "review_memory.sqlite3"))
     await service.initialize()
     await service.save_memory(
@@ -32,15 +36,25 @@ async def test_retrieve_memories_returns_empty_when_no_relevant_memory(tmp_path)
         title="Legacy migration rule",
         summary="Temporary rule for 2024 migration.",
         content="This run only needs temporary migration handling for the 2024 cutover.",
-        scope={"level": "team", "team_id": "other-team", "requirement_type": ["task_request"]},
+        scope={
+            "level": "team",
+            "team_id": "other-team",
+            "requirement_type": ["task_request"],
+        },
         confidence=0.4,
         reuse_score=0.2,
     )
 
     hits = await retrieve_memories_async(
         memory_service=service,
-        canonical_review_request={"team_id": "team-platform", "project_id": "phoenix", "requirement_type": "product_requirement"},
-        normalized_requirement=_normalized_requirement_payload("Recruiter dashboard", risk_hints=["login"]),
+        canonical_review_request={
+            "team_id": "team-platform",
+            "project_id": "phoenix",
+            "requirement_type": "product_requirement",
+        },
+        normalized_requirement=_normalized_requirement_payload(
+            "Recruiter dashboard", risk_hints=["login"]
+        ),
         memory_mode="assist",
     )
 
@@ -56,7 +70,11 @@ async def test_retrieve_memories_prefers_same_project_hit(tmp_path) -> None:
         title="Phoenix export rollback pattern",
         summary="Phoenix export flows need rollback ownership.",
         content="Partner export changes in Phoenix need rollback ownership and compatibility checks.",
-        scope={"level": "project", "project_id": "phoenix", "requirement_type": ["product_requirement"]},
+        scope={
+            "level": "project",
+            "project_id": "phoenix",
+            "requirement_type": ["product_requirement"],
+        },
         confidence=0.82,
         reuse_score=0.88,
         tags=["export", "rollback"],
@@ -66,7 +84,11 @@ async def test_retrieve_memories_prefers_same_project_hit(tmp_path) -> None:
         title="Other team export rule",
         summary="Other export flow.",
         content="Another team had export work.",
-        scope={"level": "team", "team_id": "other-team", "requirement_type": ["product_requirement"]},
+        scope={
+            "level": "team",
+            "team_id": "other-team",
+            "requirement_type": ["product_requirement"],
+        },
         confidence=0.9,
         reuse_score=0.9,
         tags=["export"],
@@ -74,8 +96,14 @@ async def test_retrieve_memories_prefers_same_project_hit(tmp_path) -> None:
 
     hits = await retrieve_memories_async(
         memory_service=service,
-        canonical_review_request={"team_id": "team-platform", "project_id": "phoenix", "requirement_type": "product_requirement"},
-        normalized_requirement=_normalized_requirement_payload("Phoenix export change", risk_hints=["rollback", "partner export"]),
+        canonical_review_request={
+            "team_id": "team-platform",
+            "project_id": "phoenix",
+            "requirement_type": "product_requirement",
+        },
+        normalized_requirement=_normalized_requirement_payload(
+            "Phoenix export change", risk_hints=["rollback", "partner export"]
+        ),
         memory_mode="assist",
     )
 
@@ -93,7 +121,11 @@ async def test_retrieve_memories_strict_mode_only_returns_team_rules(tmp_path) -
         title="Platform team approval gate",
         summary="Platform export changes require rollback owner.",
         content="Platform export changes require rollback owner before approval.",
-        scope={"level": "team", "team_id": "team-platform", "requirement_type": ["product_requirement"]},
+        scope={
+            "level": "team",
+            "team_id": "team-platform",
+            "requirement_type": ["product_requirement"],
+        },
         confidence=0.85,
         reuse_score=0.9,
         tags=["rollback"],
@@ -103,7 +135,11 @@ async def test_retrieve_memories_strict_mode_only_returns_team_rules(tmp_path) -
         title="Platform export regression pattern",
         summary="Export regressions can break downstream consumers.",
         content="Export regressions can break downstream consumers.",
-        scope={"level": "team", "team_id": "team-platform", "requirement_type": ["product_requirement"]},
+        scope={
+            "level": "team",
+            "team_id": "team-platform",
+            "requirement_type": ["product_requirement"],
+        },
         confidence=0.95,
         reuse_score=0.95,
         tags=["rollback"],
@@ -111,8 +147,14 @@ async def test_retrieve_memories_strict_mode_only_returns_team_rules(tmp_path) -
 
     hits = await retrieve_memories_async(
         memory_service=service,
-        canonical_review_request={"team_id": "team-platform", "project_id": "phoenix", "requirement_type": "product_requirement"},
-        normalized_requirement=_normalized_requirement_payload("Export change", risk_hints=["rollback"]),
+        canonical_review_request={
+            "team_id": "team-platform",
+            "project_id": "phoenix",
+            "requirement_type": "product_requirement",
+        },
+        normalized_requirement=_normalized_requirement_payload(
+            "Export change", risk_hints=["rollback"]
+        ),
         memory_mode="strict",
     )
 
@@ -138,8 +180,14 @@ async def test_retrieve_memories_rejects_weakly_related_memory(tmp_path) -> None
 
     hits = await retrieve_memories_async(
         memory_service=service,
-        canonical_review_request={"team_id": "team-platform", "project_id": "", "requirement_type": "product_requirement"},
-        normalized_requirement=_normalized_requirement_payload("Payment OAuth rollout", risk_hints=["oauth", "audit", "rollback"]),
+        canonical_review_request={
+            "team_id": "team-platform",
+            "project_id": "",
+            "requirement_type": "product_requirement",
+        },
+        normalized_requirement=_normalized_requirement_payload(
+            "Payment OAuth rollout", risk_hints=["oauth", "audit", "rollback"]
+        ),
         memory_mode="assist",
     )
 
@@ -147,7 +195,9 @@ async def test_retrieve_memories_rejects_weakly_related_memory(tmp_path) -> None
 
 
 @pytest.mark.asyncio
-async def test_retrieve_memories_reports_rejected_candidates_with_reasons(tmp_path) -> None:
+async def test_retrieve_memories_reports_rejected_candidates_with_reasons(
+    tmp_path,
+) -> None:
     service = MemoryService(MemoryRepository(tmp_path / "review_memory.sqlite3"))
     await service.initialize()
     await service.save_memory(
@@ -163,8 +213,14 @@ async def test_retrieve_memories_reports_rejected_candidates_with_reasons(tmp_pa
 
     diagnostics = await retrieve_memories_with_diagnostics_async(
         memory_service=service,
-        canonical_review_request={"team_id": "team-platform", "project_id": "", "requirement_type": "product_requirement"},
-        normalized_requirement=_normalized_requirement_payload("Payment OAuth rollout", risk_hints=["oauth", "audit", "rollback"]),
+        canonical_review_request={
+            "team_id": "team-platform",
+            "project_id": "",
+            "requirement_type": "product_requirement",
+        },
+        normalized_requirement=_normalized_requirement_payload(
+            "Payment OAuth rollout", risk_hints=["oauth", "audit", "rollback"]
+        ),
         memory_mode="assist",
     )
 
@@ -185,7 +241,9 @@ def test_apply_review_context_records_memory_usage_fields() -> None:
                         "evidence": [{"source": "review_memory", "ref": "memory:1"}],
                     }
                 ],
-                "open_questions": [{"question": "Who owns approval gate?", "memory_refs": ["memory:1"]}],
+                "open_questions": [
+                    {"question": "Who owns approval gate?", "memory_refs": ["memory:1"]}
+                ],
                 "clarification": {
                     "questions": [
                         {
@@ -212,7 +270,13 @@ def test_apply_review_context_records_memory_usage_fields() -> None:
                 }
             ],
             "memory_mode": "assist",
-            "rejected_memory_candidates": [{"memory_id": "memory:2", "title": "Legacy note", "reason": "score_below_threshold"}],
+            "rejected_memory_candidates": [
+                {
+                    "memory_id": "memory:2",
+                    "title": "Legacy note",
+                    "reason": "score_below_threshold",
+                }
+            ],
             "memory_usage_notes": ["Verify against current PRD."],
             "normalizer_cache_hit": False,
             "rag_enabled": False,
@@ -221,9 +285,26 @@ def test_apply_review_context_records_memory_usage_fields() -> None:
 
     assert updated["memory_mode"] == "assist"
     assert updated["memory_usage"]["retrieved_memory_ids"] == ["memory:1"]
-    assert updated["memory_usage"]["retrieved_memories"] == [{"memory_id": "memory:1", "title": "Platform rule"}]
-    assert updated["parallel_review_meta"]["rejected_memory_candidates"][0]["memory_id"] == "memory:2"
-    assert updated["parallel_review_meta"]["memory_influence"]["findings"][0]["finding_id"] == "finding-1"
-    assert updated["parallel_review_meta"]["memory_influence"]["clarification_questions"][0]["id"] == "clarify-1"
-    assert updated["parallel_review"]["memory_influence"]["open_questions"][0]["memory_refs"] == ["memory:1"]
-    assert updated["parallel_review_meta"]["memory_usage_notes"] == ["Verify against current PRD."]
+    assert updated["memory_usage"]["retrieved_memories"] == [
+        {"memory_id": "memory:1", "title": "Platform rule"}
+    ]
+    assert (
+        updated["parallel_review_meta"]["rejected_memory_candidates"][0]["memory_id"]
+        == "memory:2"
+    )
+    assert (
+        updated["parallel_review_meta"]["memory_influence"]["findings"][0]["finding_id"]
+        == "finding-1"
+    )
+    assert (
+        updated["parallel_review_meta"]["memory_influence"]["clarification_questions"][
+            0
+        ]["id"]
+        == "clarify-1"
+    )
+    assert updated["parallel_review"]["memory_influence"]["open_questions"][0][
+        "memory_refs"
+    ] == ["memory:1"]
+    assert updated["parallel_review_meta"]["memory_usage_notes"] == [
+        "Verify against current PRD."
+    ]

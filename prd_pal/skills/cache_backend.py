@@ -93,14 +93,19 @@ class SQLiteSkillCacheBackend(SkillCacheBackend):
                 return CacheLookupResult(status="miss")
             created_at, output_json = row
             if time.time() - float(created_at) > ttl_sec:
-                conn.execute("DELETE FROM skill_cache WHERE cache_key_hash = ?", (cache_key_hash,))
+                conn.execute(
+                    "DELETE FROM skill_cache WHERE cache_key_hash = ?",
+                    (cache_key_hash,),
+                )
                 conn.commit()
                 return CacheLookupResult(status="expired")
             return CacheLookupResult(status="hit", output_data=json.loads(output_json))
 
     def set(self, cache_key_hash: str, output_data: Any) -> None:
         os.makedirs(os.path.dirname(self._path) or ".", exist_ok=True)
-        payload = json.dumps(output_data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        payload = json.dumps(
+            output_data, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
         with self._lock, self._connect() as conn:
             self._ensure_table(conn)
             conn.execute(

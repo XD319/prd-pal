@@ -29,7 +29,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
 
         return await self._run("workspace_repository.initialize", operation)
 
-    async def upsert_workspace(self, workspace: WorkspaceState) -> RepositoryResult[WorkspaceState]:
+    async def upsert_workspace(
+        self, workspace: WorkspaceState
+    ) -> RepositoryResult[WorkspaceState]:
         async def operation(connection: Any) -> WorkspaceState:
             await self._ensure_schema(connection)
             await self.artifact_repository._ensure_schema(connection)
@@ -37,7 +39,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
             await self._upsert_workspace_with_connection(connection, workspace)
 
             for version in workspace.versions:
-                await self.artifact_repository._upsert_version_with_connection(connection, version)
+                await self.artifact_repository._upsert_version_with_connection(
+                    connection, version
+                )
                 await self.trace_repository._replace_links_for_source_with_connection(
                     connection,
                     source_type="artifact_version",
@@ -65,7 +69,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
 
         return await self._run("workspace_repository.upsert_workspace", operation)
 
-    async def get_workspace(self, workspace_id: str) -> RepositoryResult[WorkspaceState]:
+    async def get_workspace(
+        self, workspace_id: str
+    ) -> RepositoryResult[WorkspaceState]:
         async def operation(connection: Any) -> WorkspaceState:
             await self._ensure_schema(connection)
             await self.artifact_repository._ensure_schema(connection)
@@ -86,7 +92,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
 
         return await self._run("workspace_repository.get_workspace", operation)
 
-    async def list_workspaces(self, *, status: str | None = None) -> RepositoryResult[list[WorkspaceState]]:
+    async def list_workspaces(
+        self, *, status: str | None = None
+    ) -> RepositoryResult[list[WorkspaceState]]:
         async def operation(connection: Any) -> list[WorkspaceState]:
             await self._ensure_schema(connection)
             await self.artifact_repository._ensure_schema(connection)
@@ -119,7 +127,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
 
         return await self._run("workspace_repository.list_workspaces", operation)
 
-    async def upsert_decision(self, decision: DecisionRecord) -> RepositoryResult[DecisionRecord]:
+    async def upsert_decision(
+        self, decision: DecisionRecord
+    ) -> RepositoryResult[DecisionRecord]:
         async def operation(connection: Any) -> DecisionRecord:
             await self._ensure_schema(connection)
             await self.trace_repository._ensure_schema(connection)
@@ -135,7 +145,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
 
         return await self._run("workspace_repository.upsert_decision", operation)
 
-    async def list_decisions(self, workspace_id: str) -> RepositoryResult[list[DecisionRecord]]:
+    async def list_decisions(
+        self, workspace_id: str
+    ) -> RepositoryResult[list[DecisionRecord]]:
         async def operation(connection: Any) -> list[DecisionRecord]:
             await self._ensure_schema(connection)
             await self.trace_repository._ensure_schema(connection)
@@ -183,7 +195,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
             """
         )
 
-    async def _upsert_workspace_with_connection(self, connection: Any, workspace: WorkspaceState) -> None:
+    async def _upsert_workspace_with_connection(
+        self, connection: Any, workspace: WorkspaceState
+    ) -> None:
         await connection.execute(
             """
             INSERT INTO workspaces (
@@ -223,7 +237,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
             ),
         )
 
-    async def _upsert_decision_with_connection(self, connection: Any, decision: DecisionRecord) -> None:
+    async def _upsert_decision_with_connection(
+        self, connection: Any, decision: DecisionRecord
+    ) -> None:
         await connection.execute(
             """
             INSERT INTO decision_records (
@@ -308,7 +324,9 @@ class WorkspaceRepository(SQLiteRepositoryBase):
             reason=str(row["reason"]),
             artifact_key=str(row["artifact_key"]),
             artifact_version_id=str(row["artifact_version_id"]),
-            parent_version_id=str(row["parent_version_id"]) if row["parent_version_id"] is not None else None,
+            parent_version_id=str(row["parent_version_id"])
+            if row["parent_version_id"] is not None
+            else None,
             source_run_id=str(row["source_run_id"]),
             actor=str(row["actor"]),
             created_at=str(row["created_at"]),
@@ -317,11 +335,15 @@ class WorkspaceRepository(SQLiteRepositoryBase):
         )
 
     async def _row_to_workspace(self, connection: Any, row: Any) -> WorkspaceState:
-        versions = await self.artifact_repository._list_versions_by_workspace_with_connection(
-            connection,
-            str(row["workspace_id"]),
+        versions = (
+            await self.artifact_repository._list_versions_by_workspace_with_connection(
+                connection,
+                str(row["workspace_id"]),
+            )
         )
-        decisions = await self._list_decisions_with_connection(connection, str(row["workspace_id"]))
+        decisions = await self._list_decisions_with_connection(
+            connection, str(row["workspace_id"])
+        )
         trace_links = await self.trace_repository._list_by_source_with_connection(
             connection,
             "workspace",
@@ -339,6 +361,8 @@ class WorkspaceRepository(SQLiteRepositoryBase):
             versions=versions,
             decisions=decisions,
             trace_links=trace_links,
-            rerun_targets=[str(item) for item in self._load_json_list(row["rerun_targets_json"])],
+            rerun_targets=[
+                str(item) for item in self._load_json_list(row["rerun_targets_json"])
+            ],
             metadata=self._load_json_object(row["metadata_json"]),
         )

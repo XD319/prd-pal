@@ -33,7 +33,9 @@ def test_list_templates_by_type_endpoint_filters_by_template_type() -> None:
     assert payload["template_type"] == "adapter_prompt"
     assert payload["count"] == len(payload["templates"])
     assert payload["count"] >= 1
-    assert {item["template_type"] for item in payload["templates"]} == {"adapter_prompt"}
+    assert {item["template_type"] for item in payload["templates"]} == {
+        "adapter_prompt"
+    }
 
 
 def test_list_templates_endpoint_supports_version_filter() -> None:

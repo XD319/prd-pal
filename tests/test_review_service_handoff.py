@@ -6,14 +6,23 @@ from pathlib import Path
 from prd_pal.connectors.schemas import SourceMetadata
 from prd_pal.packs.delivery_bundle import DeliveryBundle
 from prd_pal.service import review_service
-from prd_pal.service.review_service import build_delivery_handoff_outputs, get_review_result_payload
+from prd_pal.service.review_service import (
+    build_delivery_handoff_outputs,
+    get_review_result_payload,
+)
 
 
-def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_report_json: dict):
+def test_build_delivery_handoff_outputs_writes_packs_and_trace(
+    tmp_path, sample_report_json: dict
+):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -57,7 +66,9 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_
             content = path.read_text(encoding="utf-8")
             assert content.startswith("# ") or content.startswith("<!--")
 
-    bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
+    bundle_payload = json.loads(
+        Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8")
+    )
     bundle = DeliveryBundle.model_validate(bundle_payload)
     assert bundle.status == "draft"
     assert bundle.artifacts.prd_review_report.path.endswith("prd_review_report.md")
@@ -69,13 +80,19 @@ def test_build_delivery_handoff_outputs_writes_packs_and_trace(tmp_path, sample_
     assert trace_payload["task_bundle_builder"]["status"] == "ok"
     assert trace_payload["handoff_renderer"]["status"] == "ok"
     assert trace_payload["bundle_builder"]["status"] == "ok"
-    assert trace_payload["bundle_builder"]["output_paths"]["delivery_bundle"].endswith("delivery_bundle.json")
+    assert trace_payload["bundle_builder"]["output_paths"]["delivery_bundle"].endswith(
+        "delivery_bundle.json"
+    )
 
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
-    assert report_payload["artifacts"]["implementation_pack"].endswith("implementation_pack.json")
+    assert report_payload["artifacts"]["implementation_pack"].endswith(
+        "implementation_pack.json"
+    )
     assert report_payload["artifacts"]["prd_v1"].endswith("prd_v1.md")
     assert report_payload["artifacts"]["task_bundle_v1"].endswith("task_bundle_v1.json")
-    assert report_payload["artifacts"]["delivery_bundle"].endswith("delivery_bundle.json")
+    assert report_payload["artifacts"]["delivery_bundle"].endswith(
+        "delivery_bundle.json"
+    )
     assert report_payload["trace"]["draft_generator"]["status"] == "ok"
     assert report_payload["trace"]["task_bundle_builder"]["status"] == "ok"
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
@@ -91,10 +108,17 @@ def test_build_delivery_handoff_outputs_preserves_source_metadata(tmp_path):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
     report_json_path.write_text(
-        json.dumps({"trace": {}, "source_metadata": source_metadata}, ensure_ascii=False, indent=2),
+        json.dumps(
+            {"trace": {}, "source_metadata": source_metadata},
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
-    trace_path.write_text(json.dumps({"source_metadata": source_metadata}, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(
+        json.dumps({"source_metadata": source_metadata}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -158,7 +182,9 @@ def test_build_delivery_handoff_outputs_preserves_source_metadata(tmp_path):
 
     artifact_paths = build_delivery_handoff_outputs(run_output)
 
-    bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
+    bundle_payload = json.loads(
+        Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8")
+    )
     trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
     assert bundle_payload["metadata"]["source_metadata"] == source_metadata
@@ -169,8 +195,12 @@ def test_build_delivery_handoff_outputs_preserves_source_metadata(tmp_path):
 def test_build_delivery_handoff_outputs_is_non_blocking_on_pack_failure(tmp_path):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -180,7 +210,13 @@ def test_build_delivery_handoff_outputs_is_non_blocking_on_pack_failure(tmp_path
             "run_trace": str(trace_path),
         },
         "result": {
-            "parsed_items": [{"id": "REQ-001", "description": "Broken payload", "acceptance_criteria": []}],
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Broken payload",
+                    "acceptance_criteria": [],
+                }
+            ],
             "tasks": "invalid",
             "risks": [],
             "implementation_plan": {},
@@ -200,11 +236,17 @@ def test_build_delivery_handoff_outputs_is_non_blocking_on_pack_failure(tmp_path
     assert trace_payload["bundle_builder"]["status"] == "failed"
 
 
-def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(tmp_path, monkeypatch):
+def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(
+    tmp_path, monkeypatch
+):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -219,14 +261,27 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(tm
                 {
                     "id": "REQ-001",
                     "description": "Support OAuth login for campus recruiters",
-                    "acceptance_criteria": ["OAuth callback succeeds", "Session is persisted"],
+                    "acceptance_criteria": [
+                        "OAuth callback succeeds",
+                        "Session is persisted",
+                    ],
                 }
             ],
             "review_results": [],
-            "tasks": [{"id": "TASK-001", "title": "Implement OAuth login flow", "owner": "BE", "requirement_ids": ["REQ-001"]}],
+            "tasks": [
+                {
+                    "id": "TASK-001",
+                    "title": "Implement OAuth login flow",
+                    "owner": "BE",
+                    "requirement_ids": ["REQ-001"],
+                }
+            ],
             "risks": [],
             "implementation_plan": {
-                "implementation_steps": ["Inspect auth entrypoints", "Implement OAuth callback"],
+                "implementation_steps": [
+                    "Inspect auth entrypoints",
+                    "Implement OAuth callback",
+                ],
                 "target_modules": ["backend.auth"],
                 "constraints": ["Preserve password login behavior"],
             },
@@ -241,7 +296,11 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(tm
         },
     }
 
-    monkeypatch.setattr(review_service, "render_codex_prompt", lambda _pack: (_ for _ in ()).throw(RuntimeError("renderer boom")))
+    monkeypatch.setattr(
+        review_service,
+        "render_codex_prompt",
+        lambda _pack: (_ for _ in ()).throw(RuntimeError("renderer boom")),
+    )
 
     artifact_paths = build_delivery_handoff_outputs(run_output)
 
@@ -262,11 +321,17 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_renderer_fails(tm
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
 
 
-def test_build_delivery_handoff_outputs_keeps_main_result_when_prd_draft_fails(tmp_path, monkeypatch):
+def test_build_delivery_handoff_outputs_keeps_main_result_when_prd_draft_fails(
+    tmp_path, monkeypatch
+):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -282,14 +347,27 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_prd_draft_fails(t
                 {
                     "id": "REQ-001",
                     "description": "Support OAuth login for campus recruiters",
-                    "acceptance_criteria": ["OAuth callback succeeds", "Session is persisted"],
+                    "acceptance_criteria": [
+                        "OAuth callback succeeds",
+                        "Session is persisted",
+                    ],
                 }
             ],
             "review_results": [],
-            "tasks": [{"id": "TASK-001", "title": "Implement OAuth login flow", "owner": "BE", "requirement_ids": ["REQ-001"]}],
+            "tasks": [
+                {
+                    "id": "TASK-001",
+                    "title": "Implement OAuth login flow",
+                    "owner": "BE",
+                    "requirement_ids": ["REQ-001"],
+                }
+            ],
             "risks": [],
             "implementation_plan": {
-                "implementation_steps": ["Inspect auth entrypoints", "Implement OAuth callback"],
+                "implementation_steps": [
+                    "Inspect auth entrypoints",
+                    "Implement OAuth callback",
+                ],
                 "target_modules": ["backend.auth"],
                 "constraints": ["Preserve password login behavior"],
             },
@@ -304,7 +382,11 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_prd_draft_fails(t
         },
     }
 
-    monkeypatch.setattr(review_service, "generate_prd_v1_artifact", lambda _run_output: (_ for _ in ()).throw(RuntimeError("draft boom")))
+    monkeypatch.setattr(
+        review_service,
+        "generate_prd_v1_artifact",
+        lambda _run_output: (_ for _ in ()).throw(RuntimeError("draft boom")),
+    )
 
     artifact_paths = build_delivery_handoff_outputs(run_output)
 
@@ -322,11 +404,17 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_prd_draft_fails(t
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
 
 
-def test_build_delivery_handoff_outputs_skips_prd_draft_when_requirement_doc_missing(tmp_path, sample_report_json: dict):
+def test_build_delivery_handoff_outputs_skips_prd_draft_when_requirement_doc_missing(
+    tmp_path, sample_report_json: dict
+):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -347,7 +435,9 @@ def test_build_delivery_handoff_outputs_skips_prd_draft_when_requirement_doc_mis
 
     trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace_payload["draft_generator"]["status"] == "skipped"
-    assert trace_payload["draft_generator"]["error_message"] == "requirement_doc_missing"
+    assert (
+        trace_payload["draft_generator"]["error_message"] == "requirement_doc_missing"
+    )
     assert trace_payload["bundle_builder"]["status"] == "ok"
 
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
@@ -355,11 +445,17 @@ def test_build_delivery_handoff_outputs_skips_prd_draft_when_requirement_doc_mis
     assert report_payload["trace"]["bundle_builder"]["status"] == "ok"
 
 
-def test_build_delivery_handoff_outputs_keeps_main_result_when_task_bundle_fails(tmp_path, monkeypatch):
+def test_build_delivery_handoff_outputs_keeps_main_result_when_task_bundle_fails(
+    tmp_path, monkeypatch
+):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -371,19 +467,44 @@ def test_build_delivery_handoff_outputs_keeps_main_result_when_task_bundle_fails
         "result": {
             "requirement_doc": "# Requirement\n\nOriginal body.",
             "final_report": "# Requirement Review Report\n\nSummary.",
-            "parsed_items": [{"id": "REQ-001", "description": "Support OAuth login", "acceptance_criteria": ["OAuth callback succeeds"]}],
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Support OAuth login",
+                    "acceptance_criteria": ["OAuth callback succeeds"],
+                }
+            ],
             "review_results": [],
-            "tasks": [{"id": "TASK-001", "title": "Implement OAuth login flow", "owner": "BE", "requirement_ids": ["REQ-001"]}],
+            "tasks": [
+                {
+                    "id": "TASK-001",
+                    "title": "Implement OAuth login flow",
+                    "owner": "BE",
+                    "requirement_ids": ["REQ-001"],
+                }
+            ],
             "risks": [],
-            "implementation_plan": {"implementation_steps": ["Implement OAuth callback"], "target_modules": ["backend.auth"], "constraints": []},
-            "test_plan": {"test_scope": ["OAuth callback API"], "edge_cases": [], "regression_focus": []},
+            "implementation_plan": {
+                "implementation_steps": ["Implement OAuth callback"],
+                "target_modules": ["backend.auth"],
+                "constraints": [],
+            },
+            "test_plan": {
+                "test_scope": ["OAuth callback API"],
+                "edge_cases": [],
+                "regression_focus": [],
+            },
             "codex_prompt_handoff": {},
             "claude_code_prompt_handoff": {},
             "trace": {},
         },
     }
 
-    monkeypatch.setattr(review_service, "generate_task_bundle_v1_artifact", lambda _run_output: (_ for _ in ()).throw(RuntimeError("task bundle boom")))
+    monkeypatch.setattr(
+        review_service,
+        "generate_task_bundle_v1_artifact",
+        lambda _run_output: (_ for _ in ()).throw(RuntimeError("task bundle boom")),
+    )
 
     artifact_paths = build_delivery_handoff_outputs(run_output)
 
@@ -412,7 +533,9 @@ def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
         "manual_review_message": "\u9700\u4eba\u5de5\u8865\u5ba1\uff1a\u5b58\u5728\u9ad8\u98ce\u9669\u95ee\u9898\uff0c\u4e14\u4ee5\u4e0b reviewer \u7f3a\u5931\u6216\u5931\u8d25\uff1aqa (timeout: timed out after 30.0s)",
         "reviewer_count": 4,
         "reviewers_completed": ["product", "engineering", "security"],
-        "reviewers_failed": [{"reviewer": "qa", "status": "timeout", "reason": "timed out after 30.0s"}],
+        "reviewers_failed": [
+            {"reviewer": "qa", "status": "timeout", "reason": "timed out after 30.0s"}
+        ],
         "open_questions_count": 2,
         "risk_items_count": 1,
         "artifact_paths": {
@@ -423,8 +546,12 @@ def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
     }
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -435,14 +562,54 @@ def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
         },
         "result": {
             "final_report": "# Requirement Review Report\n\nSummary.",
-            "parsed_items": [{"id": "REQ-001", "description": "Use parallel review", "acceptance_criteria": ["Done"]}],
-            "review_results": [{"id": "REQ-001", "is_clear": True, "is_testable": True, "is_ambiguous": False, "issues": [], "suggestions": ""}],
-            "tasks": [{"id": "TASK-001", "title": "Implement review", "owner": "BE", "requirement_ids": ["REQ-001"]}],
+            "parsed_items": [
+                {
+                    "id": "REQ-001",
+                    "description": "Use parallel review",
+                    "acceptance_criteria": ["Done"],
+                }
+            ],
+            "review_results": [
+                {
+                    "id": "REQ-001",
+                    "is_clear": True,
+                    "is_testable": True,
+                    "is_ambiguous": False,
+                    "issues": [],
+                    "suggestions": "",
+                }
+            ],
+            "tasks": [
+                {
+                    "id": "TASK-001",
+                    "title": "Implement review",
+                    "owner": "BE",
+                    "requirement_ids": ["REQ-001"],
+                }
+            ],
             "risks": [],
-            "implementation_plan": {"implementation_steps": ["Implement"], "target_modules": ["workflow"], "constraints": []},
-            "test_plan": {"test_scope": ["workflow"], "edge_cases": [], "regression_focus": []},
-            "codex_prompt_handoff": {"agent_prompt": "Implement", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
-            "claude_code_prompt_handoff": {"agent_prompt": "Verify", "recommended_execution_order": [], "non_goals": [], "validation_checklist": []},
+            "implementation_plan": {
+                "implementation_steps": ["Implement"],
+                "target_modules": ["workflow"],
+                "constraints": [],
+            },
+            "test_plan": {
+                "test_scope": ["workflow"],
+                "edge_cases": [],
+                "regression_focus": [],
+            },
+            "codex_prompt_handoff": {
+                "agent_prompt": "Implement",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
+            "claude_code_prompt_handoff": {
+                "agent_prompt": "Verify",
+                "recommended_execution_order": [],
+                "non_goals": [],
+                "validation_checklist": [],
+            },
             "parallel-review_meta": parallel_review_meta,
             "trace": {},
         },
@@ -450,13 +617,17 @@ def test_build_delivery_handoff_outputs_persists_parallel_review_meta(tmp_path):
 
     artifact_paths = build_delivery_handoff_outputs(run_output)
 
-    bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
+    bundle_payload = json.loads(
+        Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8")
+    )
     trace_payload = json.loads(trace_path.read_text(encoding="utf-8"))
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
     assert bundle_payload["metadata"]["parallel-review_meta"] == parallel_review_meta
     assert trace_payload["parallel-review_meta"] == parallel_review_meta
     assert report_payload["parallel-review_meta"] == parallel_review_meta
-    assert report_payload["parallel-review_meta"]["artifact_paths"]["review_result_json"].endswith("review_result.json")
+    assert report_payload["parallel-review_meta"]["artifact_paths"][
+        "review_result_json"
+    ].endswith("review_result.json")
 
 
 def test_build_summary_exposes_generated_artifact_paths():
@@ -484,10 +655,33 @@ def test_get_review_result_payload_discovers_generated_artifacts(tmp_path):
     run_id = "20260307T010210Z"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "report.json").write_text(json.dumps({"trace": {}, "artifacts": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "run_trace.json").write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "report.json").write_text(
+        json.dumps({"trace": {}, "artifacts": {}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / "run_trace.json").write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (run_dir / "prd_v1.md").write_text("# Draft\n", encoding="utf-8")
-    (run_dir / "task_bundle_v1.json").write_text(json.dumps({"run_id": run_id, "version": 1, "generated_at": "2026-04-12T00:00:00+00:00", "source_artifacts": [], "tasks_by_role": {"backend": [], "frontend": [], "qa": [], "security": []}}, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "task_bundle_v1.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "version": 1,
+                "generated_at": "2026-04-12T00:00:00+00:00",
+                "source_artifacts": [],
+                "tasks_by_role": {
+                    "backend": [],
+                    "frontend": [],
+                    "qa": [],
+                    "security": [],
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     payload = get_review_result_payload(run_id=run_id, outputs_root=tmp_path)
 
@@ -495,12 +689,20 @@ def test_get_review_result_payload_discovers_generated_artifacts(tmp_path):
     assert payload["artifact_paths"]["task_bundle_v1"].endswith("task_bundle_v1.json")
 
 
-def test_build_delivery_handoff_outputs_prefers_confirmed_revision_source(tmp_path, sample_report_json: dict):
+def test_build_delivery_handoff_outputs_prefers_confirmed_revision_source(
+    tmp_path, sample_report_json: dict
+):
     report_json_path = tmp_path / "report.json"
     trace_path = tmp_path / "run_trace.json"
-    report_json_path.write_text(json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
-    trace_path.write_text(json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8")
-    (tmp_path / "confirmed_prd.md").write_text("# Confirmed PRD\n\nUse this as handoff input.\n", encoding="utf-8")
+    report_json_path.write_text(
+        json.dumps({"trace": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    trace_path.write_text(
+        json.dumps({}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (tmp_path / "confirmed_prd.md").write_text(
+        "# Confirmed PRD\n\nUse this as handoff input.\n", encoding="utf-8"
+    )
 
     run_output = {
         "run_dir": str(tmp_path),
@@ -517,9 +719,14 @@ def test_build_delivery_handoff_outputs_prefers_confirmed_revision_source(tmp_pa
     }
 
     artifact_paths = build_delivery_handoff_outputs(run_output)
-    bundle_payload = json.loads(Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8"))
+    bundle_payload = json.loads(
+        Path(artifact_paths["delivery_bundle"]).read_text(encoding="utf-8")
+    )
     report_payload = json.loads(report_json_path.read_text(encoding="utf-8"))
 
-    assert bundle_payload["metadata"]["handoff_source"]["selected_source"] == "confirmed_revision"
+    assert (
+        bundle_payload["metadata"]["handoff_source"]["selected_source"]
+        == "confirmed_revision"
+    )
     assert report_payload["handoff_source"]["selected_source"] == "confirmed_revision"
     assert report_payload["requirement_doc"].startswith("# Confirmed PRD")

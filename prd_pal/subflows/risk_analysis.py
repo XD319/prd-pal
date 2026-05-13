@@ -101,19 +101,31 @@ def _requirement_query(structured_requirements: list[dict[str, Any]]) -> str:
     for item in structured_requirements[:10]:
         rid = str(item.get("id", "")).strip()
         desc = str(item.get("description", "")).strip()
-        criteria = "; ".join(str(x).strip() for x in item.get("acceptance_criteria", []) if str(x).strip())
+        criteria = "; ".join(
+            str(x).strip()
+            for x in item.get("acceptance_criteria", [])
+            if str(x).strip()
+        )
         if rid or desc or criteria:
             lines.append(f"{rid}: {desc} | criteria: {criteria}".strip())
     return "\n".join(lines)
 
 
-def _plan_query(structured_requirements: list[dict[str, Any]], plan: dict[str, Any]) -> str:
+def _plan_query(
+    structured_requirements: list[dict[str, Any]], plan: dict[str, Any]
+) -> str:
     tasks = list(plan.get("tasks", []) or [])
     milestones = list(plan.get("milestones", []) or [])
     estimation = dict(plan.get("estimation", {}) or {})
-    task_titles = "; ".join(str(t.get("title", "")) for t in tasks[:20] if t.get("title"))
-    owners = ", ".join(sorted({str(t.get("owner", "")).strip() for t in tasks if t.get("owner")}))
-    milestone_titles = "; ".join(str(m.get("title", "")) for m in milestones[:10] if m.get("title"))
+    task_titles = "; ".join(
+        str(t.get("title", "")) for t in tasks[:20] if t.get("title")
+    )
+    owners = ", ".join(
+        sorted({str(t.get("owner", "")).strip() for t in tasks if t.get("owner")})
+    )
+    milestone_titles = "; ".join(
+        str(m.get("title", "")) for m in milestones[:10] if m.get("title")
+    )
     total_days = estimation.get("total_days", "")
     buffer_days = estimation.get("buffer_days", "")
     return (
@@ -140,8 +152,12 @@ def _attach_fallback_evidence(
     risks: list[dict[str, Any]],
     evidence_hits: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    fallback_ids = [str(hit.get("id", "")) for hit in evidence_hits[:2] if hit.get("id")]
-    fallback_snippets = [str(hit.get("snippet", "")) for hit in evidence_hits[:2] if hit.get("snippet")]
+    fallback_ids = [
+        str(hit.get("id", "")) for hit in evidence_hits[:2] if hit.get("id")
+    ]
+    fallback_snippets = [
+        str(hit.get("snippet", "")) for hit in evidence_hits[:2] if hit.get("snippet")
+    ]
     for risk in risks:
         risk.setdefault("evidence_ids", [])
         risk.setdefault("evidence_snippets", [])
@@ -166,7 +182,9 @@ def _tool_action(
         tool_name="risk_catalog.search",
         status=status,
         input_summary=query,
-        output_summary=f"hits={hit_count}, ids={','.join(top_ids)}" if top_ids else f"hits={hit_count}",
+        output_summary=f"hits={hit_count}, ids={','.join(top_ids)}"
+        if top_ids
+        else f"hits={hit_count}",
         duration_ms=duration_ms,
         cache_hit=cache_hit,
         node_path=node_path,
@@ -202,12 +220,16 @@ async def _retrieve_evidence_node(state: RiskAnalysisState) -> RiskAnalysisState
                 {"query": query, "top_k": top_k},
                 trace=trace,
             )
-            evidence_hits = [item.model_dump(mode="python") for item in skill_output.hits]
+            evidence_hits = [
+                item.model_dump(mode="python") for item in skill_output.hits
+            ]
             skill_trace = trace.get("risk_catalog.search", {})
             tool_status = "ok"
             tool_duration_ms = int(skill_trace.get("duration_ms", 0) or 0)
             cache_hit = skill_trace.get("cache_hit")
-            top_ids = [str(item.get("id", "")) for item in evidence_hits if item.get("id")]
+            top_ids = [
+                str(item.get("id", "")) for item in evidence_hits if item.get("id")
+            ]
             if isinstance(skill_trace, dict):
                 skill_trace["subflow_id"] = context.subflow_id
                 skill_trace["node_path"] = f"{_EVIDENCE_NODE}.tool"
@@ -227,7 +249,11 @@ async def _retrieve_evidence_node(state: RiskAnalysisState) -> RiskAnalysisState
         tool_status=tool_status,
         hit_count=len(evidence_hits),
         top_ids=top_ids,
-        snippets=[str(item.get("snippet", "")) for item in evidence_hits[:2] if item.get("snippet")],
+        snippets=[
+            str(item.get("snippet", ""))
+            for item in evidence_hits[:2]
+            if item.get("snippet")
+        ],
     ).model_dump(mode="python")
 
     span.set_attrs(
@@ -243,9 +269,14 @@ async def _retrieve_evidence_node(state: RiskAnalysisState) -> RiskAnalysisState
     if tool_error:
         span.set_attr("risk_catalog_tool_error", tool_error)
     if not tool_enabled:
-        span.set_attr("risk_catalog_tool_reason", f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped")
+        span.set_attr(
+            "risk_catalog_tool_reason",
+            f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped",
+        )
 
-    trace[_EVIDENCE_NODE] = span.end(status="ok", output_chars=len(json.dumps(evidence_hits, ensure_ascii=False)))
+    trace[_EVIDENCE_NODE] = span.end(
+        status="ok", output_chars=len(json.dumps(evidence_hits, ensure_ascii=False))
+    )
     return {
         "evidence_hits": evidence_hits,
         "evidence_summary": evidence_summary,
@@ -271,7 +302,9 @@ async def _retrieve_evidence_node(state: RiskAnalysisState) -> RiskAnalysisState
                 "risk_catalog_top_ids": top_ids,
                 **({"risk_catalog_tool_error": tool_error} if tool_error else {}),
                 **(
-                    {"risk_catalog_tool_reason": f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped"}
+                    {
+                        "risk_catalog_tool_reason": f"disabled by env {_RISK_TOOL_ENV}; evidence retrieval skipped"
+                    }
                     if not tool_enabled
                     else {}
                 ),
@@ -316,7 +349,9 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
         return {"risks": [], "trace": trace, "trace_meta": trace_meta}
 
     evidence_hits = list(state.get("evidence_hits", []) or [])
-    evidence_json = json.dumps(_evidence_for_prompt(evidence_hits), ensure_ascii=False, indent=2)
+    evidence_json = json.dumps(
+        _evidence_for_prompt(evidence_hits), ensure_ascii=False, indent=2
+    )
     prompt = (
         f"{RISK_SYSTEM_PROMPT}\n\n"
         f"{RISK_USER_PROMPT.format(requirements_json=json.dumps(structured_requirements, ensure_ascii=False, indent=2), plan_json=json.dumps(plan_data, ensure_ascii=False, indent=2), evidence_json=evidence_json)}"
@@ -341,7 +376,9 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
         try:
             validated = validate_risk_output(parsed)
             output = validated.model_dump(mode="python")
-            output["risks"] = _attach_fallback_evidence(output.get("risks", []), evidence_hits)
+            output["risks"] = _attach_fallback_evidence(
+                output.get("risks", []), evidence_hits
+            )
             trace[_GENERATION_NODE] = span.end(status="ok", output_chars=len(raw))
             trace_meta.update(
                 {
@@ -354,7 +391,9 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
                 }
             )
         except Exception as exc:
-            raw_path = save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
+            raw_path = (
+                save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
+            )
             output = RiskOutput().model_dump(mode="python")
             trace[_GENERATION_NODE] = span.end(
                 status="error",
@@ -373,12 +412,18 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
                 }
             )
 
-        return {"risks": output.get("risks", []), "trace": trace, "trace_meta": trace_meta}
+        return {
+            "risks": output.get("risks", []),
+            "trace": trace,
+            "trace_meta": trace_meta,
+        }
 
     except StructuredCallError as exc:
         raw = exc.raw_output or raw
         span.set_attr("structured_mode", exc.structured_mode)
-        raw_path = save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
+        raw_path = (
+            save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
+        )
         trace[_GENERATION_NODE] = span.end(
             status="error",
             output_chars=len(raw),
@@ -398,7 +443,9 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
         return {"risks": [], "trace": trace, "trace_meta": trace_meta}
 
     except Exception as exc:
-        raw_path = save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
+        raw_path = (
+            save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
+        )
         trace[_GENERATION_NODE] = span.end(
             status="error",
             output_chars=len(raw),
@@ -430,7 +477,9 @@ def build_risk_analysis_subgraph():
     return workflow.compile()
 
 
-async def run_risk_analysis_subflow(payload: RiskAnalysisInput | dict[str, Any]) -> dict[str, Any]:
+async def run_risk_analysis_subflow(
+    payload: RiskAnalysisInput | dict[str, Any],
+) -> dict[str, Any]:
     """Invoke the compiled risk-analysis subflow and return execution details."""
 
     model = RiskAnalysisInput.model_validate(payload)
@@ -468,8 +517,16 @@ def _legacy_requirements_from_review_state(state: ReviewState) -> list[dict[str,
     for task in tasks:
         task_title = str(task.get("title", "")).strip()
         task_owner = str(task.get("owner", "")).strip()
-        criteria_parts = [part for part in (task_title, f"owner: {task_owner}" if task_owner else "") if part]
-        requirement_ids = [str(req_id).strip() for req_id in task.get("requirement_ids", []) if str(req_id).strip()]
+        criteria_parts = [
+            part
+            for part in (task_title, f"owner: {task_owner}" if task_owner else "")
+            if part
+        ]
+        requirement_ids = [
+            str(req_id).strip()
+            for req_id in task.get("requirement_ids", [])
+            if str(req_id).strip()
+        ]
 
         if not requirement_ids:
             fallback_index += 1
@@ -507,7 +564,11 @@ async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState
         indent=2,
     )
 
-    span = trace_start("risk", input_chars=len(input_json), model="none" if not structured_requirements else "unknown")
+    span = trace_start(
+        "risk",
+        input_chars=len(input_json),
+        model="none" if not structured_requirements else "unknown",
+    )
     span.set_attrs({"subflow_id": _SUBFLOW_ID, "node_path": "risk"})
     span.set_template(RISK_REVIEW_PROMPT)
 
@@ -547,8 +608,3 @@ async def run_risk_analysis_from_review_state(state: ReviewState) -> ReviewState
         },
         "trace": next_trace,
     }
-
-
-
-
-

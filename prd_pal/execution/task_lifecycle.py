@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from prd_pal.execution.models import ExecutionEvent, ExecutionMode, ExecutionTask, ExecutionTaskStatus
+from prd_pal.execution.models import (
+    ExecutionEvent,
+    ExecutionMode,
+    ExecutionTask,
+    ExecutionTaskStatus,
+)
 
 
 def _utc_now_iso() -> str:
@@ -12,8 +17,14 @@ def _utc_now_iso() -> str:
 
 
 VALID_TASK_TRANSITIONS: dict[ExecutionTaskStatus, set[ExecutionTaskStatus]] = {
-    ExecutionTaskStatus.pending: {ExecutionTaskStatus.assigned, ExecutionTaskStatus.cancelled},
-    ExecutionTaskStatus.assigned: {ExecutionTaskStatus.in_progress, ExecutionTaskStatus.cancelled},
+    ExecutionTaskStatus.pending: {
+        ExecutionTaskStatus.assigned,
+        ExecutionTaskStatus.cancelled,
+    },
+    ExecutionTaskStatus.assigned: {
+        ExecutionTaskStatus.in_progress,
+        ExecutionTaskStatus.cancelled,
+    },
     ExecutionTaskStatus.in_progress: {
         ExecutionTaskStatus.waiting_review,
         ExecutionTaskStatus.completed,
@@ -46,7 +57,9 @@ def _transition(
     result_summary: str | None = None,
 ) -> ExecutionTask:
     if to_status not in VALID_TASK_TRANSITIONS.get(task.status, set()):
-        raise InvalidExecutionTaskTransitionError(f"cannot transition from {task.status} to {to_status}")
+        raise InvalidExecutionTaskTransitionError(
+            f"cannot transition from {task.status} to {to_status}"
+        )
 
     now = _utc_now_iso()
     log = list(task.execution_log)
@@ -93,7 +106,9 @@ def start_task(task: ExecutionTask, actor: str) -> ExecutionTask:
 
 def request_review(task: ExecutionTask, actor: str, detail: str) -> ExecutionTask:
     if task.execution_mode != ExecutionMode.agent_assisted:
-        raise InvalidExecutionTaskTransitionError("request_review is only valid for agent_assisted tasks")
+        raise InvalidExecutionTaskTransitionError(
+            "request_review is only valid for agent_assisted tasks"
+        )
     return _transition(
         task,
         to_status=ExecutionTaskStatus.waiting_review,
@@ -103,7 +118,9 @@ def request_review(task: ExecutionTask, actor: str, detail: str) -> ExecutionTas
     )
 
 
-def complete_task(task: ExecutionTask, actor: str, result_summary: str) -> ExecutionTask:
+def complete_task(
+    task: ExecutionTask, actor: str, result_summary: str
+) -> ExecutionTask:
     return _transition(
         task,
         to_status=ExecutionTaskStatus.completed,

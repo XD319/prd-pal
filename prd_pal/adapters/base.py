@@ -53,7 +53,9 @@ class BaseAdapter(ABC):
             context_path=context_path,
         )
         request_path = pack_dir / self.request_filename
-        request_path.write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
+        request_path.write_text(
+            json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         return {
             "adapter": self.adapter_name,
@@ -69,7 +71,9 @@ class BaseAdapter(ABC):
         execution_pack = self._load_execution_pack(Path(pack_dir))
         return self._render_prompt(execution_pack)
 
-    def create_execution_request(self, task: ExecutionTask, bundle: DeliveryBundle) -> dict[str, Any]:
+    def create_execution_request(
+        self, task: ExecutionTask, bundle: DeliveryBundle
+    ) -> dict[str, Any]:
         """Create an adapter-specific request payload without executing it."""
 
         resolved_task = self._coerce_task(task)
@@ -90,7 +94,9 @@ class BaseAdapter(ABC):
         context_path: Path | None = None,
     ) -> dict[str, Any]:
         self._validate_task(task)
-        resolved_prompt = prompt if prompt is not None else self.build_prompt(str(pack_dir))
+        resolved_prompt = (
+            prompt if prompt is not None else self.build_prompt(str(pack_dir))
+        )
         resolved_context_path = context_path or (pack_dir / EXECUTION_CONTEXT_FILENAME)
         execution_pack = self._load_execution_pack(pack_dir)
 
@@ -140,7 +146,9 @@ class BaseAdapter(ABC):
             )
 
     def _resolve_pack_dir(self, bundle: DeliveryBundle) -> Path:
-        execution_pack_path = Path(str(bundle.artifacts.execution_pack.path or "").strip())
+        execution_pack_path = Path(
+            str(bundle.artifacts.execution_pack.path or "").strip()
+        )
         if not execution_pack_path.name:
             raise ValueError("bundle is missing execution_pack path")
         return execution_pack_path.parent
@@ -152,13 +160,19 @@ class BaseAdapter(ABC):
         payload = json.loads(execution_pack_path.read_text(encoding="utf-8"))
         return ExecutionPack.model_validate(payload)
 
-    def _render_execution_context(self, *, task: ExecutionTask, bundle: DeliveryBundle, prompt: str) -> str:
+    def _render_execution_context(
+        self, *, task: ExecutionTask, bundle: DeliveryBundle, prompt: str
+    ) -> str:
         artifact_lines = [
             f"- `{name}`: {artifact.get('path', '')}"
             for name, artifact in bundle.artifacts.model_dump(mode="python").items()
             if isinstance(artifact, dict)
         ]
-        metadata_block = json.dumps(bundle.metadata, ensure_ascii=False, indent=2) if bundle.metadata else "{}"
+        metadata_block = (
+            json.dumps(bundle.metadata, ensure_ascii=False, indent=2)
+            if bundle.metadata
+            else "{}"
+        )
         return "\n".join(
             [
                 f"# {self.display_name or self.adapter_name} Execution Context",
@@ -200,7 +214,9 @@ class BaseAdapter(ABC):
         raise TypeError(f"Unsupported task type: {type(task)!r}")
 
     @staticmethod
-    def _coerce_bundle(bundle: DeliveryBundle | dict[str, Any] | None) -> DeliveryBundle:
+    def _coerce_bundle(
+        bundle: DeliveryBundle | dict[str, Any] | None,
+    ) -> DeliveryBundle:
         if bundle is None:
             raise ValueError("handoff_bundle.bundle is required")
         if isinstance(bundle, DeliveryBundle):

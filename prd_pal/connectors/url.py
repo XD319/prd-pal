@@ -64,7 +64,9 @@ class _HTMLTextExtractor(HTMLParser):
 
     @property
     def title(self) -> str:
-        return " ".join(part.strip() for part in self._title_parts if part.strip()).strip()
+        return " ".join(
+            part.strip() for part in self._title_parts if part.strip()
+        ).strip()
 
     @property
     def text(self) -> str:
@@ -183,7 +185,9 @@ class URLConnector(BaseConnector):
 
         with response:
             final_url = getattr(response, "geturl", lambda: normalized_source)()
-            final_parsed = self._parse_supported_url(str(final_url or normalized_source).strip())
+            final_parsed = self._parse_supported_url(
+                str(final_url or normalized_source).strip()
+            )
             self._assert_public_host(final_parsed.hostname or "")
 
             headers = getattr(response, "headers", None)
@@ -193,13 +197,18 @@ class URLConnector(BaseConnector):
                     "Unsupported URL content type: "
                     f"{content_type or '<missing>'}. Only text/plain, text/markdown, text/html, and other text/* pages are supported.",
                     source=normalized_source,
-                    details={"connector": "url", "content_type": content_type or "<missing>"},
+                    details={
+                        "connector": "url",
+                        "content_type": content_type or "<missing>",
+                    },
                 )
 
             charset = self._resolve_charset(headers)
             raw_content = self._read_body(response, content_type=content_type)
             decoded_content = self._decode_body(raw_content, charset=charset)
-            title, content_markdown = self._normalize_content(decoded_content, content_type, final_parsed.path)
+            title, content_markdown = self._normalize_content(
+                decoded_content, content_type, final_parsed.path
+            )
 
         metadata = SourceMetadata(
             mime_type=content_type,
@@ -242,7 +251,9 @@ class URLConnector(BaseConnector):
                 source=hostname,
                 details={"connector": "url"},
             )
-        if normalized_host in {"localhost", "0.0.0.0"} or normalized_host.endswith(".local"):
+        if normalized_host in {"localhost", "0.0.0.0"} or normalized_host.endswith(
+            ".local"
+        ):
             raise ConnectorValidationError(
                 f"URL source must be publicly reachable: {hostname}",
                 source=hostname,
@@ -250,7 +261,9 @@ class URLConnector(BaseConnector):
             )
 
         try:
-            addresses = socket.getaddrinfo(normalized_host, None, proto=socket.IPPROTO_TCP)
+            addresses = socket.getaddrinfo(
+                normalized_host, None, proto=socket.IPPROTO_TCP
+            )
         except socket.gaierror as exc:
             raise ConnectorNetworkError(
                 f"Network unavailable while validating URL source '{hostname}': {exc.strerror or exc}",
@@ -274,7 +287,11 @@ class URLConnector(BaseConnector):
                 raise ConnectorValidationError(
                     f"URL source must be publicly reachable: {hostname}",
                     source=hostname,
-                    details={"connector": "url", "hostname": normalized_host, "ip": ip_value},
+                    details={
+                        "connector": "url",
+                        "hostname": normalized_host,
+                        "ip": ip_value,
+                    },
                 )
 
     def _resolve_content_type(self, headers: Any) -> str:
@@ -288,18 +305,28 @@ class URLConnector(BaseConnector):
         return normalized.startswith("text/") or normalized in self.SUPPORTED_MIME_TYPES
 
     def _read_body(self, response: Any, *, content_type: str) -> bytes:
-        declared_length = self._resolve_declared_length(getattr(response, "headers", None))
+        declared_length = self._resolve_declared_length(
+            getattr(response, "headers", None)
+        )
         if declared_length is not None and declared_length > self._max_response_bytes:
             raise ConnectorValidationError(
                 f"URL content too large to ingest safely: {declared_length} bytes exceeds {self._max_response_bytes} bytes",
-                details={"connector": "url", "content_type": content_type or "", "declared_length": declared_length},
+                details={
+                    "connector": "url",
+                    "content_type": content_type or "",
+                    "declared_length": declared_length,
+                },
             )
 
         raw_content = response.read(self._max_response_bytes + 1)
         if len(raw_content) > self._max_response_bytes:
             raise ConnectorValidationError(
                 f"URL content too large to ingest safely: exceeds {self._max_response_bytes} bytes for {content_type or 'unknown content'}",
-                details={"connector": "url", "content_type": content_type or "", "max_bytes": self._max_response_bytes},
+                details={
+                    "connector": "url",
+                    "content_type": content_type or "",
+                    "max_bytes": self._max_response_bytes,
+                },
             )
         return raw_content
 
@@ -309,7 +336,9 @@ class URLConnector(BaseConnector):
     def _decode_body(self, raw_content: bytes, *, charset: str) -> str:
         return decode_text_body(raw_content, charset=charset)
 
-    def _normalize_content(self, content: str, content_type: str, path: str) -> tuple[str, str]:
+    def _normalize_content(
+        self, content: str, content_type: str, path: str
+    ) -> tuple[str, str]:
         normalized_type = str(content_type or "").strip().lower()
         if normalized_type in {"text/html", "application/xhtml+xml"}:
             parser = _HTMLTextExtractor()

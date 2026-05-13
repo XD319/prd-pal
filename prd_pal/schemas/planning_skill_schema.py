@@ -43,7 +43,9 @@ class CodingAgentPromptOutput(AgentSchemaModel):
     validation_checklist: list[str] = Field(default_factory=list)
 
 
-def validate_implementation_plan_output(data: dict[str, Any]) -> ImplementationPlanOutput:
+def validate_implementation_plan_output(
+    data: dict[str, Any],
+) -> ImplementationPlanOutput:
     return ImplementationPlanOutput.model_validate(data)
 
 
@@ -51,5 +53,7 @@ def validate_test_plan_generate_output(data: dict[str, Any]) -> QaPlanningOutput
     return QaPlanningOutput.model_validate(data)
 
 
-def validate_coding_agent_prompt_output(data: dict[str, Any]) -> CodingAgentPromptOutput:
+def validate_coding_agent_prompt_output(
+    data: dict[str, Any],
+) -> CodingAgentPromptOutput:
     return CodingAgentPromptOutput.model_validate(data)

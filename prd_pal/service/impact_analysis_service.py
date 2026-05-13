@@ -39,11 +39,23 @@ def _deterministic_fallback(
         if isinstance(token, str) and token.strip()
     }
     affected = {"parser", "reporter"}
-    if any(key in tokens for key in ("scope", "requirement", "acceptance_criteria", "scenarios", "user_story")):
+    if any(
+        key in tokens
+        for key in (
+            "scope",
+            "requirement",
+            "acceptance_criteria",
+            "scenarios",
+            "user_story",
+        )
+    ):
         affected.update({"planner", "delivery_planning", "reviewer", "risk"})
     if any(key in tokens for key in ("risk", "security", "compliance")):
         affected.update({"risk", "reviewer"})
-    if any(key in tokens for key in ("timeline", "milestone", "task", "effort", "dependency")):
+    if any(
+        key in tokens
+        for key in ("timeline", "milestone", "task", "effort", "dependency")
+    ):
         affected.update({"planner", "delivery_planning", "reviewer"})
     ordered = [node for node in WORKFLOW_NODES if node in affected]
     return {
@@ -59,10 +71,20 @@ async def analyze_affected_nodes_async(
     baseline_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Infer affected workflow nodes from structured artifact diff."""
-    changed_fields = [str(item) for item in artifact_diff.get("changed_fields", []) if str(item).strip()]
-    changed_sections = [str(item) for item in artifact_diff.get("changed_sections", []) if str(item).strip()]
+    changed_fields = [
+        str(item)
+        for item in artifact_diff.get("changed_fields", [])
+        if str(item).strip()
+    ]
+    changed_sections = [
+        str(item)
+        for item in artifact_diff.get("changed_sections", [])
+        if str(item).strip()
+    ]
     baseline_digest = hashlib.sha256(
-        json.dumps(baseline_snapshot or {}, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+        json.dumps(
+            baseline_snapshot or {}, ensure_ascii=False, sort_keys=True, default=str
+        ).encode("utf-8")
     ).hexdigest()[:12]
     schema = {
         "type": "object",
@@ -93,15 +115,23 @@ async def analyze_affected_nodes_async(
     )
     metadata: dict[str, Any] = {"agent_name": "impact_analysis_service", "run_id": ""}
     try:
-        result = await llm_structured_call(prompt=prompt, schema=schema, metadata=metadata)
+        result = await llm_structured_call(
+            prompt=prompt, schema=schema, metadata=metadata
+        )
     except StructuredCallError:
-        result = _deterministic_fallback(changed_fields=changed_fields, changed_sections=changed_sections)
+        result = _deterministic_fallback(
+            changed_fields=changed_fields, changed_sections=changed_sections
+        )
 
     raw_nodes = result.get("affected_nodes")
     if not isinstance(raw_nodes, list):
-        result = _deterministic_fallback(changed_fields=changed_fields, changed_sections=changed_sections)
+        result = _deterministic_fallback(
+            changed_fields=changed_fields, changed_sections=changed_sections
+        )
         raw_nodes = result["affected_nodes"]
-    normalized = [node for node in WORKFLOW_NODES if node in {str(item) for item in raw_nodes}]
+    normalized = [
+        node for node in WORKFLOW_NODES if node in {str(item) for item in raw_nodes}
+    ]
     if not normalized:
         normalized = ["parser", "reporter"]
     reasons = result.get("reasons") if isinstance(result.get("reasons"), dict) else {}

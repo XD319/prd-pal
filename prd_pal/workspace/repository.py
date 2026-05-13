@@ -8,7 +8,12 @@ from typing import Any
 
 from prd_pal.packs.delivery_bundle import BundleStatus, DeliveryBundle
 
-from .models import ApprovalRecord, ReviewWorkspaceRecord, StatusSnapshot, WorkspaceStatus
+from .models import (
+    ApprovalRecord,
+    ReviewWorkspaceRecord,
+    StatusSnapshot,
+    WorkspaceStatus,
+)
 
 APPROVAL_RECORDS_FILENAME = "approval_records.json"
 STATUS_SNAPSHOT_FILENAME = "status_snapshot.json"
@@ -29,14 +34,18 @@ _WORKSPACE_TO_BUNDLE_STATUS: dict[WorkspaceStatus, BundleStatus] = {
 }
 
 
-def workspace_status_from_bundle_status(bundle_status: BundleStatus | str) -> WorkspaceStatus:
+def workspace_status_from_bundle_status(
+    bundle_status: BundleStatus | str,
+) -> WorkspaceStatus:
     """Map persisted bundle status into the workspace-facing status vocabulary."""
 
     normalized_status = BundleStatus(bundle_status)
     return _BUNDLE_TO_WORKSPACE_STATUS[normalized_status]
 
 
-def bundle_status_from_workspace_status(workspace_status: WorkspaceStatus | str) -> BundleStatus | None:
+def bundle_status_from_workspace_status(
+    workspace_status: WorkspaceStatus | str,
+) -> BundleStatus | None:
     """Map workspace status back to bundle status when an equivalent exists."""
 
     normalized_status = WorkspaceStatus(workspace_status)
@@ -66,12 +75,18 @@ class ReviewWorkspaceRepository:
         raw_records = payload.get("approval_records")
         if not isinstance(raw_records, list):
             return []
-        return [ApprovalRecord.model_validate(item) for item in raw_records if isinstance(item, dict)]
+        return [
+            ApprovalRecord.model_validate(item)
+            for item in raw_records
+            if isinstance(item, dict)
+        ]
 
     def save_approval_records(self, approval_records: list[ApprovalRecord]) -> Path:
         self._ensure_run_dir()
         payload = {
-            "approval_records": [record.model_dump(mode="python") for record in approval_records],
+            "approval_records": [
+                record.model_dump(mode="python") for record in approval_records
+            ],
         }
         self._write_json(self.approval_records_path, payload)
         return self.approval_records_path
@@ -89,7 +104,9 @@ class ReviewWorkspaceRepository:
 
     def save_status_snapshot(self, status_snapshot: StatusSnapshot) -> Path:
         self._ensure_run_dir()
-        self._write_json(self.status_snapshot_path, status_snapshot.model_dump(mode="python"))
+        self._write_json(
+            self.status_snapshot_path, status_snapshot.model_dump(mode="python")
+        )
         return self.status_snapshot_path
 
     def load_bundle(self) -> DeliveryBundle | None:
@@ -111,11 +128,15 @@ class ReviewWorkspaceRepository:
             run_id=run_id,
             bundle_id=bundle_id,
             bundle_status=normalized_bundle_status,
-            workspace_status=workspace_status_from_bundle_status(normalized_bundle_status),
+            workspace_status=workspace_status_from_bundle_status(
+                normalized_bundle_status
+            ),
             updated_at=updated_at,
         )
 
-    def save_status_snapshot_for_bundle(self, bundle: DeliveryBundle, updated_at: str) -> Path:
+    def save_status_snapshot_for_bundle(
+        self, bundle: DeliveryBundle, updated_at: str
+    ) -> Path:
         snapshot = self.build_status_snapshot(
             run_id=bundle.source_run_id,
             bundle_id=bundle.bundle_id,
@@ -157,7 +178,9 @@ class ReviewWorkspaceRepository:
             bundle_id=bundle_id,
             bundle_status=bundle_status,
             workspace_status=workspace_status,
-            approval_history=list(bundle.approval_history) if bundle is not None else [],
+            approval_history=list(bundle.approval_history)
+            if bundle is not None
+            else [],
             approval_records=approval_records,
             status_snapshot=status_snapshot,
         )
@@ -189,4 +212,6 @@ class ReviewWorkspaceRepository:
 
     @staticmethod
     def _write_json(path: Path, payload: dict[str, Any]) -> None:
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )

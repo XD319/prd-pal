@@ -5,7 +5,10 @@ import pytest
 pytest.importorskip("aiosqlite")
 
 from prd_pal.memory import MemoryRepository, MemoryService
-from prd_pal.memory.extraction import extract_memory_candidates, process_review_memory_extraction_async
+from prd_pal.memory.extraction import (
+    extract_memory_candidates,
+    process_review_memory_extraction_async,
+)
 from prd_pal.monitoring import read_audit_events
 from prd_pal import run_review as run_review_module
 
@@ -102,11 +105,17 @@ def test_extract_memory_candidates_prefers_team_rule_and_risk_pattern() -> None:
     memory_types = [item.memory_type for item in candidates]
     assert "team_rule" in memory_types
     assert "risk_pattern" in memory_types
-    assert any(item.scope.level == "team" for item in candidates if item.memory_type in {"team_rule", "risk_pattern"})
+    assert any(
+        item.scope.level == "team"
+        for item in candidates
+        if item.memory_type in {"team_rule", "risk_pattern"}
+    )
 
 
 @pytest.mark.asyncio
-async def test_memory_extraction_gatekeeps_duplicates_and_persists_small_kept_set(tmp_path) -> None:
+async def test_memory_extraction_gatekeeps_duplicates_and_persists_small_kept_set(
+    tmp_path,
+) -> None:
     service = MemoryService(MemoryRepository(tmp_path / "review_memory.sqlite3"))
     await service.initialize()
     await service.save_memory(
@@ -114,7 +123,11 @@ async def test_memory_extraction_gatekeeps_duplicates_and_persists_small_kept_se
         title="Reusable risk pattern: Export contract regression",
         summary="Changing export shape can regress analytics and partner ingestion.",
         content="Changing export shape can regress analytics and partner ingestion. Version the schema and define rollback ownership before rollout.",
-        scope={"level": "team", "team_id": "team-platform", "requirement_type": ["product_requirement"]},
+        scope={
+            "level": "team",
+            "team_id": "team-platform",
+            "requirement_type": ["product_requirement"],
+        },
         tags=["risk-pattern", "integration"],
     )
 
@@ -135,18 +148,24 @@ async def test_memory_extraction_gatekeeps_duplicates_and_persists_small_kept_se
 
     assert len(outcome.candidates) >= 4
     assert len(outcome.kept) == 2
-    assert all(item.memory_type in {"team_rule", "risk_pattern"} for item in outcome.kept)
+    assert all(
+        item.memory_type in {"team_rule", "risk_pattern"} for item in outcome.kept
+    )
     rejection_reasons = {item.reason for item in outcome.rejected}
     assert any(reason.startswith("duplicate_existing") for reason in rejection_reasons)
     assert "too_vague" in rejection_reasons
 
-    stored_team = await service.list_memory_by_scope(level="team", team_id="team-platform")
+    stored_team = await service.list_memory_by_scope(
+        level="team", team_id="team-platform"
+    )
     assert len(stored_team) == 3
     assert any(item.memory_type == "team_rule" for item in stored_team)
 
 
 @pytest.mark.asyncio
-async def test_memory_extraction_writes_candidate_rejection_and_persist_audit_events(tmp_path) -> None:
+async def test_memory_extraction_writes_candidate_rejection_and_persist_audit_events(
+    tmp_path,
+) -> None:
     run_id = "20260414T030405Z"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -177,14 +196,19 @@ async def test_memory_extraction_writes_candidate_rejection_and_persist_audit_ev
 
 
 @pytest.mark.asyncio
-async def test_run_review_attaches_memory_extraction_without_breaking_main_result(tmp_path, monkeypatch) -> None:
+async def test_run_review_attaches_memory_extraction_without_breaking_main_result(
+    tmp_path, monkeypatch
+) -> None:
     class _FakeGraph:
         async def ainvoke(self, initial_state):
             return {
                 "final_report": "# Review Report\n\nDone.",
                 "trace": {"reporter": {"status": "ok"}},
                 "parallel_review": _mock_review_result()["parallel_review"],
-                "parallel_review_meta": {"selected_mode": "full", "review_mode": "full"},
+                "parallel_review_meta": {
+                    "selected_mode": "full",
+                    "review_mode": "full",
+                },
                 "review_mode": "full",
                 "mode": "full",
                 "metrics": {"coverage_ratio": 0.9},
@@ -192,7 +216,9 @@ async def test_run_review_attaches_memory_extraction_without_breaking_main_resul
                 "revision_round": 0,
             }
 
-    monkeypatch.setattr(run_review_module, "build_review_graph", lambda progress_hook=None: _FakeGraph())
+    monkeypatch.setattr(
+        run_review_module, "build_review_graph", lambda progress_hook=None: _FakeGraph()
+    )
 
     output = await run_review_module.run_review(
         "# mock prd",
@@ -211,6 +237,8 @@ async def test_run_review_attaches_memory_extraction_without_breaking_main_resul
 
     assert output["result"]["memory_extraction"]["persisted_count"] >= 1
     assert (tmp_path / "20260414T050607Z" / "report.json").exists()
-    audit_ops = [event["operation"] for event in read_audit_events(tmp_path / "20260414T050607Z")]
+    audit_ops = [
+        event["operation"] for event in read_audit_events(tmp_path / "20260414T050607Z")
+    ]
     assert "memory_candidates" in audit_ops
     assert "memory_persisted" in audit_ops

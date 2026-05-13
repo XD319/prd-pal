@@ -5,11 +5,21 @@ from __future__ import annotations
 import asyncio
 
 from ..normalizer import NormalizedRequirement
-from .base import EvidenceItem, ReviewFinding, ReviewerConfig, ReviewerResult, RiskItem, ToolCall, limit_items
+from .base import (
+    EvidenceItem,
+    ReviewFinding,
+    ReviewerConfig,
+    ReviewerResult,
+    RiskItem,
+    ToolCall,
+    limit_items,
+)
 from .memory_support import build_memory_evidence, build_memory_notes
 
 
-def _defect_heuristic(requirement: NormalizedRequirement) -> tuple[tuple[EvidenceItem, ...], ToolCall]:
+def _defect_heuristic(
+    requirement: NormalizedRequirement,
+) -> tuple[tuple[EvidenceItem, ...], ToolCall]:
     snippets: list[EvidenceItem] = []
     if requirement.risk_hints:
         snippets.append(
@@ -73,7 +83,9 @@ async def review(
             )
         )
 
-    if requirement.risk_hints and len(requirement.acceptance_criteria) < len(requirement.risk_hints):
+    if requirement.risk_hints and len(requirement.acceptance_criteria) < len(
+        requirement.risk_hints
+    ):
         findings.append(
             ReviewFinding(
                 title="Edge-case coverage looks thin",
@@ -98,10 +110,18 @@ async def review(
         )
 
     if requirement.scenarios and not requirement.acceptance_criteria:
-        open_questions.append("How should each scenario be validated end-to-end in UAT or regression testing?")
+        open_questions.append(
+            "How should each scenario be validated end-to-end in UAT or regression testing?"
+        )
 
-    ambiguity_type = "missing_test_oracle" if not requirement.acceptance_criteria else ""
-    clarification_question = "What are the explicit pass/fail checks, rollback expectations, and negative cases for QA validation?" if ambiguity_type else ""
+    ambiguity_type = (
+        "missing_test_oracle" if not requirement.acceptance_criteria else ""
+    )
+    clarification_question = (
+        "What are the explicit pass/fail checks, rollback expectations, and negative cases for QA validation?"
+        if ambiguity_type
+        else ""
+    )
     reviewer_status_detail = f"QA review completed with {len(findings)} findings, {len(risks)} risks, and {len(evidence)} heuristic evidence hits."
 
     await asyncio.sleep(0)
@@ -116,5 +136,8 @@ async def review(
         ambiguity_type=ambiguity_type,
         clarification_question=clarification_question,
         reviewer_status_detail=reviewer_status_detail,
-        notes=("QA evidence currently comes from local heuristics; external defect systems remain optional stubs.", *memory_notes),
+        notes=(
+            "QA evidence currently comes from local heuristics; external defect systems remain optional stubs.",
+            *memory_notes,
+        ),
     )

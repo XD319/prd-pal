@@ -80,4 +80,3 @@ class MemoryQuery(AgentSchemaModel):
     requirement_type: str = ""
     memory_type: MemoryType | None = None
     tag: str = ""
-

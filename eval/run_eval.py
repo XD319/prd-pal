@@ -21,8 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from prd_pal.metrics import build_runtime_trace_summary
-from prd_pal.workflow import build_review_graph
+from prd_pal.metrics import build_runtime_trace_summary  # noqa: E402
+from prd_pal.workflow import build_review_graph  # noqa: E402
 
 REQUIRED_TRACE_AGENTS = ("parser", "planner", "risk", "reviewer", "reporter")
 REQUIRED_TRACE_FIELDS = (
@@ -103,7 +103,9 @@ def _load_cases(cases_path: Path) -> list[dict[str, Any]]:
         raise FileNotFoundError(f"Cases file not found: {cases_path}")
 
     cases: list[dict[str, Any]] = []
-    for index, line in enumerate(cases_path.read_text(encoding="utf-8").splitlines(), start=1):
+    for index, line in enumerate(
+        cases_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
         stripped = line.strip()
         if not stripped:
             continue
@@ -154,7 +156,11 @@ def _resolve_model_provider(result: dict[str, Any]) -> tuple[str, str]:
                 span = trace.get(agent_name, {})
                 if isinstance(span, dict):
                     maybe_model = span.get("model", "")
-                    if isinstance(maybe_model, str) and maybe_model and maybe_model not in ("unknown", "none"):
+                    if (
+                        isinstance(maybe_model, str)
+                        and maybe_model
+                        and maybe_model not in ("unknown", "none")
+                    ):
                         model = maybe_model
                         break
     return model, provider
@@ -217,7 +223,9 @@ def _check_trace_complete(trace: Any) -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
-def _check_coverage_ratio(report_data: dict[str, Any]) -> tuple[bool, list[str], float | None]:
+def _check_coverage_ratio(
+    report_data: dict[str, Any],
+) -> tuple[bool, list[str], float | None]:
     errors: list[str] = []
     ratio_value: float | None = None
 
@@ -236,7 +244,9 @@ def _check_coverage_ratio(report_data: dict[str, Any]) -> tuple[bool, list[str],
     return len(errors) == 0, errors, ratio_value
 
 
-def _check_metrics_fields_present(report_data: dict[str, Any]) -> tuple[bool, list[str]]:
+def _check_metrics_fields_present(
+    report_data: dict[str, Any],
+) -> tuple[bool, list[str]]:
     errors: list[str] = []
     metrics = report_data.get("metrics")
     if not isinstance(metrics, dict):
@@ -250,8 +260,14 @@ def _check_metrics_fields_present(report_data: dict[str, Any]) -> tuple[bool, li
 
 def _collect_case_runtime_snapshot(report_data: dict[str, Any]) -> dict[str, Any]:
     trace = report_data.get("trace", {})
-    runtime_summary = build_runtime_trace_summary(trace if isinstance(trace, dict) else {})
-    metrics = report_data.get("metrics", {}) if isinstance(report_data.get("metrics"), dict) else {}
+    runtime_summary = build_runtime_trace_summary(
+        trace if isinstance(trace, dict) else {}
+    )
+    metrics = (
+        report_data.get("metrics", {})
+        if isinstance(report_data.get("metrics"), dict)
+        else {}
+    )
     return {
         "total_latency_ms": int(metrics.get("total_latency_ms", 0) or 0),
         "parallel_enabled": bool(metrics.get("parallel_enabled", False)),
@@ -259,10 +275,16 @@ def _collect_case_runtime_snapshot(report_data: dict[str, Any]) -> dict[str, Any
         "cache_miss_count": int(metrics.get("cache_miss_count", 0) or 0),
         "cache_hit_rate": float(metrics.get("cache_hit_rate", 0.0) or 0.0),
         "slowest_span_name": runtime_summary.get("slowest_span_name", ""),
-        "slowest_span_duration_ms": int(runtime_summary.get("slowest_span_duration_ms", 0) or 0),
+        "slowest_span_duration_ms": int(
+            runtime_summary.get("slowest_span_duration_ms", 0) or 0
+        ),
         "failed_spans": list(runtime_summary.get("failed_spans", []) or []),
-        "completed_primary_spans": list(runtime_summary.get("completed_primary_spans", []) or []),
-        "cache_backend_usage": dict(runtime_summary.get("cache_backend_usage", {}) or {}),
+        "completed_primary_spans": list(
+            runtime_summary.get("completed_primary_spans", []) or []
+        ),
+        "cache_backend_usage": dict(
+            runtime_summary.get("cache_backend_usage", {}) or {}
+        ),
     }
 
 
@@ -305,14 +327,24 @@ async def _run_case(
 
         report_ok, report_errors = _check_report_json_valid(report_data)
         trace_ok, trace_errors = _check_trace_complete(trace)
-        coverage_ok, coverage_errors, coverage_ratio = _check_coverage_ratio(report_data)
-        metrics_fields_ok, metrics_fields_errors = _check_metrics_fields_present(report_data)
+        coverage_ok, coverage_errors, coverage_ratio = _check_coverage_ratio(
+            report_data
+        )
+        metrics_fields_ok, metrics_fields_errors = _check_metrics_fields_present(
+            report_data
+        )
 
         checks = {
             "report_json_valid": {"passed": report_ok, "errors": report_errors},
             "trace_complete": {"passed": trace_ok, "errors": trace_errors},
-            "coverage_ratio_present": {"passed": coverage_ok, "errors": coverage_errors},
-            "metrics_fields_present": {"passed": metrics_fields_ok, "errors": metrics_fields_errors},
+            "coverage_ratio_present": {
+                "passed": coverage_ok,
+                "errors": coverage_errors,
+            },
+            "metrics_fields_present": {
+                "passed": metrics_fields_ok,
+                "errors": metrics_fields_errors,
+            },
         }
         all_ok = all(item["passed"] for item in checks.values())
 
@@ -327,7 +359,9 @@ async def _run_case(
             "coverage_ratio": coverage_ratio,
             "runtime_summary": runtime_summary,
             "trace_status": {
-                agent: (trace.get(agent, {}) if isinstance(trace, dict) else {}).get("status")
+                agent: (trace.get(agent, {}) if isinstance(trace, dict) else {}).get(
+                    "status"
+                )
                 for agent in REQUIRED_TRACE_AGENTS
             },
             "case_duration_sec": round(perf_counter() - started_perf, 4),
@@ -343,10 +377,22 @@ async def _run_case(
             "run_dir": str(run_dir),
             "status": "error",
             "checks": {
-                "report_json_valid": {"passed": False, "errors": ["workflow failed before report validation"]},
-                "trace_complete": {"passed": False, "errors": ["workflow failed before trace validation"]},
-                "coverage_ratio_present": {"passed": False, "errors": ["workflow failed before coverage validation"]},
-                "metrics_fields_present": {"passed": False, "errors": ["workflow failed before metrics validation"]},
+                "report_json_valid": {
+                    "passed": False,
+                    "errors": ["workflow failed before report validation"],
+                },
+                "trace_complete": {
+                    "passed": False,
+                    "errors": ["workflow failed before trace validation"],
+                },
+                "coverage_ratio_present": {
+                    "passed": False,
+                    "errors": ["workflow failed before coverage validation"],
+                },
+                "metrics_fields_present": {
+                    "passed": False,
+                    "errors": ["workflow failed before metrics validation"],
+                },
             },
             "coverage_ratio": None,
             "runtime_summary": {
@@ -382,21 +428,32 @@ async def _run_cases(
             print(f"[{idx}/{len(cases)}] Running case: {case_id} (workers={workers})")
             case_result = await _run_case(graph, case, runs_dir)
             case_results.append(case_result)
-            print(f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)")
+            print(
+                f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)"
+            )
         return case_results
 
     semaphore = asyncio.Semaphore(workers)
     indexed_results: list[tuple[int, dict[str, Any]]] = []
 
-    async def _run_indexed_case(idx: int, case: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    async def _run_indexed_case(
+        idx: int, case: dict[str, Any]
+    ) -> tuple[int, dict[str, Any]]:
         case_id = case.get("case_id", f"case_{idx + 1}")
         async with semaphore:
-            print(f"[{idx + 1}/{len(cases)}] Running case: {case_id} (workers={workers})")
+            print(
+                f"[{idx + 1}/{len(cases)}] Running case: {case_id} (workers={workers})"
+            )
             case_result = await _run_case(graph, case, runs_dir)
-            print(f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)")
+            print(
+                f"  -> {case_result['status']} ({case_result['case_duration_sec']:.4f}s)"
+            )
             return idx, case_result
 
-    tasks = [asyncio.create_task(_run_indexed_case(idx, case)) for idx, case in enumerate(cases)]
+    tasks = [
+        asyncio.create_task(_run_indexed_case(idx, case))
+        for idx, case in enumerate(cases)
+    ]
     for task in asyncio.as_completed(tasks):
         indexed_results.append(await task)
 
@@ -414,8 +471,12 @@ def _build_duration_summary(
         for item in case_results
     }
     sum_case_time_sec = round(sum(per_case_duration_sec.values()), 4)
-    avg_case_duration_sec = round(sum_case_time_sec / len(case_results), 4) if case_results else 0.0
-    speedup_estimate = round(sum_case_time_sec / wall_time_sec, 4) if wall_time_sec > 0 else 0.0
+    avg_case_duration_sec = (
+        round(sum_case_time_sec / len(case_results), 4) if case_results else 0.0
+    )
+    speedup_estimate = (
+        round(sum_case_time_sec / wall_time_sec, 4) if wall_time_sec > 0 else 0.0
+    )
     slowest_cases = sorted(
         (
             {
@@ -442,9 +503,18 @@ def _build_duration_summary(
 
 
 def _build_runtime_summary(case_results: list[dict[str, Any]]) -> dict[str, Any]:
-    total_latency_ms = sum(int(item.get("runtime_summary", {}).get("total_latency_ms", 0) or 0) for item in case_results)
-    cache_hits = sum(int(item.get("runtime_summary", {}).get("cache_hit_count", 0) or 0) for item in case_results)
-    cache_misses = sum(int(item.get("runtime_summary", {}).get("cache_miss_count", 0) or 0) for item in case_results)
+    total_latency_ms = sum(
+        int(item.get("runtime_summary", {}).get("total_latency_ms", 0) or 0)
+        for item in case_results
+    )
+    cache_hits = sum(
+        int(item.get("runtime_summary", {}).get("cache_hit_count", 0) or 0)
+        for item in case_results
+    )
+    cache_misses = sum(
+        int(item.get("runtime_summary", {}).get("cache_miss_count", 0) or 0)
+        for item in case_results
+    )
     cache_total = cache_hits + cache_misses
     backend_usage: dict[str, int] = {}
     slowest_case = {
@@ -455,25 +525,44 @@ def _build_runtime_summary(case_results: list[dict[str, Any]]) -> dict[str, Any]
     cases_with_failed_spans: list[dict[str, Any]] = []
 
     for item in case_results:
-        runtime_summary = item.get("runtime_summary", {}) if isinstance(item.get("runtime_summary"), dict) else {}
-        for backend_name, count in dict(runtime_summary.get("cache_backend_usage", {}) or {}).items():
-            backend_usage[str(backend_name)] = backend_usage.get(str(backend_name), 0) + int(count or 0)
-        slowest_span_duration_ms = int(runtime_summary.get("slowest_span_duration_ms", 0) or 0)
+        runtime_summary = (
+            item.get("runtime_summary", {})
+            if isinstance(item.get("runtime_summary"), dict)
+            else {}
+        )
+        for backend_name, count in dict(
+            runtime_summary.get("cache_backend_usage", {}) or {}
+        ).items():
+            backend_usage[str(backend_name)] = backend_usage.get(
+                str(backend_name), 0
+            ) + int(count or 0)
+        slowest_span_duration_ms = int(
+            runtime_summary.get("slowest_span_duration_ms", 0) or 0
+        )
         if slowest_span_duration_ms > slowest_case["slowest_span_duration_ms"]:
             slowest_case = {
                 "case_id": str(item.get("case_id", "") or ""),
-                "slowest_span_name": str(runtime_summary.get("slowest_span_name", "") or ""),
+                "slowest_span_name": str(
+                    runtime_summary.get("slowest_span_name", "") or ""
+                ),
                 "slowest_span_duration_ms": slowest_span_duration_ms,
             }
         failed_spans = list(runtime_summary.get("failed_spans", []) or [])
         if failed_spans:
-            cases_with_failed_spans.append({"case_id": str(item.get("case_id", "") or ""), "failed_spans": failed_spans})
+            cases_with_failed_spans.append(
+                {
+                    "case_id": str(item.get("case_id", "") or ""),
+                    "failed_spans": failed_spans,
+                }
+            )
 
     return {
         "aggregate_total_latency_ms": total_latency_ms,
         "aggregate_cache_hit_count": cache_hits,
         "aggregate_cache_miss_count": cache_misses,
-        "aggregate_cache_hit_rate": round(cache_hits / cache_total, 4) if cache_total else 0.0,
+        "aggregate_cache_hit_rate": round(cache_hits / cache_total, 4)
+        if cache_total
+        else 0.0,
         "cache_backend_usage": backend_usage,
         "slowest_case_span": slowest_case,
         "cases_with_failed_spans": cases_with_failed_spans,
@@ -519,7 +608,9 @@ def _print_summary(
     if duration_summary["slowest_cases_top_3"]:
         print("  slowest cases:")
         for item in duration_summary["slowest_cases_top_3"]:
-            print(f"    - {item['case_id']}: {item['duration_sec']:.4f}s ({item['status']})")
+            print(
+                f"    - {item['case_id']}: {item['duration_sec']:.4f}s ({item['status']})"
+            )
     print(f"  report: {out_path}")
 
 
@@ -548,7 +639,9 @@ async def _amain() -> int:
         "failed_cases": failed,
         "error_cases": errored,
     }
-    duration_summary = _build_duration_summary(case_results, wall_time_sec, args.workers)
+    duration_summary = _build_duration_summary(
+        case_results, wall_time_sec, args.workers
+    )
     runtime_summary = _build_runtime_summary(case_results)
 
     eval_report = {
@@ -568,8 +661,18 @@ async def _amain() -> int:
         "cases": case_results,
     }
 
-    args.out.write_text(json.dumps(eval_report, ensure_ascii=False, indent=2), encoding="utf-8")
-    _print_summary(args.profile, args.workers, args.cases, summary, duration_summary, runtime_summary, args.out)
+    args.out.write_text(
+        json.dumps(eval_report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _print_summary(
+        args.profile,
+        args.workers,
+        args.cases,
+        summary,
+        duration_summary,
+        runtime_summary,
+        args.out,
+    )
     return 0 if (failed == 0 and errored == 0) else 1
 
 
