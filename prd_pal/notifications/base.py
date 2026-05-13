@@ -29,11 +29,13 @@ class BaseNotifier(ABC):
 
 
 def default_notifiers() -> tuple[BaseNotifier, ...]:
-    from .feishu import FeishuNotifier
+    from .feishu import resolve_feishu_notifiers
     from .wecom import WeComNotifier
 
-    return (FeishuNotifier(), WeComNotifier())
+    return (*resolve_feishu_notifiers(), WeComNotifier())
 
 
-def resolve_notifiers(notifiers: Sequence[BaseNotifier] | None = None) -> tuple[BaseNotifier, ...]:
+def resolve_notifiers(
+    notifiers: Sequence[BaseNotifier] | None = None,
+) -> tuple[BaseNotifier, ...]:
     return tuple(notifiers) if notifiers is not None else default_notifiers()

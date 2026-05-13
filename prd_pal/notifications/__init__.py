@@ -11,7 +11,16 @@ from .dispatcher import (
     read_notification_records,
     record_dry_run_notification,
 )
-from .feishu import FeishuCardRenderer, FeishuNotifier, FeishuNotifierConfig, FeishuWebhookSender
+from .feishu import (
+    FeishuCardRenderer,
+    FeishuNotifier,
+    FeishuNotifierConfig,
+    FeishuOpenAPINotifier,
+    FeishuOpenAPISender,
+    FeishuWebhookNotifier,
+    FeishuWebhookSender,
+    resolve_feishu_notifiers,
+)
 from .models import (
     DispatchStatus,
     NotificationDeliveryResult,
@@ -30,6 +39,9 @@ __all__ = [
     "FeishuCardRenderer",
     "FeishuNotifier",
     "FeishuNotifierConfig",
+    "FeishuOpenAPINotifier",
+    "FeishuOpenAPISender",
+    "FeishuWebhookNotifier",
     "FeishuWebhookSender",
     "NotificationDeliveryResult",
     "NotificationDispatchRecord",
@@ -46,5 +58,6 @@ __all__ = [
     "notifications_path",
     "read_notification_records",
     "record_dry_run_notification",
+    "resolve_feishu_notifiers",
     "resolve_notifiers",
 ]

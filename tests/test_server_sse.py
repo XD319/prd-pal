@@ -9,6 +9,33 @@ from prd_pal.server import app as app_module
 from prd_pal.server.sse import ProgressBroadcaster
 
 
+def _write_completed_feishu_run(
+    tmp_path,
+    run_id: str,
+    *,
+    submitter_open_id: str = "ou_owner",
+    tenant_key: str = "tenant-a",
+) -> None:
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "report.md").write_text("# done", encoding="utf-8")
+    (run_dir / "report.json").write_text("{}", encoding="utf-8")
+    (run_dir / "entry_context.json").write_text(
+        json.dumps(
+            {
+                "source_origin": "feishu",
+                "entry_mode": "plugin",
+                "submitter_open_id": submitter_open_id,
+                "tenant_key": tenant_key,
+                "trigger_source": "feishu",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
 def _read_sse_payloads(response) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
     for line in response.iter_lines():
@@ -39,16 +66,24 @@ def test_progress_broadcaster_publishes_to_multiple_subscribers() -> None:
         broadcaster.publish(
             run_id,
             "progress",
-            {"node": "parser", "status": "start", "timestamp": "2026-03-25T10:10:10+00:00"},
+            {
+                "node": "parser",
+                "status": "start",
+                "timestamp": "2026-03-25T10:10:10+00:00",
+            },
         )
 
         first_payload, second_payload = await asyncio.gather(first_task, second_task)
-        assert first_payload == second_payload == {
-            "node": "parser",
-            "status": "start",
-            "timestamp": "2026-03-25T10:10:10+00:00",
-            "event_type": "progress",
-        }
+        assert (
+            first_payload
+            == second_payload
+            == {
+                "node": "parser",
+                "status": "start",
+                "timestamp": "2026-03-25T10:10:10+00:00",
+                "event_type": "progress",
+            }
+        )
 
         await stream_one.aclose()
         await stream_two.aclose()
@@ -56,7 +91,9 @@ def test_progress_broadcaster_publishes_to_multiple_subscribers() -> None:
     asyncio.run(_run())
 
 
-def test_progress_stream_endpoint_returns_sse_headers_and_terminal_event(tmp_path, monkeypatch) -> None:
+def test_progress_stream_endpoint_returns_sse_headers_and_terminal_event(
+    tmp_path, monkeypatch
+) -> None:
     run_id = "20260325T111111Z"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
@@ -78,6 +115,42 @@ def test_progress_stream_endpoint_returns_sse_headers_and_terminal_event(tmp_pat
     assert payloads[-1]["node"] == "run"
     assert payloads[-1]["status"] == "completed"
     assert payloads[-1]["run_id"] == run_id
+    assert payloads[-1]["terminal"] is True
+    app_module._jobs.clear()
+
+
+def test_progress_stream_rejects_feishu_run_without_context(
+    tmp_path, monkeypatch
+) -> None:
+    run_id = "20260325T131313Z"
+    _write_completed_feishu_run(tmp_path, run_id)
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    app_module._jobs.clear()
+
+    client = TestClient(app_module.app)
+    response = client.get(f"/api/review/{run_id}/progress/stream")
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "feishu_context_required"
+    app_module._jobs.clear()
+
+
+def test_progress_stream_allows_feishu_run_with_matching_context(
+    tmp_path, monkeypatch
+) -> None:
+    run_id = "20260325T141414Z"
+    _write_completed_feishu_run(tmp_path, run_id)
+    monkeypatch.setattr(app_module, "OUTPUTS_ROOT", tmp_path)
+    app_module._jobs.clear()
+
+    client = TestClient(app_module.app)
+    with client.stream(
+        "GET",
+        f"/api/review/{run_id}/progress/stream?open_id=ou_owner&tenant_key=tenant-a&embed=feishu",
+    ) as response:
+        payloads = _read_sse_payloads(response)
+
+    assert response.status_code == 200
     assert payloads[-1]["terminal"] is True
     app_module._jobs.clear()
 

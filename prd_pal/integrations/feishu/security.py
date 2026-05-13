@@ -30,7 +30,7 @@ class FeishuSecuritySettings:
 
     @property
     def signature_enabled(self) -> bool:
-        return not self.signature_disabled and bool(self.webhook_secret)
+        return not self.signature_disabled
 
 
 def _env_disabled(name: str, *, default: bool) -> bool:
@@ -81,10 +81,17 @@ def verify_feishu_signature(
     now: int | None = None,
 ) -> None:
     resolved = settings or get_feishu_security_settings()
-    if not resolved.signature_enabled:
+    if resolved.signature_disabled:
         return
+    if not resolved.webhook_secret:
+        raise FeishuSignatureVerificationError(
+            "feishu_signature_not_configured",
+            "Feishu signature verification is enabled but MARRDP_FEISHU_WEBHOOK_SECRET is not configured.",
+        )
 
-    timestamp = _header(headers, "x-lark-request-timestamp", "x-feishu-request-timestamp")
+    timestamp = _header(
+        headers, "x-lark-request-timestamp", "x-feishu-request-timestamp"
+    )
     signature = _header(headers, "x-lark-signature", "x-feishu-signature")
     if not timestamp or not signature:
         raise FeishuSignatureVerificationError(
@@ -101,13 +108,18 @@ def verify_feishu_signature(
         ) from exc
 
     current_ts = int(time.time() if now is None else now)
-    if resolved.tolerance_sec >= 0 and abs(current_ts - request_ts) > resolved.tolerance_sec:
+    if (
+        resolved.tolerance_sec >= 0
+        and abs(current_ts - request_ts) > resolved.tolerance_sec
+    ):
         raise FeishuSignatureVerificationError(
             "invalid_feishu_signature",
             "Feishu signature verification failed: timestamp is outside the allowed window.",
         )
 
-    expected = build_feishu_signature(secret=resolved.webhook_secret, timestamp=timestamp, body=body)
+    expected = build_feishu_signature(
+        secret=resolved.webhook_secret, timestamp=timestamp, body=body
+    )
     if not hmac.compare_digest(signature, expected):
         raise FeishuSignatureVerificationError(
             "invalid_feishu_signature",

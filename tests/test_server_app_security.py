@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import time
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 
+from prd_pal.integrations.feishu.security import build_feishu_signature
 from prd_pal.server import app as app_module
 
 
@@ -59,7 +62,9 @@ def test_create_review_rejects_unauthorized_request(tmp_path, monkeypatch):
     _reset_state()
 
 
-def test_create_review_enforces_rate_limit_for_submission_endpoint(tmp_path, monkeypatch):
+def test_create_review_enforces_rate_limit_for_submission_endpoint(
+    tmp_path, monkeypatch
+):
     run_ids = iter(["20260310T020302Z"])
     monkeypatch.setenv("MARRDP_API_AUTH_DISABLED", "false")
     monkeypatch.setenv("MARRDP_API_KEY", "shared-api-key")
@@ -97,10 +102,31 @@ def test_feishu_events_challenge_returns_challenge(monkeypatch):
     _reset_state()
 
     client = _build_client()
-    response = client.post("/api/feishu/events", json={"type": "url_verification", "challenge": "challenge-token"})
+    response = client.post(
+        "/api/feishu/events",
+        json={"type": "url_verification", "challenge": "challenge-token"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {"challenge": "challenge-token"}
+
+
+def test_feishu_events_rejects_missing_signature_secret_when_enabled(monkeypatch):
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_DISABLED", "false")
+    monkeypatch.delenv("MARRDP_FEISHU_WEBHOOK_SECRET", raising=False)
+    _reset_state()
+
+    client = _build_client()
+    response = client.post(
+        "/api/feishu/events",
+        json={"type": "url_verification", "challenge": "challenge-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == {
+        "code": "feishu_signature_not_configured",
+        "message": "Feishu signature verification is enabled but MARRDP_FEISHU_WEBHOOK_SECRET is not configured.",
+    }
 
 
 def test_feishu_events_reject_invalid_signature(monkeypatch):
@@ -121,3 +147,30 @@ def test_feishu_events_reject_invalid_signature(monkeypatch):
 
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "invalid_feishu_signature"
+
+
+def test_feishu_events_accepts_valid_signature(monkeypatch):
+    secret = "test-secret"
+    timestamp = str(int(time.time()))
+    body = json.dumps(
+        {"type": "url_verification", "challenge": "challenge-token"}
+    ).encode("utf-8")
+    signature = build_feishu_signature(secret=secret, timestamp=timestamp, body=body)
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_DISABLED", "false")
+    monkeypatch.setenv("MARRDP_FEISHU_WEBHOOK_SECRET", secret)
+    monkeypatch.setenv("MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC", "300")
+    _reset_state()
+
+    client = _build_client()
+    response = client.post(
+        "/api/feishu/events",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Lark-Request-Timestamp": timestamp,
+            "X-Lark-Signature": signature,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"challenge": "challenge-token"}

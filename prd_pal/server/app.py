@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -17,14 +17,18 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from prd_pal.monitoring import append_audit_event, query_audit_events, resolve_audit_client_metadata
+from prd_pal.monitoring import (
+    append_audit_event,
+    query_audit_events,
+    resolve_audit_client_metadata,
+)
 from prd_pal.integrations.feishu import create_feishu_router
 from prd_pal.run_review import make_run_id
 from prd_pal.server.job_registry import JobRegistry
 from prd_pal.server.job_state import (
     ClarificationAnswerRequest,
     JobRecord,
-    RUN_PROGRESS_FILENAME,
+    RUN_PROGRESS_FILENAME as RUN_PROGRESS_FILENAME,
     RevisionConfirmRequest,
     RevisionInputRequest,
     RevisionStageRequest,
@@ -51,13 +55,21 @@ from prd_pal.server.security import (
     client_ip,
     controlled_error_response,
     enforce_submission_rate_limit,
-    reset_submission_rate_limits as _reset_submission_rate_limits,
+    reset_submission_rate_limits as _reset_submission_rate_limits,  # noqa: F401
     security_settings,
     should_skip_request_logging,
 )
 from prd_pal.server.sse import ProgressBroadcaster
-from prd_pal.service.comparison_service import compare_runs, get_run_stats_summary, get_trend_data
-from prd_pal.service.roadmap_service import diff_roadmap_versions, generate_constrained_roadmap, generate_roadmap_for_run
+from prd_pal.service.comparison_service import (
+    compare_runs,
+    get_run_stats_summary,
+    get_trend_data,
+)
+from prd_pal.service.roadmap_service import (
+    diff_roadmap_versions,
+    generate_constrained_roadmap,
+    generate_roadmap_for_run,
+)
 from prd_pal.service.report_service import RUN_ID_PATTERN
 from prd_pal.service.review_service import (
     ReviewArtifactNotFoundError,
@@ -74,7 +86,13 @@ from prd_pal.service.review_service import (
 from prd_pal.service.revision_service import generate_revision_for_run_async
 from prd_pal.templates import TemplateRegistryError, list_template_records
 from prd_pal.utils.logging import get_logger
-from prd_pal.workspace import ArtifactRepository, ArtifactVersion, ArtifactVersionStatus, WorkspaceRepository, WorkspaceState
+from prd_pal.workspace import (
+    ArtifactRepository,
+    ArtifactVersion,
+    ArtifactVersionStatus,
+    WorkspaceRepository,
+    WorkspaceState,
+)
 
 OUTPUTS_ROOT = Path("outputs")
 WORKSPACE_DB_PATH = Path("data") / "workspace.sqlite3"
@@ -162,8 +180,12 @@ async def _enqueue_review_run(
             run_id=run_id,
             audit_context=audit_context,
             details={
-                "source_origin": str((entry_context or {}).get("source_origin") or "web").strip(),
-                "entry_mode": str((entry_context or {}).get("entry_mode") or "direct").strip(),
+                "source_origin": str(
+                    (entry_context or {}).get("source_origin") or "web"
+                ).strip(),
+                "entry_mode": str(
+                    (entry_context or {}).get("entry_mode") or "direct"
+                ).strip(),
             },
         )
 
@@ -177,14 +199,20 @@ async def _enqueue_review_run(
             source=source,
             mode=mode,
             llm_options=llm_options,
-            **({"audit_context": audit_context} if isinstance(audit_context, dict) and audit_context else {}),
+            **(
+                {"audit_context": audit_context}
+                if isinstance(audit_context, dict) and audit_context
+                else {}
+            ),
         )
     )
     job.task = task
     await _job_registry.register(job)
     payload: dict[str, Any] = {"run_id": run_id}
     if _is_feishu_audit_context(audit_context):
-        payload["result_page"] = _build_result_page_payload(run_id, audit_context=audit_context, run_dir=run_dir)
+        payload["result_page"] = _build_result_page_payload(
+            run_id, audit_context=audit_context, run_dir=run_dir
+        )
     return payload
 
 
@@ -232,7 +260,9 @@ def _merge_audit_context_with_request(
     if merged_client_metadata:
         base["client_metadata"] = merged_client_metadata
     if not str(base.get("actor") or "").strip():
-        base["actor"] = str(merged_client_metadata.get("open_id") or "feishu").strip() or "feishu"
+        base["actor"] = (
+            str(merged_client_metadata.get("open_id") or "feishu").strip() or "feishu"
+        )
     return base
 
 
@@ -249,20 +279,26 @@ def _is_feishu_audit_context(audit_context: dict[str, Any] | None) -> bool:
     return str(client_metadata.get("trigger_source") or "").strip().lower() == "feishu"
 
 
-def _build_run_entry_context(audit_context: dict[str, Any] | None) -> dict[str, Any] | None:
+def _build_run_entry_context(
+    audit_context: dict[str, Any] | None,
+) -> dict[str, Any] | None:
     if not _is_feishu_audit_context(audit_context):
         return None
 
     client_metadata = resolve_audit_client_metadata(audit_context)
     submitter_open_id = str(client_metadata.get("open_id") or "").strip()
     tenant_key = str(client_metadata.get("tenant_key") or "").strip()
-    actor = str(audit_context.get("actor") or submitter_open_id or "feishu").strip() or "feishu"
+    actor = (
+        str(audit_context.get("actor") or submitter_open_id or "feishu").strip()
+        or "feishu"
+    )
     return {
         "source_origin": "feishu",
         "entry_mode": "plugin",
         "submitter_open_id": submitter_open_id,
         "tenant_key": tenant_key,
-        "trigger_source": str(client_metadata.get("trigger_source") or "feishu").strip() or "feishu",
+        "trigger_source": str(client_metadata.get("trigger_source") or "feishu").strip()
+        or "feishu",
         "result_page_context": _extract_result_page_context(client_metadata),
         "submitted_by": actor,
         "tool_name": str(audit_context.get("tool_name") or "").strip(),
@@ -270,7 +306,9 @@ def _build_run_entry_context(audit_context: dict[str, Any] | None) -> dict[str, 
     }
 
 
-def _persist_run_entry_context(run_dir: Path, audit_context: dict[str, Any] | None) -> dict[str, Any] | None:
+def _persist_run_entry_context(
+    run_dir: Path, audit_context: dict[str, Any] | None
+) -> dict[str, Any] | None:
     entry_context = _build_run_entry_context(audit_context)
     if entry_context is None:
         return None
@@ -292,20 +330,6 @@ def _read_run_entry_context(run_dir: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _extract_feishu_context_from_url(raw_url: str | None) -> dict[str, str]:
-    if not raw_url:
-        return {}
-    parsed = urlparse(str(raw_url))
-    query_params = parse_qs(parsed.query or "", keep_blank_values=False)
-    resolved: dict[str, str] = {}
-    for key in ("open_id", "tenant_key"):
-        value = query_params.get(key, [""])[0]
-        normalized = str(value or "").strip()
-        if normalized:
-            resolved[key] = normalized
-    return resolved
-
-
 def _extract_result_page_context(context: dict[str, Any] | None) -> dict[str, str]:
     if not isinstance(context, dict):
         return {}
@@ -317,7 +341,9 @@ def _extract_result_page_context(context: dict[str, Any] | None) -> dict[str, st
             continue
         if normalized_key.startswith("_"):
             continue
-        if normalized_key in {"open_id", "tenant_key"} or normalized_key.endswith("_token"):
+        if normalized_key in {"open_id", "tenant_key"} or normalized_key.endswith(
+            "_token"
+        ):
             scalar = str(value or "").strip()
             if scalar:
                 preserved[normalized_key] = scalar
@@ -364,7 +390,9 @@ def _build_result_page_payload(
     if not is_feishu_entry:
         return {"path": base_path, "url": base_path}
 
-    query_params = _merge_result_page_context(entry_result_context, client_metadata, request_context)
+    query_params = _merge_result_page_context(
+        entry_result_context, client_metadata, request_context
+    )
     expected_open_id = str(entry_context.get("submitter_open_id") or "").strip()
     expected_tenant_key = str(entry_context.get("tenant_key") or "").strip()
     if expected_open_id:
@@ -385,7 +413,9 @@ def _build_result_page_payload(
     return {"path": url, "url": url}
 
 
-def _resolve_run_feishu_context(run_id: str, context: dict[str, Any] | None) -> dict[str, str]:
+def _resolve_run_feishu_context(
+    run_id: str, context: dict[str, Any] | None
+) -> dict[str, str]:
     resolved = _extract_result_page_context(context)
     run_dir = OUTPUTS_ROOT / str(run_id or "").strip()
     entry_context = _read_run_entry_context(run_dir)
@@ -417,15 +447,15 @@ def _resolve_request_feishu_context(request: Request | None) -> dict[str, str]:
         ("open_id", str(request.query_params.get("open_id", "") or "").strip()),
         ("tenant_key", str(request.query_params.get("tenant_key", "") or "").strip()),
         ("open_id", str(request.headers.get("x-feishu-open-id", "") or "").strip()),
-        ("tenant_key", str(request.headers.get("x-feishu-tenant-key", "") or "").strip()),
+        (
+            "tenant_key",
+            str(request.headers.get("x-feishu-tenant-key", "") or "").strip(),
+        ),
     )
     for key, value in candidates:
         if value and key not in resolved:
             resolved[key] = value
 
-    referer_context = _extract_feishu_context_from_url(request.headers.get("referer"))
-    for key, value in referer_context.items():
-        resolved.setdefault(key, value)
     if "embed" in request.query_params:
         embed = str(request.query_params.get("embed", "") or "").strip()
         if embed:
@@ -435,7 +465,9 @@ def _resolve_request_feishu_context(request: Request | None) -> dict[str, str]:
     return resolved
 
 
-def _validate_feishu_run_access(*, run_dir: Path, context: dict[str, Any] | None) -> None:
+def _validate_feishu_run_access(
+    *, run_dir: Path, context: dict[str, Any] | None
+) -> None:
     entry_context = _read_run_entry_context(run_dir)
     if str(entry_context.get("source_origin") or "").strip().lower() != "feishu":
         return
@@ -447,9 +479,13 @@ def _validate_feishu_run_access(*, run_dir: Path, context: dict[str, Any] | None
     expected_tenant_key = str(entry_context.get("tenant_key") or "").strip()
 
     if not provided_tenant_key or (expected_open_id and not provided_open_id):
-        raise PermissionError("This run requires the originating Feishu identity context.")
+        raise PermissionError(
+            "This run requires the originating Feishu identity context."
+        )
     if expected_tenant_key and provided_tenant_key != expected_tenant_key:
-        raise PermissionError("This run is not accessible from the current Feishu tenant context.")
+        raise PermissionError(
+            "This run is not accessible from the current Feishu tenant context."
+        )
     if expected_open_id and provided_open_id != expected_open_id:
         raise PermissionError("This run is not accessible to the current Feishu user.")
 
@@ -459,11 +495,46 @@ def _enforce_run_access(request: Request | None, run_id: str) -> None:
     if not run_dir.exists() or not run_dir.is_dir():
         return
     try:
-        _validate_feishu_run_access(run_dir=run_dir, context=_resolve_request_feishu_context(request))
+        _validate_feishu_run_access(
+            run_dir=run_dir, context=_resolve_request_feishu_context(request)
+        )
     except PermissionError as exc:
         message = str(exc)
-        code = "feishu_context_required" if "requires" in message else "run_access_denied"
-        raise HTTPException(status_code=403, detail={"code": code, "message": message}) from exc
+        code = (
+            "feishu_context_required" if "requires" in message else "run_access_denied"
+        )
+        raise HTTPException(
+            status_code=403, detail={"code": code, "message": message}
+        ) from exc
+
+
+def _run_id_from_run_level_api_path(path: str) -> str:
+    parts = [part for part in str(path or "").strip().split("/") if part]
+    if len(parts) >= 3 and parts[0] == "api" and parts[1] in {"review", "report"}:
+        candidate = parts[2]
+        if RUN_ID_PATTERN.fullmatch(candidate):
+            return candidate
+    return ""
+
+
+def _request_has_valid_feishu_run_context(request: Request) -> bool:
+    run_id = _run_id_from_run_level_api_path(request.url.path)
+    if not run_id:
+        return False
+
+    run_dir = OUTPUTS_ROOT / run_id
+    entry_context = _read_run_entry_context(run_dir)
+    if str(entry_context.get("source_origin") or "").strip().lower() != "feishu":
+        return False
+
+    request_context = _resolve_request_feishu_context(request)
+    if not request_context:
+        return False
+    try:
+        _validate_feishu_run_access(run_dir=run_dir, context=request_context)
+    except PermissionError:
+        return False
+    return True
 
 
 def _workspace_context_from_request(request: Request | None) -> dict[str, str]:
@@ -489,7 +560,9 @@ def _build_revision_stage_payload(*, run_id: str) -> dict[str, Any]:
             "updated_at": "",
         }
     try:
-        result_payload = get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
+        result_payload = get_review_result_payload(
+            run_id=run_id, outputs_root=OUTPUTS_ROOT
+        )
     except (ReviewRunNotFoundError, ReviewResultNotReadyError, ValueError):
         return {
             "status": "unavailable",
@@ -506,63 +579,85 @@ def _build_revision_stage_payload(*, run_id: str) -> dict[str, Any]:
             "updated_at": "",
         }
     revision_stage = result_payload.get("revision_stage")
-    return dict(revision_stage) if isinstance(revision_stage, dict) else {
-        "status": "unavailable",
-        "decision": "",
-        "entered_revision": False,
-        "available": False,
-        "decision_required": False,
-        "allow_continue_without_revision": False,
-        "revision_confirmed": False,
-        "confirmed_revision_ref": "",
-        "draft_revision_ref": "",
-        "preferred_prd_source": "original_prd",
-        "preferred_prd_ref": "report.requirement_doc",
-        "updated_at": "",
-    }
+    return (
+        dict(revision_stage)
+        if isinstance(revision_stage, dict)
+        else {
+            "status": "unavailable",
+            "decision": "",
+            "entered_revision": False,
+            "available": False,
+            "decision_required": False,
+            "allow_continue_without_revision": False,
+            "revision_confirmed": False,
+            "confirmed_revision_ref": "",
+            "draft_revision_ref": "",
+            "preferred_prd_source": "original_prd",
+            "preferred_prd_ref": "report.requirement_doc",
+            "updated_at": "",
+        }
+    )
 
 
 def _extract_workspace_entry_context(workspace: WorkspaceState) -> dict[str, str]:
     metadata = workspace.metadata if isinstance(workspace.metadata, dict) else {}
     expected_open_id = str(
-        metadata.get("submitter_open_id")
-        or metadata.get("open_id")
-        or "",
+        metadata.get("submitter_open_id") or metadata.get("open_id") or "",
     ).strip()
     expected_tenant_key = str(metadata.get("tenant_key") or "").strip()
     if (not expected_open_id or not expected_tenant_key) and workspace.current_run_id:
-        run_entry = _read_run_entry_context(OUTPUTS_ROOT / str(workspace.current_run_id).strip())
-        expected_open_id = expected_open_id or str(run_entry.get("submitter_open_id") or "").strip()
-        expected_tenant_key = expected_tenant_key or str(run_entry.get("tenant_key") or "").strip()
+        run_entry = _read_run_entry_context(
+            OUTPUTS_ROOT / str(workspace.current_run_id).strip()
+        )
+        expected_open_id = (
+            expected_open_id or str(run_entry.get("submitter_open_id") or "").strip()
+        )
+        expected_tenant_key = (
+            expected_tenant_key or str(run_entry.get("tenant_key") or "").strip()
+        )
     return {
         "open_id": expected_open_id,
         "tenant_key": expected_tenant_key,
     }
 
 
-def _validate_feishu_workspace_access(*, workspace: WorkspaceState, context: dict[str, Any] | None) -> None:
+def _validate_feishu_workspace_access(
+    *, workspace: WorkspaceState, context: dict[str, Any] | None
+) -> None:
     provided = dict(context) if isinstance(context, dict) else {}
     provided_open_id = str(provided.get("open_id") or "").strip()
     provided_tenant_key = str(provided.get("tenant_key") or "").strip()
     if not provided_tenant_key:
-        raise PermissionError("This workspace requires the originating Feishu identity context.")
+        raise PermissionError(
+            "This workspace requires the originating Feishu identity context."
+        )
 
     expected = _extract_workspace_entry_context(workspace)
     expected_open_id = str(expected.get("open_id") or "").strip()
     expected_tenant_key = str(expected.get("tenant_key") or "").strip()
     if expected_tenant_key and provided_tenant_key != expected_tenant_key:
-        raise PermissionError("This workspace is not accessible from the current Feishu tenant context.")
+        raise PermissionError(
+            "This workspace is not accessible from the current Feishu tenant context."
+        )
     if expected_open_id and provided_open_id != expected_open_id:
-        raise PermissionError("This workspace is not accessible to the current Feishu user.")
+        raise PermissionError(
+            "This workspace is not accessible to the current Feishu user."
+        )
 
 
-def _enforce_workspace_access_http(*, workspace: WorkspaceState, context: dict[str, Any] | None) -> None:
+def _enforce_workspace_access_http(
+    *, workspace: WorkspaceState, context: dict[str, Any] | None
+) -> None:
     try:
         _validate_feishu_workspace_access(workspace=workspace, context=context)
     except PermissionError as exc:
         message = str(exc)
-        code = "feishu_context_required" if "requires" in message else "run_access_denied"
-        raise HTTPException(status_code=403, detail={"code": code, "message": message}) from exc
+        code = (
+            "feishu_context_required" if "requires" in message else "run_access_denied"
+        )
+        raise HTTPException(
+            status_code=403, detail={"code": code, "message": message}
+        ) from exc
 
 
 async def _load_workspace_or_404(workspace_id: str) -> WorkspaceState:
@@ -573,7 +668,10 @@ async def _load_workspace_or_404(workspace_id: str) -> WorkspaceState:
         return workspace_result.value
     raise HTTPException(
         status_code=404,
-        detail={"code": "workspace_not_found", "message": f"workspace_id not found: {workspace_id}"},
+        detail={
+            "code": "workspace_not_found",
+            "message": f"workspace_id not found: {workspace_id}",
+        },
     )
 
 
@@ -609,7 +707,9 @@ def _list_recent_workspace_runs(
     """
     try:
         with sqlite3.connect(WORKSPACE_DB_PATH) as connection:
-            rows = connection.execute(query, (workspace_id, max(1, int(limit)))).fetchall()
+            rows = connection.execute(
+                query, (workspace_id, max(1, int(limit)))
+            ).fetchall()
     except sqlite3.Error:
         return []
     return [
@@ -628,7 +728,9 @@ def _list_recent_workspace_runs(
     ]
 
 
-def _build_workspace_review_result_url(run_id: str, *, request_context: dict[str, Any] | None = None) -> str:
+def _build_workspace_review_result_url(
+    run_id: str, *, request_context: dict[str, Any] | None = None
+) -> str:
     normalized_run_id = str(run_id or "").strip()
     base_payload = _build_result_page_payload(
         normalized_run_id,
@@ -642,10 +744,16 @@ def _build_workspace_review_result_url(run_id: str, *, request_context: dict[str
     query_params = _merge_result_page_context(context)
     query_params["embed"] = "feishu"
     query_string = urlencode(query_params)
-    return f"/run/{normalized_run_id}?{query_string}" if query_string else base_payload["url"]
+    return (
+        f"/run/{normalized_run_id}?{query_string}"
+        if query_string
+        else base_payload["url"]
+    )
 
 
-async def _list_feishu_workspace_overviews(*, request: Request, limit: int = 20) -> dict[str, Any]:
+async def _list_feishu_workspace_overviews(
+    *, request: Request, limit: int = 20
+) -> dict[str, Any]:
     repository = WorkspaceRepository(WORKSPACE_DB_PATH)
     await repository.initialize()
     result = await repository.list_workspaces()
@@ -682,16 +790,22 @@ async def _list_feishu_workspace_overviews(*, request: Request, limit: int = 20)
     return {"count": len(overviews), "workspaces": overviews}
 
 
-async def _get_feishu_workspace_overview(*, workspace_id: str, request: Request) -> dict[str, Any]:
+async def _get_feishu_workspace_overview(
+    *, workspace_id: str, request: Request
+) -> dict[str, Any]:
     workspace = await _load_workspace_or_404(workspace_id)
-    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    _enforce_workspace_access_http(
+        workspace=workspace, context=_workspace_context_from_request(request)
+    )
     return {
         "workspace_id": workspace.workspace_id,
         "name": workspace.name,
         "status": str(workspace.status),
         "current_run_id": workspace.current_run_id,
         "current_version_ids": workspace.current_version_ids,
-        "versions": [_workspace_version_payload(version) for version in workspace.versions],
+        "versions": [
+            _workspace_version_payload(version) for version in workspace.versions
+        ],
         "recent_reviews": _list_recent_workspace_runs(
             workspace.workspace_id,
             limit=5,
@@ -700,9 +814,13 @@ async def _get_feishu_workspace_overview(*, workspace_id: str, request: Request)
     }
 
 
-async def _list_feishu_workspace_versions(*, workspace_id: str, artifact_key: str, request: Request) -> dict[str, Any]:
+async def _list_feishu_workspace_versions(
+    *, workspace_id: str, artifact_key: str, request: Request
+) -> dict[str, Any]:
     workspace = await _load_workspace_or_404(workspace_id)
-    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
+    _enforce_workspace_access_http(
+        workspace=workspace, context=_workspace_context_from_request(request)
+    )
     versions = workspace.list_versions(artifact_key)
     versions.sort(key=lambda item: item.version_number, reverse=True)
     return {
@@ -723,11 +841,16 @@ async def _start_feishu_workspace_review(
     workspace = await _load_workspace_or_404(workspace_id)
     context = _workspace_context_from_request(request)
     _enforce_workspace_access_http(workspace=workspace, context=context)
-    version = next((item for item in workspace.versions if item.version_id == version_id), None)
+    version = next(
+        (item for item in workspace.versions if item.version_id == version_id), None
+    )
     if version is None or version.artifact_key != artifact_key:
         raise HTTPException(
             status_code=404,
-            detail={"code": "version_not_found", "message": f"version_id not found: {version_id}"},
+            detail={
+                "code": "version_not_found",
+                "message": f"version_id not found: {version_id}",
+            },
         )
     run_response = await _enqueue_review_run(
         prd_path=version.content_path,
@@ -778,19 +901,34 @@ async def _submit_feishu_workspace_clarification(
     run_id = str(payload.run_id or "").strip()
     workspace = None
     if run_id:
-        candidates = [item for item in _list_recent_workspace_runs(workspace_id=str(workspace_id or ""), limit=50)]
+        candidates = [
+            item
+            for item in _list_recent_workspace_runs(
+                workspace_id=str(workspace_id or ""), limit=50
+            )
+        ]
         if any(str(item.get("run_id") or "").strip() == run_id for item in candidates):
             workspace = await _load_workspace_or_404(workspace_id)
     if workspace is not None:
-        _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
-    request_context = _resolve_run_feishu_context(run_id, _workspace_context_from_request(request))
-    audit_context = _merge_audit_context_with_request(payload.build_audit_context(), request_context)
+        _enforce_workspace_access_http(
+            workspace=workspace, context=_workspace_context_from_request(request)
+        )
+    request_context = _resolve_run_feishu_context(
+        run_id, _workspace_context_from_request(request)
+    )
+    audit_context = _merge_audit_context_with_request(
+        payload.build_audit_context(), request_context
+    )
     result_payload = _submit_review_clarification_internal(
         run_id=run_id,
         answers=payload.to_answers_payload(),
         audit_context=audit_context,
     )
-    clarification = result_payload.get("clarification", {}) if isinstance(result_payload, dict) else {}
+    clarification = (
+        result_payload.get("clarification", {})
+        if isinstance(result_payload, dict)
+        else {}
+    )
     has_pending_questions = bool(
         isinstance(clarification, dict)
         and clarification.get("triggered")
@@ -811,16 +949,26 @@ async def _submit_feishu_workspace_clarification(
     }
 
 
-async def _submit_feishu_clarification(*, request: Request, payload: Any) -> dict[str, Any]:
+async def _submit_feishu_clarification(
+    *, request: Request, payload: Any
+) -> dict[str, Any]:
     run_id = str(payload.run_id or "").strip()
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
-    audit_context = _merge_audit_context_with_request(payload.build_audit_context(), request_context)
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
+    audit_context = _merge_audit_context_with_request(
+        payload.build_audit_context(), request_context
+    )
     result_payload = _submit_review_clarification_internal(
         run_id=run_id,
         answers=payload.to_answers_payload(),
         audit_context=audit_context,
     )
-    clarification = result_payload.get("clarification", {}) if isinstance(result_payload, dict) else {}
+    clarification = (
+        result_payload.get("clarification", {})
+        if isinstance(result_payload, dict)
+        else {}
+    )
     has_pending_questions = bool(
         isinstance(clarification, dict)
         and clarification.get("triggered")
@@ -850,14 +998,21 @@ async def _derive_feishu_workspace_version(
     workspace = await _load_workspace_or_404(workspace_id)
     context = _workspace_context_from_request(request)
     _enforce_workspace_access_http(workspace=workspace, context=context)
-    source_version = next((item for item in workspace.versions if item.version_id == version_id), None)
+    source_version = next(
+        (item for item in workspace.versions if item.version_id == version_id), None
+    )
     if source_version is None:
         raise HTTPException(
             status_code=404,
-            detail={"code": "version_not_found", "message": f"version_id not found: {version_id}"},
+            detail={
+                "code": "version_not_found",
+                "message": f"version_id not found: {version_id}",
+            },
         )
     same_artifact_versions = workspace.list_versions(source_version.artifact_key)
-    next_version_number = max((item.version_number for item in same_artifact_versions), default=0) + 1
+    next_version_number = (
+        max((item.version_number for item in same_artifact_versions), default=0) + 1
+    )
     timestamp = datetime.now(timezone.utc).isoformat()
     derived_version = ArtifactVersion(
         version_id=f"{source_version.artifact_key}-v{next_version_number}-{uuid.uuid4().hex[:8]}",
@@ -911,11 +1066,20 @@ async def _get_feishu_workspace_diff(
     request: Request,
 ) -> dict[str, Any]:
     workspace = await _load_workspace_or_404(workspace_id)
-    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
-    left = next((item for item in workspace.versions if item.version_id == from_version), None)
-    right = next((item for item in workspace.versions if item.version_id == to_version), None)
+    _enforce_workspace_access_http(
+        workspace=workspace, context=_workspace_context_from_request(request)
+    )
+    left = next(
+        (item for item in workspace.versions if item.version_id == from_version), None
+    )
+    right = next(
+        (item for item in workspace.versions if item.version_id == to_version), None
+    )
     if left is None or right is None:
-        raise HTTPException(status_code=404, detail={"code": "version_not_found", "message": "diff versions not found."})
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "version_not_found", "message": "diff versions not found."},
+        )
     return {
         "workspace_id": workspace_id,
         "from_version": _workspace_version_payload(left),
@@ -937,10 +1101,18 @@ async def _update_feishu_workspace_roadmap(
     payload: Any,
 ) -> dict[str, Any]:
     workspace = await _load_workspace_or_404(workspace_id)
-    _enforce_workspace_access_http(workspace=workspace, context=_workspace_context_from_request(request))
-    existing_metadata = workspace.metadata if isinstance(workspace.metadata, dict) else {}
+    _enforce_workspace_access_http(
+        workspace=workspace, context=_workspace_context_from_request(request)
+    )
+    existing_metadata = (
+        workspace.metadata if isinstance(workspace.metadata, dict) else {}
+    )
     old_roadmap = existing_metadata.get("roadmap")
-    old_payload = old_roadmap if isinstance(old_roadmap, dict) else {"version": "v0", "roadmap_items": []}
+    old_payload = (
+        old_roadmap
+        if isinstance(old_roadmap, dict)
+        else {"version": "v0", "roadmap_items": []}
+    )
     new_version_label = f"v{int(time.time())}"
     new_payload = generate_constrained_roadmap(
         tasks=payload.tasks,
@@ -1008,6 +1180,8 @@ async def _api_security_middleware(request: Request, call_next):
     settings = security_settings()
     auth_error = authenticate_request(request, settings)
     if auth_error is not None:
+        if _request_has_valid_feishu_run_context(request):
+            return await call_next(request)
         return auth_error
 
     rate_limit_error = enforce_submission_rate_limit(request, settings)
@@ -1018,7 +1192,9 @@ async def _api_security_middleware(request: Request, call_next):
 
 
 @app.exception_handler(RequestValidationError)
-async def _handle_request_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+async def _handle_request_validation_error(
+    _: Request, exc: RequestValidationError
+) -> JSONResponse:
     return controlled_error_response(
         422,
         code="request_validation_error",
@@ -1074,7 +1250,9 @@ def readiness_check() -> JSONResponse:
 
 
 @app.get("/api/templates")
-def list_templates_endpoint(version: str | None = Query(default=None)) -> dict[str, Any]:
+def list_templates_endpoint(
+    version: str | None = Query(default=None),
+) -> dict[str, Any]:
     try:
         templates = list(list_template_records(version=version))
     except TemplateRegistryError as exc:
@@ -1083,12 +1261,20 @@ def list_templates_endpoint(version: str | None = Query(default=None)) -> dict[s
 
 
 @app.get("/api/templates/{template_type}")
-def list_templates_by_type_endpoint(template_type: str, version: str | None = Query(default=None)) -> dict[str, Any]:
+def list_templates_by_type_endpoint(
+    template_type: str, version: str | None = Query(default=None)
+) -> dict[str, Any]:
     try:
-        templates = list(list_template_records(template_type=template_type, version=version))
+        templates = list(
+            list_template_records(template_type=template_type, version=version)
+        )
     except TemplateRegistryError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"template_type": template_type, "count": len(templates), "templates": templates}
+    return {
+        "template_type": template_type,
+        "count": len(templates),
+        "templates": templates,
+    }
 
 
 @app.get("/api/audit")
@@ -1136,7 +1322,9 @@ async def list_runs() -> dict[str, Any]:
             (
                 run_sort_timestamp(run_dir, job),
                 run_dir.name,
-                build_run_list_entry(run_dir, persisted_status_payload=_persisted_status_payload, job=job),
+                build_run_list_entry(
+                    run_dir, persisted_status_payload=_persisted_status_payload, job=job
+                ),
             )
         )
 
@@ -1163,7 +1351,9 @@ async def create_review(payload: ReviewCreateRequest) -> dict[str, str]:
 @app.get("/api/review/{run_id}")
 async def get_review_status(run_id: str, request: Request = None) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
     run_dir = OUTPUTS_ROOT / run_id
     job = await _job_registry.get(run_id)
 
@@ -1191,7 +1381,8 @@ async def get_review_status(run_id: str, request: Request = None) -> dict[str, A
 
 
 @app.get("/api/review/{run_id}/progress/stream")
-async def stream_review_progress(run_id: str) -> StreamingResponse:
+async def stream_review_progress(run_id: str, request: Request) -> StreamingResponse:
+    _enforce_run_access(request, run_id)
     job = await _job_registry.get(run_id)
 
     run_dir = OUTPUTS_ROOT / run_id
@@ -1227,9 +1418,13 @@ async def stream_review_progress(run_id: str) -> StreamingResponse:
 
 
 @app.post("/api/review/{run_id}/clarification")
-async def submit_review_clarification(run_id: str, payload: ClarificationAnswerRequest, request: Request) -> dict[str, Any]:
+async def submit_review_clarification(
+    run_id: str, payload: ClarificationAnswerRequest, request: Request
+) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
     try:
         response_payload = await answer_review_clarification_async(
             run_id=run_id,
@@ -1258,19 +1453,31 @@ async def submit_review_clarification(run_id: str, payload: ClarificationAnswerR
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
-            detail={"code": "clarification_unavailable", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "clarification_unavailable",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
     except TypeError as exc:
         raise HTTPException(
             status_code=422,
-            detail={"code": "invalid_clarification_payload", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "invalid_clarification_payload",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
 
 
 @app.post("/api/review/{run_id}/revision-stage")
-async def update_review_revision_stage(run_id: str, payload: RevisionStageRequest, request: Request) -> dict[str, Any]:
+async def update_review_revision_stage(
+    run_id: str, payload: RevisionStageRequest, request: Request
+) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
     try:
         revision_stage = record_revision_stage_decision(
             run_id=run_id,
@@ -1300,14 +1507,22 @@ async def update_review_revision_stage(run_id: str, payload: RevisionStageReques
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
-            detail={"code": "revision_stage_unavailable", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "revision_stage_unavailable",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
 
 
 @app.post("/api/review/{run_id}/revision-input")
-async def submit_review_revision_input(run_id: str, payload: RevisionInputRequest, request: Request) -> dict[str, Any]:
+async def submit_review_revision_input(
+    run_id: str, payload: RevisionInputRequest, request: Request
+) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
     try:
         response_payload = record_revision_input(
             run_id=run_id,
@@ -1337,14 +1552,20 @@ async def submit_review_revision_input(run_id: str, payload: RevisionInputReques
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
-            detail={"code": "revision_input_unavailable", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "revision_input_unavailable",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
 
 
 @app.post("/api/review/{run_id}/revision-generate")
 async def generate_review_revision(run_id: str, request: Request) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
     try:
         response_payload = await generate_revision_for_run_async(
             run_id=run_id,
@@ -1370,14 +1591,22 @@ async def generate_review_revision(run_id: str, request: Request) -> dict[str, A
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
-            detail={"code": "revision_generate_unavailable", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "revision_generate_unavailable",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
 
 
 @app.post("/api/review/{run_id}/revision-confirm")
-async def confirm_review_revision(run_id: str, payload: RevisionConfirmRequest, request: Request) -> dict[str, Any]:
+async def confirm_review_revision(
+    run_id: str, payload: RevisionConfirmRequest, request: Request
+) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
     try:
         revision_stage = confirm_revision_action(
             run_id=run_id,
@@ -1407,12 +1636,15 @@ async def confirm_review_revision(run_id: str, payload: RevisionConfirmRequest, 
                 audit_context={
                     "source": "web",
                     "tool_name": "review.revision_regenerate",
-                    "actor": str(request_context.get("open_id") or "web").strip() or "web",
+                    "actor": str(request_context.get("open_id") or "web").strip()
+                    or "web",
                     "client_metadata": request_context,
                 },
             )
             response_payload["revision_generation"] = generation_payload
-            response_payload["revision_stage"] = _build_revision_stage_payload(run_id=run_id)
+            response_payload["revision_stage"] = _build_revision_stage_payload(
+                run_id=run_id
+            )
         return response_payload
     except FileNotFoundError as exc:
         raise HTTPException(
@@ -1422,7 +1654,11 @@ async def confirm_review_revision(run_id: str, payload: RevisionConfirmRequest, 
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
-            detail={"code": "revision_confirm_unavailable", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "revision_confirm_unavailable",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
 
 
@@ -1440,14 +1676,20 @@ async def generate_review_roadmap(run_id: str, request: Request) -> dict[str, An
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
-            detail={"code": "roadmap_generation_unavailable", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "roadmap_generation_unavailable",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
 
 
 @app.get("/api/review/{run_id}/result")
 async def get_review_result(run_id: str, request: Request) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
-    request_context = _resolve_run_feishu_context(run_id, _resolve_request_feishu_context(request))
+    request_context = _resolve_run_feishu_context(
+        run_id, _resolve_request_feishu_context(request)
+    )
     try:
         payload = get_review_result_payload(run_id=run_id, outputs_root=OUTPUTS_ROOT)
         payload["result_page"] = _build_result_page_payload(
@@ -1475,7 +1717,9 @@ async def get_review_result(run_id: str, request: Request) -> dict[str, Any]:
 
 
 @app.get("/api/review/{run_id}/artifacts/{artifact_key}")
-async def get_review_artifact_preview(run_id: str, artifact_key: str, request: Request) -> dict[str, Any]:
+async def get_review_artifact_preview(
+    run_id: str, artifact_key: str, request: Request
+) -> dict[str, Any]:
     _enforce_run_access(request, run_id)
     try:
         return get_review_artifact_preview_payload(
@@ -1497,28 +1741,49 @@ async def get_review_artifact_preview(run_id: str, artifact_key: str, request: R
     except ReviewArtifactNotFoundError as exc:
         raise HTTPException(
             status_code=404,
-            detail={"code": "artifact_not_found", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "artifact_not_found",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "invalid_artifact_preview", "message": str(exc), "run_id": run_id},
+            detail={
+                "code": "invalid_artifact_preview",
+                "message": str(exc),
+                "run_id": run_id,
+            },
         ) from exc
 
 
 @app.get("/api/compare")
-async def compare_review_runs(run_a: str = Query(...), run_b: str = Query(...)) -> dict[str, Any]:
+async def compare_review_runs(
+    run_a: str = Query(...), run_b: str = Query(...)
+) -> dict[str, Any]:
     try:
-        return compare_runs(run_id_a=run_a, run_id_b=run_b, outputs_root=OUTPUTS_ROOT).model_dump(mode="json")
+        return compare_runs(
+            run_id_a=run_a, run_id_b=run_b, outputs_root=OUTPUTS_ROOT
+        ).model_dump(mode="json")
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail={"code": "run_not_found", "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=404, detail={"code": "run_not_found", "message": str(exc)}
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail={"code": "invalid_compare_request", "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_compare_request", "message": str(exc)},
+        ) from exc
 
 
 @app.get("/api/trends")
-async def get_review_trends(limit: int = Query(default=20, ge=1, le=200)) -> dict[str, Any]:
-    return get_trend_data(outputs_root=OUTPUTS_ROOT, limit=limit).model_dump(mode="json")
+async def get_review_trends(
+    limit: int = Query(default=20, ge=1, le=200),
+) -> dict[str, Any]:
+    return get_trend_data(outputs_root=OUTPUTS_ROOT, limit=limit).model_dump(
+        mode="json"
+    )
 
 
 @app.get("/api/stats")
@@ -1541,15 +1806,21 @@ async def get_report(
         filename = "report.md" if format == "md" else "report.json"
         path = run_dir / filename
         if not path.exists():
-            raise HTTPException(status_code=404, detail=f"{filename} not found for run_id={run_id}")
+            raise HTTPException(
+                status_code=404, detail=f"{filename} not found for run_id={run_id}"
+            )
 
-        media_type = "text/markdown; charset=utf-8" if format == "md" else "application/json"
+        media_type = (
+            "text/markdown; charset=utf-8" if format == "md" else "application/json"
+        )
         return FileResponse(path=str(path), media_type=media_type, filename=filename)
 
     report_payload = _load_report_payload(run_dir)
     report_md_path = run_dir / "report.md"
     if not report_md_path.exists() and format == "html":
-        raise HTTPException(status_code=404, detail=f"report.md not found for run_id={run_id}")
+        raise HTTPException(
+            status_code=404, detail=f"report.md not found for run_id={run_id}"
+        )
 
     if format == "html":
         report_md = report_md_path.read_text(encoding="utf-8")
@@ -1590,4 +1861,6 @@ app.include_router(
 
 
 if FRONTEND_DIST_ROOT.exists():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST_ROOT, html=True), name="frontend")
+    app.mount(
+        "/", StaticFiles(directory=FRONTEND_DIST_ROOT, html=True), name="frontend"
+    )
