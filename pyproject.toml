@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prd-pal"
-version = "0.6.0"
+version = "3.1.0"
 description = "prd-pal review engine for requirement analysis, handoff preparation, and delivery support"
 readme = "README.md"
 requires-python = ">=3.11"

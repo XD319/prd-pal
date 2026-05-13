@@ -6,7 +6,6 @@ services:
     env_file:
       - path: .env
         required: false
-    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:

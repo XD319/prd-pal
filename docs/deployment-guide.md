@@ -4,8 +4,8 @@ This guide describes the two recommended adoption paths for prd-pal.
 
 If you are setting this project up for the first time, start here instead:
 
-- [quick-start.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/quick-start.md)
-- [feishu-setup.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/feishu-setup.md)
+- [quick-start.md](./quick-start.md)
+- [feishu-setup.md](./feishu-setup.md)
 
 ## Path 1: Local Skill + Local Repository
 

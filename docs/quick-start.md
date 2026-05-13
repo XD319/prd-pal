@@ -119,5 +119,5 @@ npm run dev
 
 本地链路跑通后，继续看：
 
-- [feishu-setup.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/feishu-setup.md)
-- [v2-api.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/v2-api.md)
+- [feishu-setup.md](./feishu-setup.md)
+- [v2-api.md](./v2-api.md)

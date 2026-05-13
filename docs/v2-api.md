@@ -4,8 +4,8 @@ This document describes the current FastAPI surface with review-first positionin
 
 For installation and Feishu rollout steps, read these first:
 
-- [quick-start.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/quick-start.md)
-- [feishu-setup.md](/D:/Backup/Career/Projects/AgentProject/prd-pal/docs/feishu-setup.md)
+- [quick-start.md](./quick-start.md)
+- [feishu-setup.md](./feishu-setup.md)
 
 ## Positioning
 
@@ -55,6 +55,8 @@ Auth behavior:
 - Send `X-API-Key: <secret>` or `Authorization: Bearer <token>`.
 - If auth is enabled but no credentials are configured, the API returns a controlled `503` instead of exposing the surface anonymously.
 - Invalid or missing credentials return controlled `401` responses.
+- Run-level Feishu H5 requests may omit the API key only when they carry matching `open_id`, `tenant_key`, and `embed=feishu` context for that run.
+- Global management endpoints such as `GET /api/runs` still require API credentials when auth is enabled.
 
 Rate-limit behavior:
 
@@ -137,7 +139,9 @@ Feishu source notes:
 
 ## Feishu Entry Endpoints
 
-The service also exposes a thin Feishu entry layer. This layer does not implement review logic itself. It only performs protocol conversion, optional signature verification, event handling, and review submission handoff into the existing review queue.
+The service also exposes a thin Feishu entry layer. This layer does not implement review logic itself. It only performs protocol conversion, signature verification, event handling, and review submission handoff into the existing review queue.
+
+Production review submission is expected to enter through Feishu plugin or message-card signed callbacks. The browser H5 page is for result viewing, clarification, and follow-up actions; it is not a production direct-submit client for `/api/feishu/submit`.
 
 ## Feishu Plugin Rollout Checklist
 
@@ -151,8 +155,8 @@ Use this checklist when the engineering team is wiring the Feishu app to the rev
    - an H5 page entry that opens the run detail page
 3. Copy `.env.example` to `.env` and fill in all required Feishu variables.
 4. Start the backend and finish the challenge handshake on `/api/feishu/events`.
-5. Submit one mock review from `/api/feishu/submit`.
-6. Open the H5 result page with `embed=feishu`.
+5. Submit one signed review callback to `/api/feishu/submit`.
+6. Open the H5 result page with `embed=feishu`, `open_id`, and `tenant_key`.
 7. Trigger one clarification answer through `/api/feishu/clarification`.
 8. Verify `outputs/<run_id>/entry_context.json` and `outputs/<run_id>/audit_log.jsonl`.
 
@@ -182,11 +186,17 @@ These are the minimum Feishu-related variables for a production-capable backend:
 - `MARRDP_FEISHU_APP_SECRET`
 - `MARRDP_FEISHU_SIGNATURE_DISABLED`
 - `MARRDP_FEISHU_WEBHOOK_SECRET` when signatures are enforced
+- `MARRDP_PUBLIC_BASE_URL`
 
 Recommended companion variables:
 
 - `MARRDP_FEISHU_OPEN_BASE_URL=https://open.feishu.cn`
 - `MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300`
+- `MARRDP_FEISHU_NOTIFICATION_DRY_RUN=true|false`
+- `MARRDP_FEISHU_NOTIFICATION_CHANNELS=webhook|openapi|both`
+- `MARRDP_FEISHU_NOTIFICATION_RECEIVE_ID_TYPE=open_id|user_id|union_id|email|chat_id`
+- `MARRDP_FEISHU_NOTIFICATION_DEFAULT_RECEIVE_ID=`
+- `MARRDP_FEISHU_NOTIFICATION_WEBHOOK_URL=`
 - `MARRDP_API_AUTH_DISABLED=false`
 - `MARRDP_API_KEY` and/or `MARRDP_API_BEARER_TOKEN`
 
@@ -200,6 +210,7 @@ Recommended modes:
 
 - Local development: keep `MARRDP_FEISHU_SIGNATURE_DISABLED=true`.
 - Shared Feishu integration: set `MARRDP_FEISHU_SIGNATURE_DISABLED=false`, configure `MARRDP_FEISHU_WEBHOOK_SECRET`, and keep a reasonable timestamp tolerance.
+- If signatures are enabled and `MARRDP_FEISHU_WEBHOOK_SECRET` is empty, callback endpoints return `detail.code = feishu_signature_not_configured`.
 
 ### `POST /api/feishu/events`
 
@@ -245,6 +256,7 @@ Request body accepts:
 Behavior notes:
 
 - The endpoint reuses the existing review submission flow and returns the same `run_id` contract.
+- In production this endpoint is for Feishu signed callbacks only. Do not use the browser H5 page as a direct submitter.
 - `source` is preferred. If `source` is omitted, `prd_text` is required.
 - The Feishu adapter stores context such as `open_id`, `tenant_key`, and `trigger_source=feishu` inside `audit_context.client_metadata`.
 - The backend also persists entry metadata to `outputs/<run_id>/entry_context.json` for lightweight access control and audit tracing.
@@ -382,6 +394,8 @@ For Feishu-origin runs, access is guarded by the persisted entry context in `out
   - `X-Feishu-Open-Id: <open_id>`
   - `X-Feishu-Tenant-Key: <tenant_key>`
 
+This same explicit context applies to run status, result, report download, artifact preview, clarification, revision, roadmap, and SSE progress APIs. The backend does not use `Referer` as an identity source.
+
 If the context is missing or does not match, the API returns controlled `403` responses such as:
 
 - `detail.code = feishu_context_required`
@@ -396,6 +410,12 @@ Examples:
 ```bash
 curl -H "X-API-Key: local-dev-secret" "http://127.0.0.1:8000/api/report/20260309T000000Z?format=md"
 curl -H "X-API-Key: local-dev-secret" "http://127.0.0.1:8000/api/report/20260309T000000Z?format=json"
+```
+
+For Feishu-origin runs, include the same explicit Feishu context:
+
+```bash
+curl "http://127.0.0.1:8000/api/report/20260309T000000Z?format=md&embed=feishu&open_id=ou_xxx&tenant_key=tenant_xxx"
 ```
 
 ## Primary Output Interpretation
@@ -439,7 +459,24 @@ Engineering notes:
 2. Open the URL inside Feishu WebView or H5 container.
 3. Keep `open_id` and `tenant_key` on the URL or inject them as headers through your app gateway.
 4. The page automatically switches to the compact layout when `embed=feishu` is present.
-5. The same `open_id` and `tenant_key` are used by the protected result APIs.
+5. The same `open_id` and `tenant_key` are sent to protected result, report, clarification, follow-up action, and SSE progress APIs.
+
+## Feishu Notifications
+
+The Feishu notification layer can render interactive message cards and deliver them through webhook, OpenAPI, or both:
+
+```dotenv
+MARRDP_FEISHU_NOTIFICATION_DRY_RUN=true
+MARRDP_FEISHU_NOTIFICATION_CHANNELS=webhook
+MARRDP_FEISHU_NOTIFICATION_RECEIVE_ID_TYPE=open_id
+MARRDP_FEISHU_NOTIFICATION_DEFAULT_RECEIVE_ID=
+MARRDP_FEISHU_NOTIFICATION_WEBHOOK_URL=
+MARRDP_PUBLIC_BASE_URL=https://<your-domain>
+```
+
+OpenAPI delivery uses the app tenant access token and sends `msg_type=interactive` with card JSON in `content`. The recipient is resolved from the run Feishu context first, then `MARRDP_FEISHU_NOTIFICATION_DEFAULT_RECEIVE_ID`. Non-dry-run OpenAPI delivery fails explicitly if credentials or recipient are missing.
+
+`MARRDP_FEISHU_NOTIFICATION_CHANNELS=both` records OpenAPI and webhook attempts separately in `notifications.jsonl` and `audit_log.jsonl`. There is no automatic fallback from one channel to the other.
 
 ## Local Mock And Joint Debug
 
@@ -471,7 +508,7 @@ Then send Feishu-style signed requests from your local mock client or API test c
 ### Local End-To-End Check
 
 1. `docker-compose up --build`
-2. Submit a run through `/api/feishu/submit`
+2. Submit a signed run callback through `/api/feishu/submit`
 3. Open `/run/<run_id>?embed=feishu&open_id=<open_id>&tenant_key=<tenant_key>`
 4. Confirm the run directory contains:
    - `report.json`

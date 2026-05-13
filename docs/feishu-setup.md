@@ -36,7 +36,9 @@
 - [ ] 已设置 `MARRDP_FEISHU_WEBHOOK_SECRET`
 - [ ] 已设置 `MARRDP_FEISHU_SIGNATURE_DISABLED=false`
 - [ ] 已设置 `MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300`（或更严格值）
+- [ ] 已设置 `MARRDP_PUBLIC_BASE_URL`
 - [ ] 生产环境已开启 API 鉴权（推荐）
+- [ ] 已选择通知通道并关闭本地 dry-run（如需真实通知）
 
 参考：
 
@@ -46,18 +48,27 @@ MARRDP_FEISHU_APP_SECRET=your-app-secret
 MARRDP_FEISHU_SIGNATURE_DISABLED=false
 MARRDP_FEISHU_WEBHOOK_SECRET=your-webhook-secret
 MARRDP_FEISHU_SIGNATURE_TOLERANCE_SEC=300
+MARRDP_PUBLIC_BASE_URL=https://<your-domain>
 
 MARRDP_API_AUTH_DISABLED=false
 MARRDP_API_KEY=replace-with-a-strong-secret
+
+MARRDP_FEISHU_NOTIFICATION_DRY_RUN=false
+MARRDP_FEISHU_NOTIFICATION_CHANNELS=openapi
+MARRDP_FEISHU_NOTIFICATION_RECEIVE_ID_TYPE=open_id
+MARRDP_FEISHU_NOTIFICATION_DEFAULT_RECEIVE_ID=
+MARRDP_FEISHU_NOTIFICATION_WEBHOOK_URL=
 ```
 
 ### C. 飞书应用回调与页面地址
 
 - [ ] 事件回调地址：`POST https://<your-domain>/api/feishu/events`
-- [ ] 评审提交地址：`POST https://<your-domain>/api/feishu/submit`
+- [ ] 评审提交地址：`POST https://<your-domain>/api/feishu/submit`（仅用于飞书插件或卡片动作签名回调）
 - [ ] 澄清提交地址：`POST https://<your-domain>/api/feishu/clarification`
-- [ ] 飞书工作入口地址：`https://<your-domain>/feishu`
+- [ ] 飞书工作入口地址：`https://<your-domain>/feishu`（H5 查看与继续处理，不作为生产提审入口）
 - [ ] 飞书结果页可正常打开：`https://<your-domain>/run/<run_id>?trigger_source=feishu&open_id=<open_id>&tenant_key=<tenant_key>&embed=feishu`
+
+生产提审必须由飞书插件或卡片动作调用后端签名回调发起。浏览器 H5 页面不承诺直接调用 `/api/feishu/submit`，以避免绕过飞书签名与身份上下文。
 
 ## 推荐接入流程（管理员）
 
@@ -80,6 +91,24 @@ MARRDP_API_KEY=replace-with-a-strong-secret
 - `outputs/<run_id>/report.json` 已生成
 - `outputs/<run_id>/entry_context.json` 已生成
 - `outputs/<run_id>/audit_log.jsonl` 已生成
+- 结果页、澄清、后续操作和 SSE 进度流都显式携带 `open_id`、`tenant_key`、`embed=feishu`
+- 未携带匹配飞书上下文的 run 级请求返回 `403`，全局 `/api/runs` 在 API 鉴权开启时仍需 API key
+
+## 飞书通知配置
+
+通知支持 webhook、OpenAPI 或两者同时发送。不会在 OpenAPI 失败后自动改发 webhook；如果配置 `both`，两条发送结果会分别写入 `notifications.jsonl` 和 `audit_log.jsonl`。
+
+```dotenv
+MARRDP_FEISHU_NOTIFICATION_DRY_RUN=true
+MARRDP_FEISHU_NOTIFICATION_CHANNELS=webhook
+MARRDP_FEISHU_NOTIFICATION_RECEIVE_ID_TYPE=open_id
+MARRDP_FEISHU_NOTIFICATION_DEFAULT_RECEIVE_ID=
+MARRDP_FEISHU_NOTIFICATION_WEBHOOK_URL=
+MARRDP_FEISHU_NOTIFICATION_TIMEOUT_SEC=10
+MARRDP_PUBLIC_BASE_URL=https://<your-domain>
+```
+
+OpenAPI 通知使用 tenant access token，并以 `msg_type=interactive` 发送消息卡片。收件人优先来自 run 的飞书上下文；若缺失且未配置 `MARRDP_FEISHU_NOTIFICATION_DEFAULT_RECEIVE_ID`，非 dry-run 发送会明确失败。`MARRDP_FEISHU_NOTIFICATION_DRY_RUN=true` 仅用于本地联调。
 
 ## 常见问题
 
@@ -111,6 +140,8 @@ MARRDP_FEISHU_SIGNATURE_DISABLED=true
 ```
 
 生产环境必须改回 `false`。
+
+当 `MARRDP_FEISHU_SIGNATURE_DISABLED=false` 时，`MARRDP_FEISHU_WEBHOOK_SECRET` 必须配置；缺失会返回受控配置错误，不会静默跳过验签。
 
 ## 相关文档
 
