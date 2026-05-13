@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchReviewResult, submitFeishuReview } from '../api';
+import { fetchReviewResult } from '../api';
 import PanelErrorBoundary from '../components/PanelErrorBoundary';
 import ReviewSubmissionForm from '../components/ReviewSubmissionForm';
 import { useToast } from '../components/ToastProvider';
@@ -8,7 +8,6 @@ import useReviewHistory from '../hooks/useReviewHistory';
 import { deriveClarification, describeHistoryRun } from '../utils/derivers';
 import { formatApiError } from '../utils/errors';
 import { formatDateTime } from '../utils/formatters';
-import { buildSubmissionPayload, validateSubmission } from '../utils/submission';
 
 const initialForm = {
   prd_text: '',
@@ -126,33 +125,10 @@ function FeishuEntryPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-
-    const payload = buildSubmissionPayload(form, {
-      includeMode: true,
-      allowPrdPath: false,
-    });
-    const validationMessage = validateSubmission(payload, {
-      allowPrdPath: false,
-      requireSourceOrText: true,
-    });
-    if (validationMessage) {
-      setSubmitError(validationMessage);
-      return;
-    }
-
-    setSubmitState('submitting');
-    setSubmitError('');
-
-    try {
-      const response = await submitFeishuReview(payload);
-      setSubmittedRunId(response.run_id);
-      setSubmitState('idle');
-      showToast(`Review submitted from Feishu entry. Tracking run ${response.run_id}.`, 'success');
-      void loadRunHistory();
-    } catch (error) {
-      setSubmitState('idle');
-      setSubmitError(formatApiError(error, 'Feishu review submission failed.'));
-    }
+    const message = '生产环境提审需通过飞书插件或卡片动作的签名回调发起；此 H5 页面只负责查看结果和继续处理。';
+    setSubmitState('idle');
+    setSubmitError(message);
+    showToast(message, 'warning');
   }
 
   async function loadClarificationSummary(runId) {

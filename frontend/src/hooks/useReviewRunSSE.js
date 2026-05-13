@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
-import { fetchReviewStatus } from '../api';
+import { buildReviewProgressStreamUrl, fetchReviewStatus } from '../api';
 import { deriveFailureMessage } from '../utils/derivers';
 import { formatApiError } from '../utils/errors';
 
@@ -281,7 +281,7 @@ function useReviewRunSSE(runId, options = {}) {
     }
 
     closeConnection();
-    const source = new window.EventSource(`/api/review/${encodeURIComponent(runIdRef.current)}/progress/stream`);
+    const source = new window.EventSource(buildReviewProgressStreamUrl(runIdRef.current));
     eventSourceRef.current = source;
 
     source.onopen = () => {
