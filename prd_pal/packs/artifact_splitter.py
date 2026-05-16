@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from prd_pal.packs.delivery_bundle import ArtifactRef
 from prd_pal.templates import DeliveryArtifactTemplate, get_delivery_artifact_template
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from prd_pal.utils.time import utc_now_iso as _utc_now_iso
 
 
 class ArtifactSplitter:

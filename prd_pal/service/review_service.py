@@ -6,7 +6,6 @@ import asyncio
 import json
 import re
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -54,12 +53,18 @@ from prd_pal.packs import (
 )
 from prd_pal.packs.approval import build_approval_record
 from prd_pal.run_review import make_unique_run_id, run_review
-from review_runtime.config.config import runtime_config_overrides
+from prd_pal.runtime.config.config import runtime_config_overrides
 from prd_pal.service.report_service import RUN_ID_PATTERN
 from prd_pal.server.sse import ProgressBroadcaster
+from prd_pal.utils.collections import copy_dict_list as _copy_dict_list
+from prd_pal.utils.json import (
+    load_json_object as _load_json_object,
+    write_json_object as _write_json_object,
+)
 from prd_pal.workspace import ArtifactRepository
 from prd_pal.workspace import ReviewWorkspaceRepository
 from prd_pal.utils.logging import RunLogContext, get_logger
+from prd_pal.utils.time import utc_now_iso as _utc_now_iso
 
 log = get_logger("service.review")
 CANONICAL_REQUEST_FILENAME = "canonical_review_request.json"
@@ -908,10 +913,6 @@ def _build_summary(run_output: dict[str, Any]) -> ReviewResultSummary:
     )
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 def _publish_progress_event(
     run_id: str, event: str, node_name: str, state: dict[str, Any] | None = None
 ) -> None:
@@ -1057,20 +1058,6 @@ def _dispatch_review_status_notification(
         metadata=resolved_metadata,
         audit_context=audit_context,
     )
-
-
-def _load_json_object(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _resolve_outputs_root(outputs_root: str | Path = "outputs") -> Path:
@@ -2418,12 +2405,6 @@ def get_review_workspace_for_mcp(
             "status_snapshot_path": str(repository.status_snapshot_path),
         },
     }
-
-
-def _copy_dict_list(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    return [dict(item) for item in value if isinstance(item, dict)]
 
 
 def _slugify_identifier(value: str) -> str:

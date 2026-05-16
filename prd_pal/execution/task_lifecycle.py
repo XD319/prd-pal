@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from prd_pal.execution.models import (
     ExecutionEvent,
     ExecutionMode,
     ExecutionTask,
     ExecutionTaskStatus,
 )
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from prd_pal.utils.time import utc_now_iso as _utc_now_iso
 
 
 VALID_TASK_TRANSITIONS: dict[ExecutionTaskStatus, set[ExecutionTaskStatus]] = {

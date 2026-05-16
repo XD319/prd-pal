@@ -119,6 +119,20 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(
             },
         }
 
+    async def fake_agent_call(*, prompt, schema, metadata):
+        agent_name = metadata["agent_name"]
+        if agent_name == "parser":
+            return await fake_parser_call(prompt=prompt, schema=schema, metadata=metadata)
+        if agent_name == "planner":
+            return await fake_planner_call(prompt=prompt, schema=schema, metadata=metadata)
+        if agent_name == "risk":
+            return await fake_risk_call(prompt=prompt, schema=schema, metadata=metadata)
+        if agent_name == "reviewer":
+            return await fake_reviewer_call(
+                prompt=prompt, schema=schema, metadata=metadata
+            )
+        raise AssertionError(f"unexpected agent: {agent_name}")
+
     async def fake_delivery_skill_call(*, prompt, schema, metadata):
         if metadata["agent_name"] == "implementation.plan":
             return {
@@ -185,26 +199,8 @@ async def test_sample_prd_trace_includes_prompt_generation_skills(
     monkeypatch.setenv("RISK_AGENT_ENABLE_CATALOG_TOOL", "false")
 
     with (
-        patch("prd_pal.agents.parser_agent.Config", _FakeConfig),
-        patch("prd_pal.agents.planner_agent.Config", _FakeConfig),
-        patch("prd_pal.agents.reviewer_agent.Config", _FakeConfig),
-        patch("prd_pal.subflows.risk_analysis.Config", _FakeConfig),
-        patch(
-            "prd_pal.agents.parser_agent.llm_structured_call",
-            side_effect=fake_parser_call,
-        ),
-        patch(
-            "prd_pal.agents.planner_agent.llm_structured_call",
-            side_effect=fake_planner_call,
-        ),
-        patch(
-            "prd_pal.subflows.risk_analysis.llm_structured_call",
-            side_effect=fake_risk_call,
-        ),
-        patch(
-            "prd_pal.agents.reviewer_agent.llm_structured_call",
-            side_effect=fake_reviewer_call,
-        ),
+        patch("prd_pal.agents.structured_runner.Config", _FakeConfig),
+        patch("prd_pal.agents.structured_runner.llm_structured_call", fake_agent_call),
         patch(
             "prd_pal.skills.delivery_planning.llm_structured_call",
             side_effect=fake_delivery_skill_call,

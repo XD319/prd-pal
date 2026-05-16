@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from prd_pal.utils.time import utc_now_iso as _utc_now_iso
 from prd_pal.workspace.repository_support import RepositoryResult, SQLiteRepositoryBase
 
 from .models import (
@@ -16,10 +16,6 @@ from .models import (
     MemoryScope,
     MemoryScopeLevel,
 )
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _enum_value(value: Any) -> str:

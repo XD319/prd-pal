@@ -65,7 +65,7 @@ def make_unique_run_id(
 def resolve_model_provider(result: dict[str, Any]) -> tuple[str, str]:
     model, provider = "unknown", "unknown"
     try:
-        from review_runtime.config.config import Config as _Cfg
+        from prd_pal.runtime.config.config import Config as _Cfg
 
         cfg = _Cfg()
         model = cfg.smart_llm_model or "unknown"

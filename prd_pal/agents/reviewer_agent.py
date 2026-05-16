@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
-from review_runtime.config.config import Config
-
+from .structured_runner import run_structured_node
 from ..prompts import REVIEWER_SYSTEM_PROMPT, REVIEWER_USER_PROMPT
 from ..schemas import ReviewerOutput, validate_reviewer_output
 from ..state import ReviewState, plan_from_state
 from ..templates.registry import REVIEWER_REVIEW_PROMPT
-from ..utils.io import save_raw_agent_output
-from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.logging import get_logger
 from ..utils.trace import trace_start
 
@@ -85,15 +81,14 @@ async def run(state: ReviewState) -> ReviewState:
     parsed_items: list[dict] = state.get("parsed_items", [])
     trace: dict[str, Any] = dict(state.get("trace", {}))
     run_dir: str = state.get("run_dir", "")
-    raw = ""
-    log.info("review 模式: %s", "quick", extra={"node": _AGENT})
+    log.info("Reviewer started in quick mode", extra={"node": _AGENT})
 
     if not parsed_items:
         span = trace_start(_AGENT, model="none", input_chars=0)
         trace[_AGENT] = span.end(
             status="error", error_message="parsed_items is empty - nothing to review"
         )
-        log.warning("review 完成, %s 条 findings", 0, extra={"node": _AGENT})
+        log.warning("Reviewer completed with %s findings", 0, extra={"node": _AGENT})
         return {
             "review_results": [],
             "plan_review": {},
@@ -113,92 +108,41 @@ async def run(state: ReviewState) -> ReviewState:
     input_chars = len(items_json) + len(plan_json)
     span = trace_start(_AGENT, input_chars=input_chars)
     span.set_template(REVIEWER_REVIEW_PROMPT)
-    prompt = f"{REVIEWER_SYSTEM_PROMPT}\n\n{REVIEWER_USER_PROMPT.format(items_json=items_json, plan_json=plan_json)}"
+    prompt = (
+        f"{REVIEWER_SYSTEM_PROMPT}\n\n"
+        f"{REVIEWER_USER_PROMPT.format(items_json=items_json, plan_json=plan_json)}"
+    )
 
-    try:
-        cfg = Config()
-        span.model = cfg.smart_llm_model or "unknown"
+    result = await run_structured_node(
+        agent_name=_AGENT,
+        prompt=prompt,
+        schema=ReviewerOutput,
+        validate_output=validate_reviewer_output,
+        empty_output=lambda: ReviewerOutput().model_dump(mode="python"),
+        trace=trace,
+        run_dir=run_dir,
+        span=span,
+    )
 
-        call_meta: dict[str, Any] = {
-            "agent_name": _AGENT,
-            "run_id": os.path.basename(run_dir) if run_dir else "",
-        }
-        parsed = await llm_structured_call(
-            prompt=prompt,
-            schema=ReviewerOutput,
-            metadata=call_meta,
-        )
-        span.set_attr("structured_mode", call_meta.get("structured_mode", "unknown"))
-        raw = str(call_meta.get("raw_output", "") or "")
-        try:
-            validated = validate_reviewer_output(parsed)
-            output = validated.model_dump(mode="python")
-            trace[_AGENT] = span.end(status="ok", output_chars=len(raw))
-        except Exception as exc:
-            raw_path = (
-                save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
-            )
-            output = ReviewerOutput().model_dump(mode="python")
-            trace[_AGENT] = span.end(
-                status="error",
-                output_chars=len(raw),
-                raw_output_path=raw_path,
-                error_message=f"schema validation failed: {exc}",
-            )
+    review_results = result.output.get("review_results", [])
+    high_risk_ratio = _compute_high_risk_ratio(review_results)
+    ambiguity_ratio = _compute_ambiguity_ratio(parsed_items)
+    high_risk_ratio = max(high_risk_ratio, ambiguity_ratio)
+    reviewer_trace = result.trace.get(_AGENT)
+    if isinstance(reviewer_trace, dict):
+        reviewer_trace["high_risk_ratio"] = round(high_risk_ratio, 4)
+        reviewer_trace["ambiguity_ratio"] = round(ambiguity_ratio, 4)
+        reviewer_trace["revision_round"] = int(state.get("revision_round", 0) or 0)
 
-        high_risk_ratio = _compute_high_risk_ratio(output.get("review_results", []))
-        ambiguity_ratio = _compute_ambiguity_ratio(parsed_items)
-        high_risk_ratio = max(high_risk_ratio, ambiguity_ratio)
-        span.set_attr("high_risk_ratio", round(high_risk_ratio, 4))
-        span.set_attr("ambiguity_ratio", round(ambiguity_ratio, 4))
-        span.set_attr("revision_round", int(state.get("revision_round", 0) or 0))
-        log.info(
-            "review 完成, %s 条 findings",
-            len(output.get("review_results", [])),
-            extra={"node": _AGENT},
-        )
-
-        return {
-            "review_results": output.get("review_results", []),
-            "plan_review": output.get("plan_review", {}),
-            "high_risk_ratio": high_risk_ratio,
-            "trace": trace,
-        }
-
-    except StructuredCallError as exc:
-        raw = exc.raw_output or raw
-        span.set_attr("structured_mode", exc.structured_mode)
-        raw_path = (
-            save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
-        )
-        trace[_AGENT] = span.end(
-            status="error",
-            output_chars=len(raw),
-            raw_output_path=raw_path,
-            error_message=str(exc),
-        )
-        log.warning("review 完成, %s 条 findings", 0, extra={"node": _AGENT})
-        return {
-            "review_results": [],
-            "plan_review": {},
-            "high_risk_ratio": 0.0,
-            "trace": trace,
-        }
-
-    except Exception as exc:
-        raw_path = (
-            save_raw_agent_output(run_dir, _AGENT, raw) if run_dir and raw else ""
-        )
-        trace[_AGENT] = span.end(
-            status="error",
-            output_chars=len(raw),
-            raw_output_path=raw_path,
-            error_message=str(exc),
-        )
-        log.warning("review 完成, %s 条 findings", 0, extra={"node": _AGENT})
-        return {
-            "review_results": [],
-            "plan_review": {},
-            "high_risk_ratio": 0.0,
-            "trace": trace,
-        }
+    log_fn = log.info if result.status == "ok" else log.warning
+    log_fn(
+        "Reviewer completed with %s findings",
+        len(review_results),
+        extra={"node": _AGENT},
+    )
+    return {
+        "review_results": review_results,
+        "plan_review": result.output.get("plan_review", {}),
+        "high_risk_ratio": high_risk_ratio,
+        "trace": result.trace,
+    }

@@ -35,18 +35,15 @@ class CodexAdapter(BaseAdapter):
         implementation_pack = execution_pack.implementation_pack
         return {
             "input": {
-                "prompt": prompt,
-                "context_file": str(context_path),
-                "workspace_root": str(bundle.metadata.get("workspace_root", "") or ""),
+                **self._base_input_payload(
+                    bundle=bundle, prompt=prompt, context_path=context_path
+                ),
                 "target_modules": implementation_pack.target_modules,
                 "implementation_steps": implementation_pack.implementation_steps,
                 "acceptance_criteria": implementation_pack.acceptance_criteria,
                 "constraints": implementation_pack.constraints,
             },
-            "callback": {
-                "type": "file",
-                "mode": "deferred",
-                "task_id": task.task_id,
-                "context_file": str(context_path),
-            },
+            "callback": self._deferred_file_callback(
+                task=task, context_path=context_path
+            ),
         }

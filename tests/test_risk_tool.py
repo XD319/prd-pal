@@ -21,6 +21,9 @@ from prd_pal.subflows.risk_analysis import run_risk_analysis_subflow
 from prd_pal.tools.risk_catalog_search import search_risk_catalog
 from prd_pal.state import ReviewState
 
+LLM_CALL_TARGET = "prd_pal.agents.structured_runner.llm_structured_call"
+CONFIG_TARGET = "prd_pal.agents.structured_runner.Config"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # search_risk_catalog: local TF-IDF tool
@@ -221,11 +224,11 @@ class TestRiskAgentToolEnabled:
         ]
         with (
             patch(
-                "prd_pal.subflows.risk_analysis.llm_structured_call",
+                LLM_CALL_TARGET,
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("prd_pal.subflows.risk_analysis.Config"),
+            patch(CONFIG_TARGET),
             patch(
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=catalog_hits,
@@ -260,11 +263,11 @@ class TestRiskAgentToolEnabled:
     ):
         with (
             patch(
-                "prd_pal.subflows.risk_analysis.llm_structured_call",
+                LLM_CALL_TARGET,
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("prd_pal.subflows.risk_analysis.Config"),
+            patch(CONFIG_TARGET),
             patch(
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=[],
@@ -300,11 +303,11 @@ class TestRiskAgentToolEnabled:
         mock_search = MagicMock(return_value=catalog_hits)
         with (
             patch(
-                "prd_pal.subflows.risk_analysis.llm_structured_call",
+                LLM_CALL_TARGET,
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("prd_pal.subflows.risk_analysis.Config"),
+            patch(CONFIG_TARGET),
             patch(
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
@@ -342,11 +345,11 @@ class TestRiskAgentToolDisabled:
         mock_search = MagicMock(return_value=[])
         with (
             patch(
-                "prd_pal.subflows.risk_analysis.llm_structured_call",
+                LLM_CALL_TARGET,
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("prd_pal.subflows.risk_analysis.Config"),
+            patch(CONFIG_TARGET),
             patch(
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
@@ -374,11 +377,11 @@ class TestRiskAgentToolDisabled:
         mock_search = MagicMock(return_value=[])
         with (
             patch(
-                "prd_pal.subflows.risk_analysis.llm_structured_call",
+                LLM_CALL_TARGET,
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("prd_pal.subflows.risk_analysis.Config"),
+            patch(CONFIG_TARGET),
             patch(
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 mock_search,
@@ -411,11 +414,11 @@ class TestRiskAgentToolError:
     async def test_tool_error_degrades_gracefully(self, base_state: ReviewState):
         with (
             patch(
-                "prd_pal.subflows.risk_analysis.llm_structured_call",
+                LLM_CALL_TARGET,
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("prd_pal.subflows.risk_analysis.Config"),
+            patch(CONFIG_TARGET),
             patch(
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 side_effect=RuntimeError("catalog file missing"),
@@ -470,11 +473,11 @@ class TestRiskAnalysisSubflowContract:
     async def test_subflow_returns_contract_fields(self, base_state: ReviewState):
         with (
             patch(
-                "prd_pal.subflows.risk_analysis.llm_structured_call",
+                LLM_CALL_TARGET,
                 new_callable=AsyncMock,
                 return_value=MOCK_LLM_RISK_OUTPUT,
             ),
-            patch("prd_pal.subflows.risk_analysis.Config"),
+            patch(CONFIG_TARGET),
             patch(
                 "prd_pal.skills.risk_catalog.search_risk_catalog",
                 return_value=[],

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from prd_pal.packs.delivery_bundle import ApprovalEvent, BundleStatus, DeliveryBundle
+from prd_pal.utils.time import utc_now_iso as _utc_now_iso
 
 if TYPE_CHECKING:
     from prd_pal.workspace.models import ApprovalRecord
@@ -31,10 +31,6 @@ VALID_TRANSITIONS: dict[BundleStatus, set[BundleStatus]] = {
     },
     BundleStatus.approved: set(),
 }
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _transition(

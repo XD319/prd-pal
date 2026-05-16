@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, Iterator
 
-from review_runtime.llm_provider.generic.base import (
+from prd_pal.runtime.llm_provider.generic.base import (
     ReasoningEfforts,
     _SUPPORTED_PROVIDERS,
 )
@@ -30,7 +30,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 _MISSING = object()
 _RUNTIME_CONFIG_OVERRIDES: ContextVar[dict[str, Any]] = ContextVar(
-    "review_runtime_config_overrides",
+    "prd_pal.runtime_config_overrides",
     default={},
 )
 

@@ -20,8 +20,8 @@ from ..prompt_quality.output_validator import (
     SchemaValidationError,
     validate_with_retries,
 )
-from review_runtime.config.config import Config
-from review_runtime.utils.llm import create_chat_completion, get_llm
+from prd_pal.runtime.config.config import Config
+from prd_pal.runtime.utils.llm import create_chat_completion, get_llm
 
 
 class StructuredCallError(RuntimeError):

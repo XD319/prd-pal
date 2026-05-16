@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from prd_pal.utils.time import utc_now_iso as _utc_now_iso
+
 AUDIT_LOG_FILENAME = "audit_log.jsonl"
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def normalize_audit_context(audit_context: dict[str, Any] | None) -> dict[str, Any]:

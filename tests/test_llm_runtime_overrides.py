@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from prd_pal.service import review_service
-from review_runtime.config.config import Config
+from prd_pal.runtime.config.config import Config
 
 
 @pytest.mark.asyncio

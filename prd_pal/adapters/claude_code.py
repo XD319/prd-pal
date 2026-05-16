@@ -35,18 +35,15 @@ class ClaudeCodeAdapter(BaseAdapter):
         test_pack = execution_pack.test_pack
         return {
             "input": {
-                "prompt": prompt,
-                "context_file": str(context_path),
-                "workspace_root": str(bundle.metadata.get("workspace_root", "") or ""),
+                **self._base_input_payload(
+                    bundle=bundle, prompt=prompt, context_path=context_path
+                ),
                 "test_scope": test_pack.test_scope,
                 "edge_cases": test_pack.edge_cases,
                 "acceptance_criteria": test_pack.acceptance_criteria,
                 "handoff_strategy": execution_pack.handoff_strategy,
             },
-            "callback": {
-                "type": "file",
-                "mode": "deferred",
-                "task_id": task.task_id,
-                "context_file": str(context_path),
-            },
+            "callback": self._deferred_file_callback(
+                task=task, context_path=context_path
+            ),
         }

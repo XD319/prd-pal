@@ -119,3 +119,35 @@ def normalize_severity(value: str) -> str:
 
 def limit_items(items: list[Any], limit: int) -> tuple[Any, ...]:
     return tuple(items[: max(int(limit or 0), 0)])
+
+
+def build_reviewer_result(
+    *,
+    reviewer: str,
+    config: ReviewerConfig,
+    findings: list[ReviewFinding] | tuple[ReviewFinding, ...] = (),
+    open_questions: list[str] | tuple[str, ...] = (),
+    risk_items: list[RiskItem] | tuple[RiskItem, ...] = (),
+    evidence: list[EvidenceItem] | tuple[EvidenceItem, ...] = (),
+    tool_calls: list[ToolCall] | tuple[ToolCall, ...] = (),
+    summary: str = "",
+    ambiguity_type: str = "",
+    clarification_question: str = "",
+    reviewer_status_detail: str = "",
+    notes: list[str] | tuple[str, ...] = (),
+) -> ReviewerResult:
+    """Build a reviewer result with consistent limits and tuple coercion."""
+
+    return ReviewerResult(
+        reviewer=reviewer,
+        findings=limit_items(list(findings), config.top_n_findings),
+        open_questions=limit_items(list(open_questions), config.top_n_questions),
+        risk_items=limit_items(list(risk_items), config.top_n_risks),
+        evidence=tuple(evidence),
+        tool_calls=tuple(tool_calls),
+        summary=summary,
+        ambiguity_type=ambiguity_type,
+        clarification_question=clarification_question,
+        reviewer_status_detail=reviewer_status_detail,
+        notes=tuple(notes),
+    )

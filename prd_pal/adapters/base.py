@@ -225,6 +225,29 @@ class BaseAdapter(ABC):
             return DeliveryBundle.model_validate(bundle)
         raise TypeError(f"Unsupported bundle type: {type(bundle)!r}")
 
+    def _base_input_payload(
+        self,
+        *,
+        bundle: DeliveryBundle,
+        prompt: str,
+        context_path: Path,
+    ) -> dict[str, object]:
+        return {
+            "prompt": prompt,
+            "context_file": str(context_path),
+            "workspace_root": str(bundle.metadata.get("workspace_root", "") or ""),
+        }
+
+    def _deferred_file_callback(
+        self, *, task: ExecutionTask, context_path: Path
+    ) -> dict[str, object]:
+        return {
+            "type": "file",
+            "mode": "deferred",
+            "task_id": task.task_id,
+            "context_file": str(context_path),
+        }
+
     @abstractmethod
     def _render_prompt(self, execution_pack: ExecutionPack) -> str:
         """Render an adapter-specific prompt."""

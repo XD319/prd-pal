@@ -12,7 +12,7 @@ from .base import (
     ReviewerResult,
     RiskItem,
     ToolCall,
-    limit_items,
+    build_reviewer_result,
 )
 from .memory_support import build_memory_evidence, build_memory_notes
 
@@ -125,11 +125,12 @@ async def review(
     reviewer_status_detail = f"QA review completed with {len(findings)} findings, {len(risks)} risks, and {len(evidence)} heuristic evidence hits."
 
     await asyncio.sleep(0)
-    return ReviewerResult(
+    return build_reviewer_result(
         reviewer="qa",
-        findings=limit_items(findings, resolved.top_n_findings),
-        open_questions=limit_items(open_questions, resolved.top_n_questions),
-        risk_items=limit_items(risks, resolved.top_n_risks),
+        config=resolved,
+        findings=findings,
+        open_questions=open_questions,
+        risk_items=risks,
         evidence=evidence,
         tool_calls=(tool_call,),
         summary="QA review completed against acceptance and regression coverage.",

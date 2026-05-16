@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from ..normalizer import NormalizedRequirement
-from .base import ReviewFinding, ReviewerConfig, ReviewerResult, limit_items
+from .base import ReviewFinding, ReviewerConfig, ReviewerResult, build_reviewer_result
 from .memory_support import build_memory_evidence, build_memory_notes
 from .tooling import get_reviewer_toolbox
 
@@ -77,12 +77,12 @@ async def review(
     reviewer_status_detail = f"Product review completed with {len(findings)} findings. Competitive-search hook is {'configured' if web_tool.evidence else 'available as an optional stub'}. Memory assists={len(memory_evidence)}."
 
     await asyncio.sleep(0)
-    return ReviewerResult(
+    return build_reviewer_result(
         reviewer="product",
-        findings=limit_items(findings, resolved.top_n_findings),
-        open_questions=limit_items(open_questions, resolved.top_n_questions),
-        risk_items=(),
-        evidence=tuple([*memory_evidence, *web_tool.evidence]),
+        config=resolved,
+        findings=findings,
+        open_questions=open_questions,
+        evidence=[*memory_evidence, *web_tool.evidence],
         tool_calls=tool_calls,
         summary="Product review completed against scenarios and acceptance coverage.",
         ambiguity_type=ambiguity_type,

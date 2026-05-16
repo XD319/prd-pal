@@ -275,11 +275,11 @@ class TestParserAgentMocked:
         }
         with (
             patch(
-                "prd_pal.agents.parser_agent.llm_structured_call",
+                "prd_pal.agents.structured_runner.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=mock_llm_output,
             ),
-            patch("prd_pal.agents.parser_agent.Config"),
+            patch("prd_pal.agents.structured_runner.Config"),
         ):
             from prd_pal.agents import parser_agent
 
@@ -295,11 +295,11 @@ class TestParserAgentMocked:
         bad_output = {"parsed_items": [{"description": "missing id"}]}
         with (
             patch(
-                "prd_pal.agents.parser_agent.llm_structured_call",
+                "prd_pal.agents.structured_runner.llm_structured_call",
                 new_callable=AsyncMock,
                 return_value=bad_output,
             ),
-            patch("prd_pal.agents.parser_agent.Config"),
+            patch("prd_pal.agents.structured_runner.Config"),
         ):
             from prd_pal.agents import parser_agent
 

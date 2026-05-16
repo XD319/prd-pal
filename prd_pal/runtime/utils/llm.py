@@ -11,7 +11,7 @@ import logging
 import os
 from typing import Any
 
-from review_runtime.llm_provider.generic.base import (
+from prd_pal.runtime.llm_provider.generic.base import (
     NO_SUPPORT_TEMPERATURE_MODELS,
     SUPPORT_REASONING_EFFORT_MODELS,
     ReasoningEfforts,
@@ -19,7 +19,7 @@ from review_runtime.llm_provider.generic.base import (
 
 
 def get_llm(llm_provider: str, **kwargs: Any):
-    from review_runtime.llm_provider import GenericLLMProvider
+    from prd_pal.runtime.llm_provider import GenericLLMProvider
 
     return GenericLLMProvider.from_provider(llm_provider, **kwargs)
 

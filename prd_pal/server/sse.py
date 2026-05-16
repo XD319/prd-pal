@@ -4,12 +4,9 @@ import asyncio
 import json
 import threading
 from collections import defaultdict
-from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from prd_pal.utils.time import utc_now_iso as _utc_now_iso
 
 
 class ProgressBroadcaster:

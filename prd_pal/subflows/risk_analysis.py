@@ -6,17 +6,15 @@ import json
 import os
 from typing import Any, TypedDict
 
-from review_runtime.config.config import Config
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 
+from ..agents.structured_runner import run_structured_node
 from ..prompts import RISK_SYSTEM_PROMPT, RISK_USER_PROMPT
 from ..schemas import RiskItem, RiskOutput, validate_risk_output
 from ..skills import get_skill_executor, get_skill_spec
 from ..state import PlanState, ReviewState, plan_from_state
 from ..templates.registry import RISK_REVIEW_PROMPT
-from ..utils.io import save_raw_agent_output
-from ..utils.llm_structured_call import StructuredCallError, llm_structured_call
 from ..utils.trace import trace_start
 
 _SUBFLOW_ID = "risk_analysis.v1"
@@ -317,7 +315,6 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
     context = _context_from_state(state)
     trace = dict(state.get("trace", {}))
     run_dir = context.run_dir
-    raw = ""
     structured_requirements = list(state.get("structured_requirements", []) or [])
     plan_data = _plan_data(context)
     payload_json = json.dumps(
@@ -357,112 +354,37 @@ async def _generate_risks_node(state: RiskAnalysisState) -> RiskAnalysisState:
         f"{RISK_USER_PROMPT.format(requirements_json=json.dumps(structured_requirements, ensure_ascii=False, indent=2), plan_json=json.dumps(plan_data, ensure_ascii=False, indent=2), evidence_json=evidence_json)}"
     )
 
-    try:
-        cfg = Config()
-        span.model = cfg.smart_llm_model or "unknown"
-
-        call_meta: dict[str, Any] = {
-            "agent_name": "risk",
-            "run_id": os.path.basename(run_dir) if run_dir else "",
+    result = await run_structured_node(
+        agent_name="risk",
+        trace_key=_GENERATION_NODE,
+        raw_output_agent_name="risk",
+        prompt=prompt,
+        schema=RiskOutput,
+        validate_output=validate_risk_output,
+        empty_output=lambda: RiskOutput().model_dump(mode="python"),
+        trace=trace,
+        run_dir=run_dir,
+        span=span,
+        post_process=lambda output: {
+            **output,
+            "risks": _attach_fallback_evidence(output.get("risks", []), evidence_hits),
+        },
+    )
+    trace_meta.update(
+        {
+            "status": result.status,
+            "error_message": result.error_message,
+            "model": result.model,
+            "raw_output_path": result.raw_output_path,
+            "output_chars": result.output_chars,
+            "structured_mode": result.structured_mode,
         }
-        parsed = await llm_structured_call(
-            prompt=prompt,
-            schema=RiskOutput,
-            metadata=call_meta,
-        )
-        structured_mode = str(call_meta.get("structured_mode", "unknown"))
-        span.set_attr("structured_mode", structured_mode)
-        raw = str(call_meta.get("raw_output", "") or "")
-        try:
-            validated = validate_risk_output(parsed)
-            output = validated.model_dump(mode="python")
-            output["risks"] = _attach_fallback_evidence(
-                output.get("risks", []), evidence_hits
-            )
-            trace[_GENERATION_NODE] = span.end(status="ok", output_chars=len(raw))
-            trace_meta.update(
-                {
-                    "status": "ok",
-                    "error_message": "",
-                    "model": span.model,
-                    "raw_output_path": "",
-                    "output_chars": len(raw),
-                    "structured_mode": structured_mode,
-                }
-            )
-        except Exception as exc:
-            raw_path = (
-                save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
-            )
-            output = RiskOutput().model_dump(mode="python")
-            trace[_GENERATION_NODE] = span.end(
-                status="error",
-                output_chars=len(raw),
-                raw_output_path=raw_path,
-                error_message=f"schema validation failed: {exc}",
-            )
-            trace_meta.update(
-                {
-                    "status": "error",
-                    "error_message": f"schema validation failed: {exc}",
-                    "model": span.model,
-                    "raw_output_path": raw_path,
-                    "output_chars": len(raw),
-                    "structured_mode": structured_mode,
-                }
-            )
-
-        return {
-            "risks": output.get("risks", []),
-            "trace": trace,
-            "trace_meta": trace_meta,
-        }
-
-    except StructuredCallError as exc:
-        raw = exc.raw_output or raw
-        span.set_attr("structured_mode", exc.structured_mode)
-        raw_path = (
-            save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
-        )
-        trace[_GENERATION_NODE] = span.end(
-            status="error",
-            output_chars=len(raw),
-            raw_output_path=raw_path,
-            error_message=str(exc),
-        )
-        trace_meta.update(
-            {
-                "status": "error",
-                "error_message": str(exc),
-                "model": span.model,
-                "raw_output_path": raw_path,
-                "output_chars": len(raw),
-                "structured_mode": exc.structured_mode,
-            }
-        )
-        return {"risks": [], "trace": trace, "trace_meta": trace_meta}
-
-    except Exception as exc:
-        raw_path = (
-            save_raw_agent_output(run_dir, "risk", raw) if run_dir and raw else ""
-        )
-        trace[_GENERATION_NODE] = span.end(
-            status="error",
-            output_chars=len(raw),
-            raw_output_path=raw_path,
-            error_message=str(exc),
-        )
-        trace_meta.update(
-            {
-                "status": "error",
-                "error_message": str(exc),
-                "model": span.model,
-                "raw_output_path": raw_path,
-                "output_chars": len(raw),
-                "structured_mode": "unknown",
-            }
-        )
-        return {"risks": [], "trace": trace, "trace_meta": trace_meta}
+    )
+    return {
+        "risks": result.output.get("risks", []),
+        "trace": result.trace,
+        "trace_meta": trace_meta,
+    }
 
 
 def build_risk_analysis_subgraph():
